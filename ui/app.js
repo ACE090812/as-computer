@@ -255,7 +255,7 @@
     grip.className = 'grip';
     el.appendChild(grip);
     wins[id] = { id: id, el: el, icon: o.icon, titleKey: o.titleKey, titleDef: o.titleDef, title: o.title,
-      w: o.w, h: o.h, x: 0, y: 0, open: false, min: false, max: false, dynamic: !!o.dynamic, onOpen: o.onOpen };
+      w: o.w, h: o.h, x: 0, y: 0, open: false, min: false, max: false, dynamic: !!o.dynamic, onOpen: o.onOpen, onClose: o.onClose };
     setTitle(id);
   }
 
@@ -332,6 +332,7 @@
     w.min = false;
     w.el.classList.remove('open', 'active', 'minimised');
     if (id === 'browser' && typeof brReset === 'function') brReset();
+    if (w.onClose) w.onClose();
     if (w.dynamic) { w.el.remove(); delete wins[id]; }
     var nxt = topOpenWin();
     if (nxt) focusWin(nxt.id); else { activeId = null; renderTaskbar(); }
@@ -392,7 +393,9 @@
   // ---------------------------------------------------------------- which apps this job has
   // state.apps comes from the server (Store installs per job). An id it doesn't list is a built-in app.
   function appOn(id) { return !state.apps || state.apps[id] !== false; }
+  var EXT = {};   // apps registered from other files with LSOS.registerApp (see the end of this file)
   function appVisible(id) {
+    if (EXT[id]) return !!state.apps && state.apps[id] === true;
     if (id === 'store') return !!state.store;
     if (id === 'browser') return !!state.browser && appOn('browser');
     if (id === 'calendar') return !!state.calendar && appOn('calendar');
@@ -404,7 +407,7 @@
       el.classList.toggle('hidden', !appVisible(el.dataset.app));
     });
     // close windows of apps this job no longer has (uninstalled or never installed)
-    ['mot', 'browser', 'calendar', 'store'].forEach(function (id) {
+    ['mot', 'browser', 'calendar', 'store'].concat(Object.keys(EXT)).forEach(function (id) {
       if (!appVisible(id) && wins[id] && wins[id].open) closeWin(id);
     });
     var motOn = appVisible('mot');
@@ -475,7 +478,8 @@
       { id: 'calendar', icon: 'calendar', name: t('ui_app_calendar', 'Calendar') },
       { id: 'certs', icon: 'certpass', name: t('ui_fx_mot', 'MOT Certificates') },
       { id: 'bin', icon: binCerts().length ? 'binfull' : 'bin', name: t('ui_app_bin', 'Recycle Bin') }
-    ].filter(function (p) { return (p.id === 'certs' ? appVisible('mot') : appVisible(p.id)) && (!q || p.name.toLowerCase().indexOf(q) !== -1); });
+    ].concat(Object.keys(EXT).map(function (k) { return { id: k, icon: EXT[k].icon, name: EXT[k].name() }; }))
+      .filter(function (p) { return (p.id === 'certs' ? appVisible('mot') : appVisible(p.id)) && (!q || p.name.toLowerCase().indexOf(q) !== -1); });
     $('sm-pins').innerHTML = pins.map(function (p) {
       return '<div class="pin" data-pin="' + p.id + '">' + icSpan(p.icon) + '<span>' + esc(p.name) + '</span></div>';
     }).join('');
@@ -1404,6 +1408,7 @@
     else if (id === 'settings') openSettings();
     else if (id === 'browser') openWin('browser');
     else if (id === 'calendar') openWin('calendar');
+    else if (EXT[id]) openWin(id);
     else if (id === 'bin') openExplorer('bin');
   }
 
@@ -3269,6 +3274,7 @@
   // ================================================================ session control
   function resetSession() {
     closeAllWindows();
+    Object.keys(EXT).forEach(function (k) { if (EXT[k].onReset) EXT[k].onReset(); });
     brReset();
     calCloseForm();
     setMenu(false);
@@ -3288,6 +3294,7 @@
   function renderAll() {
     applyLocale();
     retitleAll();
+    Object.keys(EXT).forEach(function (k) { if (EXT[k].onLocale) EXT[k].onLocale(); });
     renderTaskbar();
     renderExplorer();
     if (menuOpen) renderStart();
@@ -3361,6 +3368,38 @@
       if (menuOpen) renderStart();
     }
   });
+
+  // ================================================================ app hook for other files
+  // ui/mechanic.js (and any later app) registers itself here instead of being wired into this file.
+  //   LSOS.registerApp({ id, icon: '<svg…>', titleKey, titleDef, w, h, html, onOpen, onClose, onReset, onLocale })
+  // The server decides who has the app (Config.Apps.<id> + the Store), exactly like the built-in ones.
+  window.LSOS = {
+    t: t, fmt: fmt, esc: esc, fmtPlate: fmtPlate, ic: ic, icSpan: icSpan, fillIcons: fillIcons, confirmDlg: confirmDlg,
+    showDlg: showDlg, closeDlg: closeDlg, isDui: isDui, state: state,
+    winOpen: function (id) { return !!(wins[id] && wins[id].open); },
+    registerApp: function (o) {
+      if (EXT[o.id] || isDui) return null;
+      ICONS[o.id] = o.icon;
+      var el = document.createElement('div');
+      el.id = 'win-' + o.id;
+      el.innerHTML = '<div class="win-body">' + o.html + '</div>';
+      $('windows').appendChild(el);
+      defWin(o.id, { el: el, icon: o.id, titleKey: o.titleKey, titleDef: o.titleDef, w: o.w || 1240, h: o.h || 760, onOpen: o.onOpen, onClose: o.onClose });
+      EXT[o.id] = { icon: o.id, name: function () { return t(o.titleKey, o.titleDef); }, onReset: o.onReset, onLocale: o.onLocale };
+      PINNED.push({ id: o.id, icon: o.id, key: o.titleKey, def: o.titleDef });
+      var d = document.createElement('div');
+      d.className = 'dicon hidden';
+      d.dataset.app = o.id;
+      d.innerHTML = '<span class="ic" data-ic="' + o.id + '"></span><span class="l"></span>';
+      var lab = d.querySelector('.l');
+      lab.textContent = t(o.titleKey, o.titleDef);
+      lab.dataset.i18n = o.titleKey;
+      $('desktop').insertBefore(d, $('desktop').querySelector('[data-app="explorer"]'));
+      fillIcons();
+      applyApps();
+      return el;
+    }
+  };
 
   applyLocale();
 })();

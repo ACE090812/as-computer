@@ -43,8 +43,19 @@ MySQL.ready(function()
   reload()
 end)
 
+--- Is the app switched on in the config? Config.EnabledApps.<id> = false, or Config.Apps.<id>.enabled = false, turns it off.
+function Apps.enabled(id)
+  local sw = Config.EnabledApps
+  if type(sw) == 'table' and sw[id] == false then return false end
+  local d = Config.Apps and Config.Apps[id]
+  return d ~= nil and d.enabled ~= false
+end
+
+--- The app's definition, or nil when it does not exist or is switched off. Everything else (state, Store, every
+--- app's server gate) goes through this, so a switched-off app disappears everywhere and its callbacks refuse.
 function Apps.def(id)
   if type(id) ~= 'string' then return nil end
+  if not Apps.enabled(id) then return nil end
   return Config.Apps and Config.Apps[id] or nil
 end
 
@@ -149,7 +160,7 @@ end
 local function list(job)
   local out = {}
   for id, d in pairs(Config.Apps or {}) do
-    if d.store == true and (not Apps.available[id] or Apps.available[id]()) then
+    if Apps.enabled(id) and d.store == true and (not Apps.available[id] or Apps.available[id]()) then
       out[#out + 1] = entry(id, d, job)
     end
   end
@@ -233,7 +244,7 @@ MotCallback.Register('storeApi', function(src, respond, name, data)
   if name == 'list' then
     local canManage, paid = false, false
     for id, d in pairs(Config.Apps or {}) do
-      if d.store == true and Apps.jobAllowed(id, job.name) and Apps.canManage(job, id) then
+      if Apps.enabled(id) and d.store == true and Apps.jobAllowed(id, job.name) and Apps.canManage(job, id) then
         canManage = true
         if (tonumber(d.price) or 0) > 0 then paid = true end
       end

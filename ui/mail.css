@@ -1,0 +1,80 @@
+/* Mail app (Los Santos OS). Everything is scoped to #win-mail / .ml so it cannot touch other windows. */
+#win-mail .win-body{background:#f3f4f7;font-family:var(--ui-font);color:#1b1f27}
+html.dark #win-mail .win-body{filter:invert(.9) hue-rotate(180deg)}
+.ml{position:absolute;inset:0;display:flex;font-size:14.5px;line-height:1.35}
+.ml *{box-sizing:border-box}
+.ml input,.ml textarea,.ml select{font:inherit;color:inherit;user-select:text;-webkit-user-select:text}
+.ml button{font:inherit;cursor:pointer}
+.ml-sub{color:#6b7280;font-size:13px}
+.ml-help{margin:0 0 12px;color:#5b6270}
+.ml-lbl{display:block;color:#6b7280;font-size:12.5px;margin:10px 0 4px}
+
+.ml-rail{width:230px;flex:none;background:#fbfbfd;border-right:1px solid #e1e4ea;padding:14px 10px;display:flex;flex-direction:column;gap:3px;overflow:auto}
+.ml-brand{display:flex;align-items:center;gap:10px;padding:4px 8px 12px;font-size:16px}
+.ml-logo{width:28px;height:28px;display:block}.ml-logo svg{width:100%;height:100%;display:block}
+.ml-compose-btn{margin:0 4px 10px;padding:9px 14px}
+.ml-acct select{width:100%;border:1px solid #c9ced8;border-radius:7px;background:#fff;padding:6px 8px;margin-bottom:8px}
+.ml-acct{padding:0 4px}
+.ml-nav{display:flex;align-items:center;gap:11px;border:0;background:none;border-radius:8px;padding:9px 10px;text-align:left;color:#374151}
+.ml-nav svg{width:20px;height:20px;flex:none}
+.ml-nav:hover{background:#eceff5}
+.ml-nav.on{background:#e3ecf9;color:#0f4c8a;font-weight:600}
+.ml-nav .nl{flex:1}
+.ml-nav .bd{background:#c42b1c;color:#fff;border-radius:10px;font-size:12px;min-width:20px;height:20px;line-height:20px;text-align:center;padding:0 6px}
+.ml-nav .bd.soft{background:#0f6cbd}
+.ml-foot{margin-top:auto;padding:10px 4px 0;display:flex;flex-direction:column;gap:4px}
+.ml-link{border:0;background:none;color:#0f6cbd;text-align:left;padding:3px 6px;font-size:13px}.ml-link:hover{text-decoration:underline}
+
+.ml-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.ml-head{flex:none;display:flex;align-items:center;gap:14px;padding:12px 18px;background:#fff;border-bottom:1px solid #e1e4ea;min-height:62px}
+.ml-title{font-size:19px;font-weight:600;white-space:nowrap}
+.ml-tools{margin-left:auto;display:flex;align-items:center;gap:10px}
+.ml-search input{width:240px;border:1px solid #c9ced8;border-radius:7px;background:#fff;padding:7px 10px}
+.ml-body{flex:1;min-height:0;position:relative}
+.ml-split{position:absolute;inset:0;display:flex}
+.ml-list{width:400px;flex:none;overflow:auto;border-right:1px solid #e1e4ea;background:#f7f8fa}
+.ml-det{flex:1;min-width:0;overflow:auto;background:#fff}
+.ml-empty{padding:40px 24px;text-align:center;color:#8a909c}
+.ml-empty.small{padding:28px 18px}
+
+.ml-btn{border:1px solid #c9ced8;background:#fff;color:#1b1f27;border-radius:7px;padding:7px 14px;white-space:nowrap}
+.ml-btn:hover{background:#eef1f6}
+.ml-btn.primary{background:#0f6cbd;border-color:#0f6cbd;color:#fff}.ml-btn.primary:hover{background:#0c5ba0}
+.ml-btn.danger{color:#c42b1c;border-color:#e7b9b3}.ml-btn.danger:hover{background:#fbe9e7}
+.ml-btn:disabled{opacity:.5;cursor:default}
+
+.ml-row-item{padding:10px 14px;border-bottom:1px solid #e6e8ee;cursor:pointer;background:#f7f8fa}
+.ml-row-item:hover{background:#eef1f6}
+.ml-row-item.on{background:#dfeafa}
+.ml-row-item.unread .ml-from,.ml-row-item.unread .ml-subj{font-weight:700}
+.ml-row-item.unread{box-shadow:inset 3px 0 0 #0f6cbd}
+.ml-r1{display:flex;align-items:center;gap:6px}
+.ml-from{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ml-date{color:#6b7280;font-size:12.5px;white-space:nowrap}
+.ml-flag{color:#c42b1c}.ml-clip{font-size:12px}
+.ml-subj{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ml-snip{color:#6b7280;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.ml-msg{padding:20px 26px}
+.ml-msg h2{margin:0 0 10px;font-size:20px;font-weight:600;overflow-wrap:anywhere}
+.ml-meta{display:flex;flex-direction:column;gap:2px;padding-bottom:12px;border-bottom:1px solid #e6e8ee}
+.ml-tb{display:flex;gap:8px;flex-wrap:wrap;padding:12px 0}
+.ml-text{user-select:text;-webkit-user-select:text;overflow-wrap:anywhere;padding:6px 0 14px;font-size:15px;line-height:1.5}
+.ml-atts{border-top:1px solid #e6e8ee;padding-top:6px}
+.ml-att{background:#f3f4f7;border:1px solid #e1e4ea;border-radius:8px;padding:8px 12px;margin:6px 0}
+.ml-note{white-space:pre-wrap;margin-top:4px;color:#374151}
+.ml-photo img{max-width:100%;max-height:340px;border-radius:8px;display:block;margin:6px 0}
+
+.ml-form{position:absolute;inset:0;overflow:auto;padding:18px 24px;display:flex;flex-direction:column;gap:10px;background:#fff}
+.ml-form.ml-narrow{max-width:460px;position:static;inset:auto;background:none}
+.ml-body:has(.ml-narrow){overflow:auto;padding:24px}
+.ml-form label{display:flex;flex-direction:column;gap:4px;color:#374151;font-size:13px}
+.ml-form input,.ml-form select,.ml-form textarea{border:1px solid #c9ced8;border-radius:7px;background:#fff;padding:8px 10px;font-size:14.5px}
+.ml-form input:focus,.ml-form select:focus,.ml-form textarea:focus,.ml-search input:focus{outline:2px solid #0f6cbd;outline-offset:-1px}
+.ml-form label.grow{flex:1;min-height:180px}
+.ml-form label.grow textarea{flex:1;resize:none}
+.ml-row{display:flex;gap:8px}
+.ml-err{color:#c42b1c;min-height:18px;font-size:13.5px}
+
+.ml-toast{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);background:#1f2937;color:#fff;padding:9px 18px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:70%}
+.ml-toast.on{opacity:1}.ml-toast.bad{background:#b42318}

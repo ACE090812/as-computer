@@ -19,12 +19,15 @@ Config.Store = {
 
   -- Which society bank to use:
   --   'auto'          the first supported one that is started
-  --   'renewed'       Renewed-Banking       'qb-banking'   qb-banking
-  --   'qb-management' qb-management         'okokbanking'  okokBanking
-  --   'fd_banking'    fd_banking            'esx_society'  esx_addonaccount / esx_society
+  --   'renewed'       Renewed-Banking       
+  --   'qb-banking'    qb-banking
+  --   'qb-management' qb-management         
+  --   'okokbanking'   okokBanking
+  --   'fd_banking'    fd_banking            
+  --   'esx_society'   esx_addonaccount / esx_society
   --   'custom'        fill in the three functions below
   -- Only used when an app has a price above 0.
-  bank = 'auto',
+  bank = 'renewed',
   logTransactions = true,   -- record the purchase on the society's transaction list when the bank supports it
   custom = {
     -- balance(account) -> number

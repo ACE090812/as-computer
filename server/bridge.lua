@@ -101,3 +101,82 @@ function Bridge.HasComputerJob(src)
   local j = Bridge.GetJob(src)
   return j ~= nil and Bridge.AllowedJobs()[j.name] == true
 end
+
+-- ---- helpers used by the Mechanic app ---------------------------------------------------------------
+
+--- Server id of the online player with this character id, or nil.
+function Bridge.FindSource(identifier)
+  if not identifier then return nil end
+  for _, id in ipairs(GetPlayers()) do
+    local src = tonumber(id)
+    if src and Bridge.GetIdentifier(src) == identifier then return src end
+  end
+  return nil
+end
+
+--- { identifier, name, phone } of an online player, or nil.
+function Bridge.Character(src)
+  local p = Bridge.GetPlayer(src)
+  if not p then return nil end
+  local phone
+  if framework ~= 'esx' then
+    local ci = p.PlayerData and p.PlayerData.charinfo
+    phone = ci and ci.phone or nil
+  end
+  return { identifier = Bridge.GetIdentifier(src), name = Bridge.GetName(src), phone = phone }
+end
+
+--- In-character name of a character that may be offline (best effort), or nil.
+function Bridge.CharacterName(identifier)
+  if not identifier then return nil end
+  local ok, name = pcall(function()
+    if framework == 'esx' then
+      local r = MySQL.single.await('SELECT firstname, lastname FROM users WHERE identifier = ?', { identifier })
+      return r and ((r.firstname or '') .. ' ' .. (r.lastname or '')) or nil
+    end
+    local r = MySQL.single.await('SELECT charinfo FROM players WHERE citizenid = ?', { identifier })
+    local ci = r and r.charinfo
+    if type(ci) == 'string' then ci = json.decode(ci) end
+    if type(ci) == 'table' then return (ci.firstname or '') .. ' ' .. (ci.lastname or '') end
+    return nil
+  end)
+  if ok and type(name) == 'string' then
+    name = name:gsub('^%s+', ''):gsub('%s+$', '')
+    if name ~= '' then return name end
+  end
+  return nil
+end
+
+function Bridge.GetMoney(src, account)
+  local p = Bridge.GetPlayer(src)
+  if not p then return 0 end
+  if framework == 'esx' then
+    local acc = p.getAccount and p.getAccount(account)
+    return acc and acc.money or 0
+  end
+  return p.PlayerData and p.PlayerData.money and p.PlayerData.money[account] or 0
+end
+
+--- Takes money from a player's account. true when the full amount was taken.
+function Bridge.RemoveMoney(src, account, amount, reason)
+  amount = math.floor(tonumber(amount) or 0)
+  if amount <= 0 then return true end
+  local p = Bridge.GetPlayer(src)
+  if not p or Bridge.GetMoney(src, account) < amount then return false end
+  if framework == 'esx' then
+    p.removeAccountMoney(account, amount)
+    return true
+  end
+  return p.Functions.RemoveMoney(account, amount, reason or 'as-computer') == true
+end
+
+--- Gives money back (refund after a failed step).
+function Bridge.AddMoney(src, account, amount, reason)
+  amount = math.floor(tonumber(amount) or 0)
+  if amount <= 0 then return true end
+  local p = Bridge.GetPlayer(src)
+  if not p then return false end
+  if framework == 'esx' then p.addAccountMoney(account, amount) return true end
+  p.Functions.AddMoney(account, amount, reason or 'as-computer')
+  return true
+end

@@ -1,6 +1,6 @@
 # as-computer
 
-A Windows-style desktop ("Los Santos OS") on a prop monitor: Store, MOT Testing Service, File Explorer (with Recycle Bin), Scout browser (as-browser sites) and Calendar. Formerly `mot-dui`.
+A Windows-style desktop ("Los Santos OS") on a prop monitor: Store, MOT Testing Service, File Explorer (with Recycle Bin), Scout browser (as-browser sites), Calendar and the Mechanic app. Formerly `mot-dui`.
 
 ## Rename from mot-dui
 1. Rename the resource folder `mot-dui` to `as-computer` and change the `ensure mot-dui` line in `server.cfg` to `ensure as-computer` (after `as-browser`).
@@ -21,6 +21,7 @@ Every app has its own file, so no single file grows. Nothing is hard-coded to a 
 | `config/apps/scout.lua` | Scout browser: on/off, as-browser resource name, MOT push |
 | `config/apps/calendar.lua` | Calendar: on/off, week start |
 | `config/apps/store.lua` | The Store itself: who may install, currency, society bank |
+| `config/apps/mechanic.lua` | Mechanic app: prefixes, VAT, labour rate, business details, payment methods, stock rules, email, delete rule, part categories, hooks |
 | `config/apps/booking.lua` | MOT bookings from the government website: fee, days ahead, time slots, closed days, cancel rules, reminders |
 | `config/apps/settings.lua` | Settings: default look, wallpapers, custom-wallpaper rules, device and network info shown in About/Network |
 
@@ -32,7 +33,7 @@ Settings mentioned further down as living in `client/config.lua` or `shared/chec
 
 The computer can be used by several jobs. `Config.Jobs` (config/config.lua) lists the jobs that may use it at all, and a location can set its own `jobs = { ... }`. What a job has on its desktop is decided by the **Store**:
 
-- File Explorer, Calendar and the Store are built in. Apps with `store = true` (MOT Testing Service, Scout) are not on the desktop until they are installed.
+- File Explorer, Calendar, Mail and the Store are built in. Apps with `store = true` (MOT Testing Service, Scout) are not on the desktop until they are installed.
 - Who may install is set per app with `manage` in its `Config.Apps` entry (`'boss'`, `'any'` or a grade number; default `Config.Store.manage`). MOT is boss-only, Scout can be installed by anyone. An employee who is allowed installs an app once in the Store and it is stored against the job, so everyone on that job has it. Members who already have the computer open get it straight away. Installs live in the `computer_apps` table (created automatically).
 - Everyone sees every app. Apps made for another job show as "Not for your job" and cannot be installed.
 - Each app's own file sets `jobs` (who may install/use it, nil = any), `price` (pounds, taken from the job's society account, 0 = free; a job that has paid once reinstalls free), `icon`, `tint`, `category`, `publisher`, `version`. Set `store = false` to make an app built in. Names, descriptions and feature lists come from the locale (`store_<id>_name`, `_desc`, `_f1` to `_f4`), or set `label` / `desc` / `features` in the app's config entry.
@@ -42,6 +43,22 @@ The computer can be used by several jobs. `Config.Jobs` (config/config.lua) list
 - Uninstalling only removes the app from the desktop. Data (MOT records, calendar events) is kept.
 
 To add an app: write its window in `ui/`, add `config/apps/<id>.lua` with a `Config.Apps.<id>` entry, add the locale strings, and gate its server callbacks with `Apps.allowed(src, '<id>')`.
+
+## Turning apps off (US servers, other regions)
+
+Some apps are UK-flavoured (the MOT Testing Service, £ prices). To remove an app, set it to `false` in `Config.EnabledApps` (config/config.lua):
+
+```lua
+Config.EnabledApps = { mot = false, mechanic = true, mail = true, calendar = true, browser = true }
+```
+
+A switched-off app has no desktop icon, is not in the Store, and the server refuses everything it would have done (every app's server gate goes through `Apps.def`). Anything you leave out stays on. An app's own `config/apps/<app>.lua` entry can also say `enabled = false`. Ids: `mot`, `mechanic`, `mail`, `calendar`, `browser`, `store`, `settings`, `explorer`. Existing data (MOT records, calendar events) is kept if you turn an app back on.
+
+Turning `mot` off also turns off MOT bookings automatically. For a US server also, in **as-browser** `config.lua`:
+
+- `Config.Sites.gov / plates / vehiclecheck / insurance / jobs / parts = { enabled = false }` hides any website (each has a `.co.uk` domain you can also change),
+- inside the government site, individual services (MOT booking, DBS, council tax, and so on) have their own on/off in `sites/gov/config.lua`, and `Config.gov.mot.enabled = false` removes MOT results from the vehicle checker,
+- `Config.currency = '$'` changes the currency symbol; as-computer's `Config.Store.currency` does the same here.
 
 ## Settings
 
@@ -168,7 +185,7 @@ jg-mechanic exposes that.
   doesn't follow what the interacting player is doing.
 - **Fee/payment logic** — deliberately not built (mechanics paid via wage/bonus).
 - **txd in `config/config.lua`** — `securitymonitor` confirmed as an embedded texture
-  in `ascomputer_monitor.ydr` (no separate .ytd), so txd = model name is right.
+  in `lgmods_sinner_monitor.ydr` (no separate .ytd), so txd = model name is right.
   Still worth an in-game test.
 
 ## Scout (as-browser websites on the desktop)
@@ -190,3 +207,31 @@ Only jobs that have the Scout app can use the browser through this terminal: req
 A Calendar app on the Los Santos OS desktop (also opens from the taskbar clock): Month / Week / Day views, a mini month picker, colour-coded events with optional start/end times or All day, notes, and a current-time line. One **shared team calendar**: every tester with the MOT job sees, edits and deletes the same events (bookings, reminders, shifts). Double-click a day or a time slot to add an event, click one to edit it, right-click for Edit / Delete. Keys: Left/Right change period, T = today.
 
 "Today" is the real date of the PC (the same clock as the taskbar). Events are stored in the `mot_calendar` table, created automatically. Settings in `config/apps/calendar.lua`: `Config.Calendar = { enabled, weekStart }` (weekStart 1 = Monday, 0 = Sunday).
+
+## Mail
+
+A Mail app on the desktop that shows the character's **own mailboxes from the phone's Mail app (sd-phone)**: the same accounts, folders and messages, not a separate inbox. Read, reply, reply all, forward, flag, mark as spam, delete (bin, then delete for good), write new mail, save drafts and send to any address (other players, businesses, the quotes and invoices the Mechanic app emails). Mail read here is read on the phone, and the phone still pings and shows its banner when mail arrives; while the computer is open the list also updates live. If a character has no account signed in (or wants another one), the app signs in with the address and password from the phone. New addresses are created in the phone's Mail app (Sign up); this app does not create them. Attachments are shown (photos, notes, voice memos and documents are listed) but you attach and save them on the phone.
+
+How it works: the page calls `client/mail.lua`, which asks the server whether this player may use the app (`server/mail.lua`, `mailGate`: computer job + the app is available), then calls sd-phone's own Mail callbacks as that player. So all of sd-phone's rules apply exactly as on the phone: you must be signed in to the account, send and delete rate limits, size limits. Only these callbacks can be reached: `list`, `signIn`, `signOut`, `send`, `saveDraft`, `discardDraft`, `markRead`, `toggleFlag`, `moveToBin`, `move`. Nothing is stored by as-computer and there is no database table.
+
+Setup: nothing to install in sd-phone. **as-computer now loads `ox_lib` on the client** (the manifest has `@ox_lib/init.lua`); sd-phone needs ox_lib as well, so it is already on the server. The app only shows while `sd-phone` is running. Settings in `config/apps/mail.lua`: `Config.Mail = { enabled, resource }`, and `Config.Apps.mail` (built in for every job that may use the computer; set `store = true` to hand it out through the Store, `jobs` to limit it). Text is in `locales/mail_en.lua` (`ml_*`).
+
+Not done: attaching photos or notes, contacts and address autocomplete, sign-up, mail folders beyond the phone's five, Windows-style notification toasts (a small "New mail from ..." message appears inside the app). Not tested in game.
+
+## Mechanic (job cards, quotes, invoices, customers, vehicle history, parts)
+A Store app for garages, opened from the desktop like the others. Everything is kept per job, so one garage never sees another's data. The Store decides who has it (`Config.Apps.mechanic` in `config/apps/mechanic.lua`, default job `mechanic`, managed by the boss). Tables are created on start (`computer_mech_*`, also in `sql/install.sql`).
+
+- **Overview**: active job cards, waiting for parts, ready, unpaid and overdue invoices, quotes awaiting a reply, money paid this week, low stock, today's MOT bookings.
+- **Job cards** (`JC-0001`): plate, vehicle, mileage, customer, work required, tasks, assigned mechanic. Status: open, in progress, waiting for parts, ready, completed, cancelled. Completing one writes a "service" entry to the vehicle's history on the government website (`logToHistory`).
+- **Quotes** (`Q-0001`) and **invoices** (`INV-0001`): labour, part and other lines, optional VAT (`vatRate`). Quote flow: draft, sent, accepted or declined, then "Convert to invoice". Invoice flow: draft, issued, paid or void. Overdue is worked out from the due date (`dueDays`).
+- **Stock is only touched when an invoice is issued.** Issuing is all or nothing: if any part is short it is refused and names the part (`allowNegativeStock` to change that). Voiding puts the parts back.
+- **Taking payment**: *Card* asks the customer, on their own screen, to press Y or N (`payPromptSeconds`). The customer must be online, close (`playerRange`) and linked to a character. The money moves from their bank to the job's society account. *Paid in person* only records the payment and credits nothing unless `manualPaysSociety = true`, so nobody can create money by ticking a box.
+- **Customers**: added by hand, or "Add person nearby" (server id), which links them to their character so they can be emailed and charged. Vehicle owners can be added from a plate lookup.
+- **Vehicles**: look up any plate: register status, owner, MOT, police flags, and a timeline of job cards, quotes, invoices and MOT tests.
+- **Parts**: stock list with categories, minimum level warnings, receive and adjust with a reason, a stock log, stock value.
+- **Email**: with sd-phone running, quotes and invoices are emailed to the customer's phone and an in-game notice is shown (`Config.Mechanic.mail`).
+
+For other scripts: `exports['as-computer']:getServiceHistory(plate)` returns completed job cards, and the server events `as-computer:mechanic:invoiceIssued`, `:invoicePaid` and `:jobCompleted` (or the `onInvoiceIssued` / `onInvoicePaid` / `onJobCompleted` hooks) fire with the record. A plate change from as-browser is followed automatically.
+
+Files: `config/apps/mechanic.lua`, `server/mechanic.lua`, `client/mechanic.lua`, `ui/mechanic.js`, `ui/mechanic.css`, `locales/mechanic_en.lua`. The window is added through `LSOS.registerApp` at the end of `ui/app.js`, which any later app can use the same way. Translations: copy `locales/mechanic_en.lua` and change `'en'` to your language code. It adds strings to that language without creating a new one.
+

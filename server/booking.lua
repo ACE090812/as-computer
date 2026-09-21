@@ -87,7 +87,7 @@ local function findGarage(id)
 end
 
 local function on()
-  return cfg().enabled ~= false and #Booking.garages() > 0
+  return cfg().enabled ~= false and Apps.enabled('mot') and #Booking.garages() > 0
 end
 
 local function toMin(s)

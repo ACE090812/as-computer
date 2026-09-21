@@ -136,8 +136,8 @@ end
 
 --- true when any app in the Store costs money (so a bank is needed).
 function Bank.needed()
-    for _, def in pairs(Config.Apps or {}) do
-        if def.store and (tonumber(def.price) or 0) > 0 then return true end
+    for id, def in pairs(Config.Apps or {}) do
+        if Apps.enabled(id) and def.store and (tonumber(def.price) or 0) > 0 then return true end
     end
     return false
 end
