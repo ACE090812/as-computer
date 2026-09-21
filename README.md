@@ -52,7 +52,7 @@ Some apps are UK-flavoured (the MOT Testing Service, £ prices). To remove an ap
 Config.EnabledApps = { mot = false, mechanic = true, mail = true, calendar = true, browser = true }
 ```
 
-A switched-off app has no desktop icon, is not in the Store, and the server refuses everything it would have done (every app's server gate goes through `Apps.def`). Anything you leave out stays on. An app's own `config/apps/<app>.lua` entry can also say `enabled = false`. Ids: `mot`, `mechanic`, `mail`, `calendar`, `browser`, `store`, `settings`, `explorer`. Existing data (MOT records, calendar events) is kept if you turn an app back on.
+A switched-off app has no desktop icon, is not in the Store, and the server refuses everything it would have done (every app's server gate goes through `Apps.def`). Anything you leave out stays on. An app's own `config/apps/<app>.lua` entry can also say `enabled = false`. Ids: `mot`, `mechanic`, `mail`, `calendar`, `calculator`, `notepad`, `browser`, `store`, `settings`, `explorer`. Existing data (MOT records, calendar events) is kept if you turn an app back on.
 
 Turning `mot` off also turns off MOT bookings automatically. For a US server also, in **as-browser** `config.lua`:
 
@@ -82,6 +82,117 @@ Players book an MOT on `lsgov.co.uk` > "Book an MOT test" (the as-browser resour
 - **Emails** (Mail app, sent by as-browser): booking confirmed, changed, cancelled, a reminder shortly before the slot, and when the vehicle's MOT is about to run out (`Config.gov.motBooking.expiryReminderDays` in as-browser's `sites/gov/config.lua`).
 - Table `computer_bookings` is created automatically. Times are real server time.
 - Also used by the government site (0.5.1): `exports['as-computer']:getMotRecords(plate)` returns `{ records = { { testedAt, passed, expiresAt, mileage, unit, location }, ... } }` for the vehicle history check, and `renamePlate(oldPlate, newPlate)` moves MOT records and bookings when a player buys a personalised plate.
+
+## Working with other scripts (what must match on your server)
+
+as-computer talks to the framework, the database, a banking script, sd-phone, as-browser and a few optional scripts. Everything below is read from the code. The table says what each thing needs from you; details for each kind of script follow. Nothing here edits another resource, except where it says so.
+
+| Needs | Used for | What you must do |
+| --- | --- | --- |
+| Framework (`qbx_core`, `qb-core` or `es_extended`) | jobs, money, names | Nothing (auto-detected, in that order). Jobs listed in `Config.Jobs` must exist in your framework. |
+| `oxmysql` | every table | Nothing. Tables are created on start. |
+| `ox_lib` (client and server) | Mail app (`lib.callback`), notifications | Start `ox_lib` first. It is in the manifest. |
+| A target script (`ox_target` or `qb-target`) | the "use computer" interaction | Optional: `Config.Interaction = 'key'` needs neither. |
+| Owned vehicles table | MOT lookup, Mechanic vehicle lookup, model names | See [Vehicles and plates](#vehicles-and-plates). |
+| A society bank script | Store prices, Mechanic card payments | See [Banking](#banking-society-accounts). |
+| `sd-phone` | Mail app, Mechanic emails | See [sd-phone](#sd-phone). |
+| `as-browser` | Scout, MOT bookings, vehicle history, MOT results on the gov site | Start it before as-computer. |
+| `jg-vehiclemileage` | live mileage on MOT tests and job cards | Optional. |
+
+### Start order
+
+```
+ensure ox_lib
+ensure oxmysql
+ensure <your framework, banking and inventory scripts>
+ensure sd-phone
+ensure as-browser
+ensure as-computer
+```
+
+Remove any old `ensure mot-dui` line (see "Rename from mot-dui" above); `provide 'mot-dui'` in the manifest keeps old exports calls working.
+
+### Framework and jobs
+
+- `Config.Jobs` (and any location's own `jobs`) are **framework job names**. The job must exist, and the players who should use the computer must be on it (on-duty is not checked).
+- "Boss" (Store installs, Mechanic deletes) is read from the framework: `isboss` on qbx/qb, `grade_name == 'boss'` on ESX. If your boss grade is called something else on ESX, give `manage` a grade number instead (`manage = 3`).
+- Player money is taken through the framework (`bank` account) for Mechanic card payments. Cash is not used.
+- **jg-mechanic:** the job check reads the framework job, which is right when jg-mechanic has `Config.UseFrameworkJobs = true`. With jg-mechanic's own employee system there is no export to check, so switch it to framework jobs or use a separate job for the computer (see "jg-mechanic job caveat" above).
+
+### Vehicles and plates
+
+- **Which table.** The MOT lookup, the Mechanic vehicle lookup and the Explorer model names read the owned vehicles table with `Bridge.VehicleTable()` (`server/bridge.lua`): `player_vehicles` on qbx/qb, `owned_vehicles` on ESX, selecting `plate`, `vehicle` and `citizenid`. It does **not** read `Config.vehicleTable` from as-browser. On qbx/qb with the standard table there is nothing to do. On ESX, or with a custom vehicles table, edit `Bridge.VehicleTable()` and the three queries that select `citizenid` (`server/main.lua` `lookupVehicle`, `server/mechanic.lua` `ownedRow`). ESX vehicles are keyed by `owner`, not `citizenid`, so the Mechanic owner lookup does not work on ESX until that is changed. The ESX paths here have not been run on a real ESX server.
+- **The `vehicle` column** is shown as the vehicle's model name. On qbx/qb it is the spawn name (`sultan`). ESX stores JSON there, so it would show as text.
+- **Plates are compared without spaces and in upper case** (`UPPER(REPLACE(plate, " ", ""))`), so `AB12 CDE` and `AB12CDE` are the same vehicle. A script that stores plates in another format still matches as long as only spaces and case differ.
+- **Personalised plates (LS Plates in as-browser).** as-computer follows a plate change by itself. as-browser calls `exports['as-computer']:renamePlate(old, new)` (MOT records and MOT bookings move; needs 0.5.1 or later) and fires `as-browser:plateChanged` (Mechanic job cards and documents move). You have nothing to configure. as-browser finds this resource by the name in `Config.gov.motBooking.resource` (default `as-computer`), so keep the folder name `as-computer` or change that setting to match.
+- **Other scripts that store plates.** Data in other resources is not moved. Use as-browser's `extraTables` / `onChanged` for those (see the as-browser README, "Working with other scripts"). To find every table on your server that has a plate column:
+
+  ```sql
+  SELECT table_name, column_name FROM information_schema.columns
+  WHERE table_schema = DATABASE() AND column_name LIKE '%plate%';
+  ```
+
+- **Mileage.** With `jg-vehiclemileage` running, `getMileageByPlate(plate)` and `getUnit()` are used on the MOT lookup, on submit (this overrides what the tester typed) and on Mechanic job cards. Without it the tester types the mileage. A different mileage script needs `GetLiveMileage` in `server/main.lua` and `liveMileage` in `server/mechanic.lua` pointed at its export.
+
+### Vehicle key scripts
+
+as-computer does not read or give keys, so no key script needs changing to use it. The only thing that touches keys is a plate change, and that is as-browser's job: see its README, "1. Vehicle key scripts" (item keys such as `acestudios_vehiclekeys` are rewritten, table keys go in `extraTables`, and anything else uses the `onChanged` hook). Keys in the ox_inventory database follow along; nothing in as-computer needs to know.
+
+### Garages and impound
+
+There is no garage or impound integration here. A Mechanic job card is a record, it does not repair, store or release anything. What a garage script must know: personalised plates are only allowed while the vehicle is stored (checked by as-browser), and a garage script that keeps its own copy of the plate needs `extraTables` in as-browser. To flag a vehicle as impounded or stolen on the gov site (shown on the Mechanic vehicle lookup as police flags and on LS Vehicle Check), your impound or police script calls:
+
+```lua
+exports['as-browser']:setVehicleFlag(plate, 'impounded', true, 'optional note')   -- false clears it
+```
+
+### Housing
+
+Not used by as-computer. Housing scripts matter to as-browser's council tax (`housing = 'auto'` there) and to Postal Prime home delivery for the parts shop.
+
+### Banking (society accounts)
+
+Used when an app has a `price` above 0 (Store) and by the Mechanic app when a customer pays an invoice by card.
+
+- `Config.Store.bank` is **`'renewed'` by default**, not `'auto'`. If you use `qb-banking`, `qb-management`, `okokBanking`, `fd_banking` or `esx_society`, change it (or use `'auto'`, or `'custom'` and fill in `balance`, `remove` and `add`). If no supported bank is running, the server console says so and paid apps cannot be bought; free apps are unaffected. A failed bank call is also printed.
+- `Config.Store.accountFor(job)` returns the society account name for a job (default: the job name). It must match the name your banking script uses (`mechanic`, or `society_mechanic` for esx_society, which the driver adds itself).
+- The Mechanic app pays its society account through the same bank driver.
+- If nothing is paid for and card payments are off (`Config.Mechanic.allowCard = false`), no banking script is needed.
+
+### sd-phone
+
+- **Mail app.** Calls sd-phone's own Mail callbacks as the player (`sd-phone:server:mail:list`, `signIn`, `signOut`, `send`, `saveDraft`, `discardDraft`, `markRead`, `toggleFlag`, `moveToBin`, `move`) and listens to `sd-phone:client:mail:received`. These must exist in your sd-phone version. Without sd-phone (or with `Config.Mail.enabled = false`) the app is not shown.
+- **Mechanic emails** (`Config.Mechanic.mail`) use the sd-phone server exports `getMailAccounts(source)`, `getMailAddresses(citizenId)` and `sendMail(mail)`. as-browser uses the same three, plus `addBankTransaction`, `notify` and `createDocument`. If your sd-phone does not have an export, the email is skipped with a console message and nothing else breaks (as-browser's other calls are skipped silently). Check `sd-phone`'s exports if emails do not arrive.
+- A customer needs a Mail account in the phone's Mail app to receive anything. Addresses are created on the phone (Sign up).
+
+### as-browser
+
+- **Scout** needs `as-browser` started and `Config.Browser.enabled = true`. Site pages, bookmarks and history are as-browser's; job checks are made here.
+- **MOT results.** With `pushMotResults`, every finished test is sent to as-browser through `setMotResult`; keep `Config.gov.mot.enabled = true` in as-browser's `sites/gov/config.lua`.
+- **MOT bookings** are served through as-computer's `booking*` exports (`bookingConfig`, `bookingAvailability`, `bookingHold`, `bookingConfirm`, `bookingRelease`, `bookingMine`, `bookingCancel`, `bookingMove`, `bookingDueReminders`, `bookingMarkReminded`), called by as-browser. Turning off `mot` here turns bookings off; `Config.gov.scripts.motbooking = false` in as-browser hides the pages.
+- **Vehicle history.** Completed Mechanic job cards are logged as "service" events on LS Vehicle Check (`logToHistory`). Set `logToHistory = false` to stop.
+- **Not on the desktop:** the parts shop is desktop-only, so it only works from Scout, and needs its own Postal Prime and society bank setup (as-browser README, "Parts shop").
+
+### Police, MDT and ANPR scripts
+
+```lua
+exports['as-computer']:GetMOTStatus('AB12CDE')        -- { status = 'valid' | 'expired' | 'failed_last_test' | 'never_tested', expiresAt }
+exports['as-computer']:getMotRecords('AB12CDE')       -- { records = { { testedAt, passed, expiresAt, mileage, unit, location }, ... } }
+exports['as-computer']:getServiceHistory('AB12CDE')   -- { records = { { ref, title, completedAt, mileage, garage }, ... } }
+```
+
+Add `exports['as-browser']:getVehicleStatus(plate)`, `isRoadLegal(plate)`, `getVehicleHistory(plate)` and `getVehicleFlags(plate)` for tax, insurance, flags and owners. Mechanic events for payroll, logging or Discord: `as-computer:mechanic:invoiceIssued`, `:invoicePaid`, `:jobCompleted` (server events, or the `onInvoiceIssued` / `onInvoicePaid` / `onJobCompleted` functions in `config/apps/mechanic.lua`).
+
+### Inventory and items
+
+as-computer does not use items. Nothing to add to ox_inventory or qb-inventory. Certificate printing is not built (`Config.PrintEvent`).
+
+### What is not done or not tested
+
+- Not run on a real ESX server (see Vehicles and plates).
+- The Mail app and Mechanic card payments have not been tested in game.
+- Certificate printing (`Config.PrintEvent`) is a hook only.
+- The prop, texture names (`txd`, `txn`) and the `stream/` files need an in-game check on your server.
 
 ## What's real vs placeholder here
 - `ui/index.html` + `ui/style.css` + `ui/app.js` — **Los Santos OS**, a lore-friendly
@@ -183,7 +294,7 @@ jg-mechanic exposes that.
 - **Certificate printing** — viewer is real now; only the printer hand-off (`Config.PrintEvent`) is missing.
 - **DUI state mirroring** — the world screen only shows the idle desktop; it
   doesn't follow what the interacting player is doing.
-- **Fee/payment logic** — deliberately not built (mechanics paid via wage/bonus).
+- **MOT fee logic** — a tester recording an MOT is not charged anything. Fees only exist for website bookings (`config/apps/booking.lua`) and for the Mechanic app's invoices.
 - **txd in `config/config.lua`** — `securitymonitor` confirmed as an embedded texture
   in `lgmods_sinner_monitor.ydr` (no separate .ytd), so txd = model name is right.
   Still worth an in-game test.
@@ -194,9 +305,9 @@ The desktop has a **Scout** browser app (Chrome-style: tabs, address bar, bookma
 
 Setup:
 
-1. Replace `as-browser/server/main.lua` with the patched copy from `as-browser-patch/` (it adds two exports, `handle` and `shellInfo`; nothing else changes). `as-browser/sites/gov/config.lua` in the patch has `mot = { enabled = true }` so the vehicle checker shows MOT status.
-2. Start order: `as-browser` before `as-computer`.
-3. Restart `as-browser`, then `as-computer`.
+1. Nothing to patch. `as-browser` already exports `handle` and `shellInfo` (which Scout uses) and ships with `mot = { enabled = true }` in `sites/gov/config.lua`, so the vehicle checker shows MOT status out of the box. There is no `as-browser-patch` folder any more.
+2. Start order: `as-browser` before `as-computer` (see [Start order](#start-order) below).
+3. After changing either resource: `refresh` in the server console (needed when a manifest changed), then `restart as-browser`, then `restart as-computer`.
 
 Settings (`config/apps/scout.lua`): `Config.Browser = { enabled, resource, pushMotResults }`. With `pushMotResults` on, every finished MOT test is sent to as-browser (`setMotResult`) with the failed items and advisories as the details text, so the government site's vehicle checker shows the MOT status, expiry and history. With MOT switched on in the gov site, `isRoadLegal` (police/ANPR exports) reports `no_mot` for vehicles that have never been tested.
 
@@ -207,6 +318,25 @@ Only jobs that have the Scout app can use the browser through this terminal: req
 A Calendar app on the Los Santos OS desktop (also opens from the taskbar clock): Month / Week / Day views, a mini month picker, colour-coded events with optional start/end times or All day, notes, and a current-time line. One **shared team calendar**: every tester with the MOT job sees, edits and deletes the same events (bookings, reminders, shifts). Double-click a day or a time slot to add an event, click one to edit it, right-click for Edit / Delete. Keys: Left/Right change period, T = today.
 
 "Today" is the real date of the PC (the same clock as the taskbar). Events are stored in the `mot_calendar` table, created automatically. Settings in `config/apps/calendar.lua`: `Config.Calendar = { enabled, weekStart }` (weekStart 1 = Monday, 0 = Sunday).
+
+## Calculator and Notepad
+
+Two built-in apps for every character that may use the computer (`store = false` in `config/apps/calculator.lua` and `notepad.lua`; switch either off with `Config.EnabledApps`).
+
+**Calculator:** standard calculator (immediate execution, so 2 + 3 x 4 = 20), memory keys (MC, MR, M+, M-), a history panel (last 30) and keyboard support. Nothing is stored.
+
+**Notepad:** notes saved per character (`computer_notes`, created automatically, utf8mb4 so emoji work). Sidebar list, search, autosave, Ctrl+S / Ctrl+N, font size, delete needs a second click. Limits in `config/apps/notepad.lua`: `Config.Notepad = { maxNotes = 50, maxLength = 20000 }`. Text is in `locales/calculator_en.lua` (`cl_*`) and `locales/notepad_en.lua` (`np_*`). Not tested in game.
+
+## File Explorer files (Documents, Downloads, shared job folder)
+
+The File Explorer's **Documents** and **Downloads** folders (and a **shared folder for the character's job**, shown as "Mechanic (shared)") now hold real text files kept on the server. The MOT Certificates part and the Recycle Bin for certificates work as before.
+
+- **Documents / Downloads** belong to the character and follow them to any computer. **The shared folder** belongs to the job: everyone on the job can open files, add files and copy them out; only the author can rename or delete a file (and the job boss can too, unless `bossManagesAll = false`).
+- **Files:** New text document, Open (a built-in text editor that saves by itself), Rename (F2), Delete (Del, asks first), Search, sorting. Names are cleaned (no `\ / : * ? " < > |`), `.txt` is added if there is no extension, and a duplicate name becomes `name (2).txt`.
+- **Upload and download:** select files, then **Copy to** (or right-click, or drag onto a folder in the left tree). From Documents or Downloads it offers "Upload to <Job>"; from the shared folder it offers "Download to Downloads". Copies are independent files.
+- **Notepad:** a "Save to Documents" button saves a copy of the open note as a text file.
+- Settings in `config/apps/files.lua` (`Config.Files`): `enabled`, `maxPerFolder` (200), `maxLength` (50000 characters), `maxNameLength`, `sharedFolders` (`'auto'` = every job that may use the computer, or a list like `{ mechanic = true }`), `excludeJobs`, `bossManagesAll`. Table `computer_files` is created automatically. Text is in `locales/files_en.lua` (`fl_*`).
+- Not done: real uploads from your own PC (FiveM cannot pick files from the player's disk), binary files or images, a Recycle Bin for deleted files (deleting a file is permanent, after a confirmation), folders inside folders. Not tested in game.
 
 ## Mail
 
@@ -234,4 +364,3 @@ A Store app for garages, opened from the desktop like the others. Everything is 
 For other scripts: `exports['as-computer']:getServiceHistory(plate)` returns completed job cards, and the server events `as-computer:mechanic:invoiceIssued`, `:invoicePaid` and `:jobCompleted` (or the `onInvoiceIssued` / `onInvoicePaid` / `onJobCompleted` hooks) fire with the record. A plate change from as-browser is followed automatically.
 
 Files: `config/apps/mechanic.lua`, `server/mechanic.lua`, `client/mechanic.lua`, `ui/mechanic.js`, `ui/mechanic.css`, `locales/mechanic_en.lua`. The window is added through `LSOS.registerApp` at the end of `ui/app.js`, which any later app can use the same way. Translations: copy `locales/mechanic_en.lua` and change `'en'` to your language code. It adds strings to that language without creating a new one.
-

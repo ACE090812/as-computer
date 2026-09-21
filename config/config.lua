@@ -79,13 +79,15 @@ Config.Apps = {}
 -- Turn apps off for your region / server type. Set an app to false and it vanishes: no desktop icon, not in the
 -- Store, and the server refuses everything it would have done. Anything not listed stays on. (An app's own
 -- config/apps/<app>.lua entry can also say `enabled = false`.)
--- Ids: mot, mechanic, mail, calendar, browser, store, settings, explorer.
+-- Ids: mot, mechanic, mail, calculator, notepad, calendar, browser, store, settings, explorer.
 -- Example for a US server: no MOT (a UK roadworthiness test). Also switch the matching bits off in as-browser
 -- (Config.Sites.gov / lsplates / lsvehiclecheck) and Config.Booking.enabled below, see the README.
 Config.EnabledApps = {
   mot      = true,   -- UK MOT testing service (also feeds the government site's vehicle checker and MOT bookings)
   mechanic = true,   -- job cards, quotes, invoices, parts stock
   mail     = true,   -- the phone's Mail accounts on the desktop
+  calculator = true, -- standard calculator with memory and history
+  notepad  = true,   -- the character's own notes, saved on the server
   calendar = true,
   browser  = true,   -- Scout
   -- store = true, settings = true, explorer = true,

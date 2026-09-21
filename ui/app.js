@@ -99,6 +99,7 @@
     start: '<svg viewBox="0 0 24 24"><path d="M12 1.6l9 5.2v10.4l-9 5.2-9-5.2V6.8z" fill="#1d70b8"/><path d="M12 1.6l9 5.2-9 5.2-9-5.2z" fill="#4da3e8"/><text x="12" y="17.2" font-size="7.4" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">LS</text></svg>',
     crest: '<svg viewBox="0 0 24 24"><path d="M12 1.6l9 5.2v10.4l-9 5.2-9-5.2V6.8z" fill="#1d70b8"/><text x="12" y="15.6" font-size="7.4" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">LS</text></svg>',
     folder: '<svg viewBox="0 0 24 24"><path d="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" fill="#e5b12b"/><path d="M2 9.5a1.5 1.5 0 0 1 1.5-1.5h17A1.5 1.5 0 0 1 22 9.5V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" fill="#f9d566"/></svg>',
+    filetxt: '<svg viewBox="0 0 24 24"><path d="M5 2.5h9.2L19 7.3V21a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1z" fill="#fff" stroke="#8a93a3" stroke-width="1.1"/><path d="M14 2.6V7.5h5" fill="#e6e9ef" stroke="#8a93a3" stroke-width="1.1"/><path d="M7.4 11h9.2M7.4 14h9.2M7.4 17h5.6" stroke="#5b6b85" stroke-width="1.3" stroke-linecap="round"/></svg>',
     pc: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1.6" fill="#3b8dea"/><rect x="4.5" y="5.5" width="15" height="9" rx=".8" fill="#9fd0ff"/><path d="M8 20h8M12 16v4" stroke="#556" stroke-width="1.6" stroke-linecap="round"/></svg>',
     mot: '<svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="18.5" rx="2.6" fill="#1d70b8"/><rect x="8" y="1.6" width="8" height="4.2" rx="1.6" fill="#003078"/><path d="M8 13.4l3 3 5-6" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     bin: '<svg viewBox="0 0 24 24"><path d="M6 7h12l-1 13a1.6 1.6 0 0 1-1.6 1.4H8.6A1.6 1.6 0 0 1 7 20z" fill="#9aa4b5"/><rect x="4.5" y="4.6" width="15" height="2.4" rx="1.1" fill="#7c8799"/><rect x="9.5" y="2.6" width="5" height="2.4" rx="1" fill="#7c8799"/><path d="M10 10v8M14 10v8" stroke="#eef" stroke-width="1.3" stroke-linecap="round"/></svg>',
@@ -856,6 +857,7 @@
     add('root', null, 'pc', 'ui_fx_pc', 'This PC');
     add('docs', 'root', 'folder', 'ui_fx_docs', 'Documents');
     add('dl', 'root', 'folder', 'ui_fx_dl', 'Downloads');
+    add('jobf', 'root', 'folder', 'fl_jobf', 'Shared');
     add('mot', 'root', 'folder', 'ui_fx_mot', 'MOT Certificates');
     add('mot/all', 'mot', 'folder', 'ui_fx_all', 'All certificates');
     add('mot/mine', 'mot', 'folder', 'ui_fx_mine', 'My tests');
@@ -864,11 +866,291 @@
     add('bin', 'root', 'bin', 'ui_fx_bin', 'Recycle Bin');
   })();
   // the MOT Certificates folder only exists for jobs that have the MOT app
-  function kidsOf(k) { return NODES[k].kids.filter(function (c) { return c !== 'mot' || appVisible('mot'); }); }
-  function nodeName(k) { return t(NODES[k].key, NODES[k].def); }
+  function kidsOf(k) {
+    return NODES[k].kids.filter(function (c) {
+      if (c === 'mot') return appVisible('mot');
+      if (c === 'jobf') return !!FS.job;
+      if (c === 'docs' || c === 'dl') return FS.enabled !== false;
+      return true;
+    });
+  }
+  function nodeName(k) { return k === 'jobf' && FS.job ? fmt(t('fl_shared', '%s (shared)'), FS.job) : t(NODES[k].key, NODES[k].def); }
   function nodeIcon(k) { return k === 'bin' ? (binCerts().length ? 'binfull' : 'bin') : NODES[k].ic; }
 
   var EX = { hist: ['root'], idx: 0, sel: {}, anchor: null, sortKey: 'date', sortDir: -1, q: '', view: [], renaming: null, renameVal: '' };
+
+  // ================================================================ Files: Documents, Downloads, shared job folder
+  // Text files kept on the server (server/files.lua). Every call goes through the 'filesApi' NUI callback (client/files.lua);
+  // the server decides who may see or change what, this page only shows it.
+  var FILE_KEY = { docs: 'docs', dl: 'dl', jobf: 'job' };
+  var FS = { tried: false, enabled: true, job: null, isBoss: false, limits: {}, state: {}, data: {}, seq: {}, edit: {} };
+
+  function isFileFolder(k) { return Object.prototype.hasOwnProperty.call(FILE_KEY, k); }
+  function fileById(id) {
+    var f = null;
+    Object.keys(FS.data).forEach(function (k) { (FS.data[k] || []).forEach(function (x) { if (String(x.id) === String(id)) f = x; }); });
+    return f;
+  }
+  function fsApi(name, data) {
+    if (isDui) return Promise.resolve({ ok: false, reason: 'network' });
+    return fetch('https://' + (window.GetParentResourceName ? window.GetParentResourceName() : 'as-computer') + '/filesApi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({ name: name, data: data || {} })
+    }).then(function (r) { return r.json(); }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false, reason: 'error' }; })
+      .catch(function () { return { ok: false, reason: 'network' }; });
+  }
+  var FS_ERR = {
+    not_authorised: ['fl_err_not_authorised', 'You cannot use files from this computer.'],
+    invalid: ['fl_err_invalid', 'That could not be done.'],
+    too_long: ['fl_err_too_long', 'This file is at its length limit.'],
+    too_many: ['fl_err_too_many', 'This folder is full. Delete a file first.'],
+    forbidden: ['fl_err_forbidden', 'You can only change your own files in this folder.'],
+    busy: ['fl_err_busy', 'Slow down, try again in a moment.'],
+    network: ['fl_err_network', 'Could not reach the server.'],
+    error: ['fl_err_error', 'Something went wrong.']
+  };
+  function fsErrText(res) { var e = FS_ERR[res && res.reason] || FS_ERR.error; return t(e[0], e[1]); }
+  function fsErrDlg(res) {
+    showDlg({ title: t('ui_app_explorer', 'File Explorer'), html: '<div>' + esc(fsErrText(res)) + '</div>', buttons: [{ label: t('fl_ok', 'OK'), primary: true }] });
+  }
+  function flash(msg) {
+    var el = $('ex-sel');
+    if (!el) return;
+    el.textContent = msg;
+    clearTimeout(FS.flashT);
+    FS.flashT = setTimeout(function () { renderPreview(); }, 3000);
+  }
+
+  function fsLoadFolders() {
+    FS.tried = true;
+    fsApi('folders').then(function (res) {
+      if (!res.ok || !res.data) { if (res.reason === 'not_authorised') { FS.enabled = false; FS.job = null; renderExplorer(); } return; }
+      FS.enabled = res.data.enabled !== false;
+      FS.job = res.data.job || null;
+      FS.isBoss = !!res.data.isBoss;
+      FS.limits = res.data.limits || {};
+      renderExplorer();
+    });
+  }
+  function fsEnsure(k) { if (FS.state[k] === undefined) fsLoad(k, true); }
+  function fsLoad(k, quiet) {
+    var seq = (FS.seq[k] = (FS.seq[k] || 0) + 1);
+    FS.state[k] = 'loading';
+    if (!quiet) renderExplorer();
+    fsApi('list', { folder: FILE_KEY[k] }).then(function (res) {
+      if (seq !== FS.seq[k]) return;
+      if (res.ok && res.data) { FS.data[k] = res.data.files || []; FS.state[k] = 'ok'; }
+      else FS.state[k] = 'error';
+      renderExplorer();
+    });
+  }
+  function refreshCurrent() { if (isFileFolder(curFolder())) fsLoad(curFolder()); else refreshCerts(); }
+
+  function fmtSize(n) {
+    n = Number(n) || 0;
+    return n < 1024 ? fmt(t('fl_bytes', '%s B'), n.toLocaleString(loc())) : fmt(t('fl_kb', '%s KB'), (n / 1024).toLocaleString(loc(), { maximumFractionDigits: 1 }));
+  }
+  function sortFiles(list) {
+    var key = EX.sortKey, dir = EX.sortDir;
+    function val(f) {
+      if (key === 'size') return f.size || 0;
+      if (key === 'by') return String(f.by || '').toLowerCase();
+      if (key === 'date') return f.updated || 0;
+      return String(f.name || '').toLowerCase();
+    }
+    return list.slice().sort(function (a, b) { var x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+  }
+  function fileRow(f, key, selCls) {
+    var nameHtml = (EX.renaming === key)
+      ? '<input class="rn" type="text" maxlength="' + esc(String(FS.limits.maxNameLength || 80)) + '" autocomplete="off" value="' + esc(EX.renameVal) + '">'
+      : '<span>' + esc(f.name) + '</span>';
+    return '<div class="ex-row' + selCls + '" draggable="true" data-key="' + esc(key) + '"><div class="nm">' + icSpan('filetxt') + nameHtml + '</div>' +
+      '<div class="dim">' + esc(fmtDate(f.updated)) + '</div><div class="dim">' + esc(fmtSize(f.size)) + '</div><div class="dim">' + esc(f.by || '—') + '</div></div>';
+  }
+  function filePreview(f) {
+    function kv(k, v) { return '<div class="pv-kv"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div></div>'; }
+    return '<div class="pv-badge">' + icSpan('filetxt') + '<b>' + esc(t('fl_type_text', 'Text document')) + '</b></div>' +
+      '<div class="pv-plate fl-name">' + esc(f.name) + '</div>' +
+      kv(t('fl_col_modified', 'Date modified'), fmtDate(f.updated)) +
+      kv(t('fl_col_size', 'Size'), fmtSize(f.size)) +
+      kv(t('fl_by', 'Created by'), f.by || '—') +
+      '<div class="fl-snip">' + (f.snippet ? esc(f.snippet) : '<i>' + esc(t('fl_empty_preview', '(empty file)')) + '</i>') + '</div>' +
+      '<div class="btn primary" data-fsopen="1" style="margin-top:6px">' + esc(t('fl_open', 'Open')) + '</div>';
+  }
+  function renderFileCmd(bar) {
+    var files = selFiles(), one = files.length === 1 ? files[0] : null;
+    var manage = files.length > 0 && files.every(function (f) { return f.manage; });
+    bar.classList.remove('hidden');
+    bar.innerHTML = cmdBtn('fs-new', 'filetxt', t('fl_new', 'New text document'), FS.state[curFolder()] !== 'ok') +
+      cmdBtn('fs-open', '', t('fl_open', 'Open'), !one) +
+      cmdBtn('fs-rename', 'rename', t('ui_fx_cmd_rename', 'Rename'), !(one && one.manage)) +
+      cmdBtn('fs-delete', 'trash', t('ui_fx_cmd_delete', 'Delete'), !manage) +
+      cmdBtn('fs-copy', '', t('fl_copy_to', 'Copy to') + ' ▾', !files.length);
+  }
+
+  function fsNew() {
+    var k = curFolder();
+    if (!isFileFolder(k) || FS.state[k] !== 'ok') return;
+    fsApi('save', { folder: FILE_KEY[k], name: t('fl_new_name', 'New Text Document.txt'), body: '' }).then(function (res) {
+      if (!res.ok) { fsErrDlg(res); return; }
+      var f = res.data.file;
+      (FS.data[k] = FS.data[k] || []).push(f);
+      if (curFolder() === k) { EX.sel = {}; EX.sel['x:' + f.id] = true; EX.anchor = 'x:' + f.id; EX.renaming = 'x:' + f.id; EX.renameVal = f.name; }
+      renderExplorer();
+    });
+  }
+  function fsOpen(f) {
+    fsApi('get', { id: f.id }).then(function (res) {
+      if (!res.ok) { fsErrDlg(res); if (res.reason === 'invalid') refreshCurrent(); return; }
+      openFileEditor(res.data.file);
+    });
+  }
+  function fsStartRename() {
+    var files = selFiles();
+    if (files.length !== 1 || !files[0].manage) return;
+    EX.renaming = 'x:' + files[0].id; EX.renameVal = files[0].name;
+    renderExplorer();
+  }
+  function fsCommitRename(key, val) {
+    EX.renaming = null;
+    var f = fileById(key.slice(2));
+    val = String(val || '').replace(/\s+/g, ' ').trim();
+    if (!f || !val || val === f.name) { renderExplorer(); return; }
+    fsApi('rename', { id: f.id, name: val }).then(function (res) {
+      if (!res.ok) { fsErrDlg(res); return; }
+      f.name = res.data.file.name; f.updated = res.data.file.updated;
+      var w = wins['file:' + f.id];
+      if (w) { w.title = f.name; setTitle(w.id); }
+      renderExplorer();
+    });
+    renderExplorer();
+  }
+  function fsDelete() {
+    var files = selFiles().filter(function (f) { return f.manage; });
+    if (!files.length) return;
+    confirmDlg(t('ui_dlg_delete_title', 'Delete'),
+      files.length === 1 ? t('fl_delete_one', 'Are you sure you want to permanently delete this file?') : fmt(t('fl_delete_many', 'Are you sure you want to permanently delete these %s files?'), files.length),
+      function () {
+        var k = curFolder(), chain = Promise.resolve(), failed = null;
+        files.forEach(function (f) {
+          chain = chain.then(function () {
+            return fsApi('delete', { id: f.id }).then(function (res) {
+              if (res.ok) { FS.data[k] = (FS.data[k] || []).filter(function (x) { return x.id !== f.id; }); var w = wins['file:' + f.id]; if (w) closeWin(w.id); }
+              else failed = failed || res;
+            });
+          });
+        });
+        chain.then(function () { EX.sel = {}; renderExplorer(); if (failed) fsErrDlg(failed); });
+      });
+  }
+  function fsDests(from) {
+    return ['docs', 'dl', 'jobf'].filter(function (d) { return d !== from && (d !== 'jobf' || !!FS.job); });
+  }
+  function fsDestLabel(d) {
+    return d === 'docs' ? t('fl_copy_docs', 'Copy to Documents') : d === 'dl' ? t('fl_copy_dl', 'Download to Downloads') : fmt(t('fl_copy_job', 'Upload to %s'), FS.job || '');
+  }
+  function fsCopy(files, dest) {
+    if (!files.length || !isFileFolder(dest) || dest === curFolder()) return;
+    var chain = Promise.resolve(), ok = 0, failed = null;
+    files.forEach(function (f) {
+      chain = chain.then(function () {
+        return fsApi('copy', { id: f.id, to: FILE_KEY[dest] }).then(function (res) { if (res.ok) ok++; else failed = failed || res; });
+      });
+    });
+    chain.then(function () {
+      FS.state[dest] = undefined;   // reloaded the next time that folder is opened
+      if (ok) flash(fmt(t('fl_copied', 'Copied to %s'), nodeName(dest)));
+      if (failed) fsErrDlg(failed);
+    });
+  }
+  function fsCopyMenu() {
+    var files = selFiles();
+    return fsDests(curFolder()).map(function (d) { return { label: fsDestLabel(d), run: function () { fsCopy(selFiles().length ? selFiles() : files, d); } }; });
+  }
+  function fsRowMenu(key) {
+    var files = selFiles(), one = files.length === 1 ? files[0] : null, manage = files.length > 0 && files.every(function (f) { return f.manage; });
+    return [
+      { label: t('fl_open', 'Open'), bold: true, off: !one, run: function () { fsOpen(one); } },
+      { sep: true }
+    ].concat(fsCopyMenu(), [
+      { sep: true },
+      { label: t('ui_fx_cmd_rename', 'Rename'), hint: 'F2', off: !(one && one.manage), run: fsStartRename },
+      { label: t('ui_fx_cmd_delete', 'Delete'), hint: 'Del', off: !manage, run: fsDelete }
+    ]);
+  }
+  function fsAreaMenu() {
+    var items = [{ label: t('fl_new', 'New text document'), off: FS.state[curFolder()] !== 'ok', run: fsNew }, { sep: true }];
+    [['name', t('ui_fx_col_name', 'Name')], ['date', t('fl_col_modified', 'Date modified')], ['size', t('fl_col_size', 'Size')], ['by', t('fl_col_author', 'Author')]].forEach(function (c) {
+      items.push({ label: (EX.sortKey === c[0] ? '✓  ' : '      ') + fmt(t('ui_ctx_sort', 'Sort by %s'), c[1].toLowerCase()), run: function () { setSort(c[0]); } });
+    });
+    items.push({ sep: true }, { label: t('ui_ctx_refresh', 'Refresh'), hint: 'F5', run: refreshCurrent });
+    return items;
+  }
+  function fsCmd(id, el) {
+    if (id === 'fs-new') fsNew();
+    else if (id === 'fs-open') { var one = selFiles()[0]; if (one) fsOpen(one); }
+    else if (id === 'fs-rename') fsStartRename();
+    else if (id === 'fs-delete') fsDelete();
+    else if (id === 'fs-copy') {
+      if (el.classList.contains('off')) return;
+      var r = el.getBoundingClientRect();
+      showCtx({ clientX: r.left, clientY: r.bottom }, fsCopyMenu());
+    }
+  }
+
+  // ---- the text editor window (one per open file; saves by itself a moment after typing stops)
+  function openFileEditor(f) {
+    var id = 'file:' + f.id;
+    if (wins[id]) { openWin(id); return; }
+    var win = document.createElement('div');
+    win.innerHTML = '<div class="win-body"><div class="fe"><div class="fe-bar"><span class="fe-st"></span><span class="fe-grow"></span><span class="fe-cnt"></span>' +
+      '<div class="btn primary fe-save">' + esc(t('fl_save', 'Save')) + '</div></div><textarea class="fe-ta" spellcheck="false"></textarea></div></div>';
+    $('windows').appendChild(win);
+    var ta = win.querySelector('.fe-ta'), st = win.querySelector('.fe-st'), cnt = win.querySelector('.fe-cnt'), btn = win.querySelector('.fe-save');
+    var E = { dirty: false, saving: false, again: false, timer: null };
+    FS.edit[id] = E;
+    ta.value = f.body || '';
+    ta.maxLength = FS.limits.maxLength || 50000;
+    if (!f.manage) { ta.readOnly = true; btn.style.display = 'none'; }
+    function count() { cnt.textContent = fmt(t('fl_chars', '%s characters'), ta.value.length.toLocaleString(loc())); }
+    function status(msg, bad) { st.textContent = msg; st.classList.toggle('bad', !!bad); }
+    function save() {
+      clearTimeout(E.timer);
+      if (!E.dirty || !f.manage) return;
+      if (E.saving) { E.again = true; return; }
+      E.saving = true; E.dirty = false; status(t('fl_saving', 'Saving…'));
+      var body = ta.value;
+      fsApi('save', { id: f.id, body: body }).then(function (res) {
+        E.saving = false;
+        if (res.ok) {
+          Object.keys(FS.data).forEach(function (k) { (FS.data[k] || []).forEach(function (x) { if (x.id === f.id) { x.size = res.data.file.size; x.updated = res.data.file.updated; x.snippet = res.data.file.snippet; } }); });
+          if (!E.dirty) status(t('fl_saved', 'Saved'));
+          if (wins.explorer && wins.explorer.open) renderExplorer();
+        } else { E.dirty = true; status(fsErrText(res), true); return; }
+        if (E.again || E.dirty) { E.again = false; E.timer = setTimeout(save, 300); }
+      });
+    }
+    ta.addEventListener('input', function () {
+      E.dirty = true; count(); status(t('fl_unsaved', 'Not saved yet'));
+      clearTimeout(E.timer); E.timer = setTimeout(save, 1200);
+    });
+    ta.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); save(); }
+      e.stopPropagation();
+    });
+    btn.addEventListener('click', save);
+    count();
+    defWin(id, { el: win, icon: 'filetxt', dynamic: true, w: 820, h: 620, title: f.name, onClose: function () { save(); delete FS.edit[id]; } });
+    openWin(id);
+    ta.focus();
+  }
+
+  // drag files onto a folder in the tree (or the address bar) to copy them there
+  function fsDropTarget(e) {
+    var nav = e.target.closest && e.target.closest('[data-nav]');
+    return nav && EX.dragging && isFileFolder(nav.dataset.nav) && nav.dataset.nav !== curFolder() && fsDests(curFolder()).indexOf(nav.dataset.nav) !== -1 ? nav : null;
+  }
 
   function certsFor(k) {
     var list = liveCerts();
@@ -902,7 +1184,10 @@
   }
 
   // ---- selection ----
-  function keyOfItem(it) { return it.type === 'folder' ? 'f:' + it.k : 'c:' + it.c.testNumber; }
+  function keyOfItem(it) { return it.type === 'folder' ? 'f:' + it.k : it.type === 'file' ? 'x:' + it.f.id : 'c:' + it.c.testNumber; }
+  function selFiles() {
+    return EX.view.filter(function (it) { return it.type === 'file' && EX.sel['x:' + it.f.id]; }).map(function (it) { return it.f; });
+  }
   function selCerts() {
     return EX.view.filter(function (it) { return it.type === 'cert' && EX.sel['c:' + it.c.testNumber]; }).map(function (it) { return it.c; });
   }
@@ -930,6 +1215,7 @@
   function renderCmd() {
     var k = curFolder(), bar = $('ex-cmd'), certs = selCerts(), one = certs.length === 1 ? certs[0] : null;
     var manage = certs.some(canManage);
+    if (isFileFolder(k)) { renderFileCmd(bar); return; }
     if (k === 'bin') {
       bar.classList.remove('hidden');
       var all = binCerts();
@@ -948,7 +1234,9 @@
   }
 
   function renderExplorer() {
-    var k = curFolder(), inBin = k === 'bin';
+    var k = curFolder(), inBin = k === 'bin', isFile = isFileFolder(k);
+    if (!FS.tried) fsLoadFolders();
+    if (isFile) fsEnsure(k);
     // nav tree
     var nav = '';
     (function walk(key, depth) {
@@ -974,6 +1262,7 @@
       ['date', inBin ? t('ui_fx_col_deleted', 'Date deleted') : t('ui_date_tested', 'Date tested')],
       ['result', t('ui_fx_col_result', 'Result')],
       ['expires', inBin ? t('ui_fx_col_deletedby', 'Deleted by') : t('ui_fx_col_expires', 'Expires')]];
+    if (isFile) cols = [['name', t('ui_fx_col_name', 'Name')], ['date', t('fl_col_modified', 'Date modified')], ['size', t('fl_col_size', 'Size')], ['by', t('fl_col_author', 'Author')]];
     $('ex-head').innerHTML = cols.map(function (c) {
       return '<div data-sort="' + c[0] + '">' + esc(c[1]) + (EX.sortKey === c[0] ? '<span class="arrow">' + (EX.sortDir < 0 ? '▼' : '▲') + '</span>' : '') + '</div>';
     }).join('');
@@ -992,6 +1281,12 @@
         sortCerts(certs).forEach(function (c) { items.push({ type: 'cert', c: c }); });
       }
     }
+    if (isFile) {
+      var fst = FS.state[k];
+      if (fst === 'error') msg = esc(t('fl_error', "Couldn't load the files")) + '<br><div class="btn" data-retry="1">' + esc(t('fl_retry', 'Try again')) + '</div>';
+      else if (fst !== 'ok') msg = esc(t('fl_loading', 'Loading…'));
+      else sortFiles((FS.data[k] || []).filter(function (f) { return !q || f.name.toLowerCase().indexOf(q.toLowerCase()) !== -1; })).forEach(function (f) { items.push({ type: 'file', f: f }); });
+    }
     if (!msg && !items.length) msg = esc(inBin ? t('ui_fx_bin_empty', 'Recycle Bin is empty') : t('ui_fx_empty', 'This folder is empty'));
     EX.view = items;
 
@@ -1003,6 +1298,7 @@
 
     var rows = items.map(function (it) {
       var key = keyOfItem(it), selCls = EX.sel[key] ? ' sel' : '';
+      if (it.type === 'file') return fileRow(it.f, key, selCls);
       if (it.type === 'folder') {
         var cnt = (state.certsState === 'ok' && (it.k.indexOf('mot/') === 0)) ? '<span class="dim" style="margin-left:8px">' + certsFor(it.k).length + '</span>' : '';
         return '<div class="ex-row' + selCls + '" data-key="' + esc(key) + '"><div class="nm">' + icSpan(nodeIcon(it.k)) + '<span>' + esc(nodeName(it.k)) + '</span>' + cnt + '</div><div></div><div></div><div></div></div>';
@@ -1037,6 +1333,8 @@
     $('ex-sel').textContent = count === 0 ? '' : (count === 1 ? t('ui_fx_selected', '1 item selected') : fmt(t('ui_fx_selected_n', '%s items selected'), count));
     var el = $('ex-prev');
     var certs = selCerts();
+    var pf = selFiles();
+    if (pf.length === 1 && count === 1) { el.innerHTML = filePreview(pf[0]); return; }
     if (certs.length !== 1) {
       el.innerHTML = '<div class="hint">' + esc(count > 1 ? fmt(t('ui_fx_selected_n', '%s items selected'), count) : t('ui_fx_select', 'Select a file to preview')) + '</div>';
       return;
@@ -1065,6 +1363,7 @@
   function openRowKey(key) {
     if (!key) return;
     if (key.indexOf('f:') === 0) { navigate(key.slice(2)); return; }
+    if (key.indexOf('x:') === 0) { var ff = fileById(key.slice(2)); if (ff) fsOpen(ff); return; }
     var c = null, tn = key.slice(2);
     EX.view.forEach(function (it) { if (it.type === 'cert' && it.c.testNumber === tn) c = it.c; });
     if (!c) return;
@@ -1118,6 +1417,7 @@
   function tnList(certs) { return certs.map(function (c) { return c.testNumber; }); }
 
   function deleteSelected() {
+    if (isFileFolder(curFolder())) { fsDelete(); return; }
     var certs = selCerts().filter(canManage);
     if (!certs.length) return;
     if (curFolder() === 'bin') {
@@ -1154,6 +1454,7 @@
   }
 
   function startRename() {
+    if (isFileFolder(curFolder())) { fsStartRename(); return; }
     var certs = selCerts();
     if (certs.length !== 1 || !canManage(certs[0]) || curFolder() === 'bin') return;
     EX.renaming = 'c:' + certs[0].testNumber;
@@ -1163,6 +1464,7 @@
   function commitRename(val) {
     var key = EX.renaming;
     if (!key) return;
+    if (key.indexOf('x:') === 0) { fsCommitRename(key, val); return; }
     EX.renaming = null;
     var tn = key.slice(2), c = null;
     (state.certs || []).forEach(function (x) { if (x.testNumber === tn) c = x; });
@@ -1232,6 +1534,7 @@
   function rowMenu(key) {
     if (!EX.sel[key]) setSel([key]);
     if (key.indexOf('f:') === 0) return [{ label: t('ui_ctx_open', 'Open'), bold: true, run: function () { navigate(key.slice(2)); } }];
+    if (key.indexOf('x:') === 0) return fsRowMenu(key);
     var certs = selCerts(), one = certs.length === 1 ? certs[0] : null, manage = certs.some(canManage);
     if (curFolder() === 'bin') {
       return [
@@ -1255,6 +1558,7 @@
   }
 
   function areaMenu() {
+    if (isFileFolder(curFolder())) return fsAreaMenu();
     var k = curFolder(), inBin = k === 'bin', items = [];
     if (inBin) items.push({ label: t('ui_fx_cmd_empty', 'Empty Recycle Bin'), off: !binCerts().some(canManage), run: emptyBin }, { sep: true });
     if (inBin || k.indexOf('mot/') === 0) {
@@ -1264,7 +1568,7 @@
       });
       items.push({ sep: true });
     }
-    items.push({ label: t('ui_ctx_refresh', 'Refresh'), hint: 'F5', run: function () { refreshCerts(); } });
+    items.push({ label: t('ui_ctx_refresh', 'Refresh'), hint: 'F5', run: function () { refreshCurrent(); } });
     return items;
   }
 
@@ -1347,10 +1651,11 @@
     if (nav) { navigate(nav.dataset.nav); return; }
     var sort = e.target.closest('[data-sort]');
     if (sort) { setSort(sort.dataset.sort); return; }
-    if (e.target.closest('[data-retry]')) { refreshCerts(); return; }
+    if (e.target.closest('[data-retry]')) { refreshCurrent(); return; }
     var cmd = e.target.closest('[data-cmd]');
     if (cmd) {
       var id = cmd.dataset.cmd;
+      if (id.indexOf('fs-') === 0) { fsCmd(id, cmd); return; }
       if (id === 'rename') startRename();
       else if (id === 'delete') deleteSelected();
       else if (id === 'print') { var one = selCerts()[0]; if (one && state.canPrint) postToClient('printCertificate', one); }
@@ -1359,6 +1664,7 @@
       else if (id === 'restoreall') restoreCerts(binCerts());
       return;
     }
+    if (e.target.closest('[data-fsopen]')) { var pf1 = selFiles()[0]; if (pf1) fsOpen(pf1); return; }
     if (e.target.closest('[data-openpv]')) { var sc = selCerts()[0]; if (sc) openCert(sc); return; }
     var row = e.target.closest('.ex-row');
     if (row) {
@@ -1382,6 +1688,28 @@
     var row = e.target.closest('.ex-row');
     if (row) openRowKey(row.dataset.key);
   });
+  exWin.addEventListener('dragstart', function (e) {
+    var row = e.target.closest && e.target.closest('.ex-row');
+    if (!row || row.dataset.key.indexOf('x:') !== 0) { e.preventDefault(); return; }
+    if (!EX.sel[row.dataset.key]) setSel([row.dataset.key]);
+    EX.dragging = true;
+    try { e.dataTransfer.setData('text/plain', 'files'); e.dataTransfer.effectAllowed = 'copy'; } catch (err) { /* ignore */ }
+  });
+  exWin.addEventListener('dragover', function (e) {
+    exWin.querySelectorAll('.drop').forEach(function (n) { n.classList.remove('drop'); });
+    var nav = fsDropTarget(e);
+    if (nav) { e.preventDefault(); nav.classList.add('drop'); }
+  });
+  exWin.addEventListener('drop', function (e) {
+    var nav = fsDropTarget(e);
+    exWin.querySelectorAll('.drop').forEach(function (n) { n.classList.remove('drop'); });
+    if (nav) { e.preventDefault(); fsCopy(selFiles(), nav.dataset.nav); }
+    EX.dragging = false;
+  });
+  exWin.addEventListener('dragend', function () {
+    EX.dragging = false;
+    exWin.querySelectorAll('.drop').forEach(function (n) { n.classList.remove('drop'); });
+  });
   $('ex-rows').addEventListener('keydown', function (e) {
     if (!e.target.classList || !e.target.classList.contains('rn')) return;
     if (e.key === 'Enter') { e.preventDefault(); commitRename(e.target.value); }
@@ -1396,7 +1724,7 @@
   $('ex-back').addEventListener('click', function () { if (EX.idx > 0) { EX.idx--; EX.sel = {}; EX.renaming = null; renderExplorer(); } });
   $('ex-fwd').addEventListener('click', function () { if (EX.idx < EX.hist.length - 1) { EX.idx++; EX.sel = {}; EX.renaming = null; renderExplorer(); } });
   $('ex-up').addEventListener('click', function () { var p = NODES[curFolder()].parent; if (p) navigate(p); });
-  $('ex-refresh').addEventListener('click', function () { refreshCerts(); });
+  $('ex-refresh').addEventListener('click', function () { refreshCurrent(); });
   $('ex-search').addEventListener('input', function (e) { EX.q = e.target.value; EX.sel = {}; renderExplorer(); });
 
   // ================================================================ desktop, taskbar, start menu events
@@ -1538,8 +1866,8 @@
       else if (e.key === 'Enter') { var sk = Object.keys(EX.sel)[0]; if (sk) openRowKey(sk); }
       else if (e.key === 'Delete') { e.preventDefault(); deleteSelected(); }
       else if (e.key === 'F2') { e.preventDefault(); startRename(); }
-      else if (e.key === 'F5') { e.preventDefault(); refreshCerts(); }
-      else if ((e.key === 'a' || e.key === 'A') && e.ctrlKey) { e.preventDefault(); setSel(EX.view.filter(function (it) { return it.type === 'cert'; }).map(keyOfItem)); }
+      else if (e.key === 'F5') { e.preventDefault(); refreshCurrent(); }
+      else if ((e.key === 'a' || e.key === 'A') && e.ctrlKey) { e.preventDefault(); setSel(EX.view.filter(function (it) { return it.type === 'cert' || it.type === 'file'; }).map(keyOfItem)); }
       else if (e.key === 'Backspace') { var p = NODES[curFolder()].parent; if (p) navigate(p); }
     }
   });
@@ -3263,7 +3591,7 @@
   ICONS.calendar = calIconSvg();
   defWin('calendar', { el: calWin, icon: 'calendar', titleKey: 'ui_app_calendar', titleDef: 'Calendar', w: 1240, h: 800, onOpen: calStart });
   defWin('explorer', { el: exWin, icon: 'folder', titleKey: 'ui_app_explorer', titleDef: 'File Explorer', w: 1280, h: 740,
-    onOpen: function () { if (appVisible('mot')) { EX.hist = ['root', 'mot', 'mot/all']; EX.idx = 2; } else { EX.hist = ['root']; EX.idx = 0; } EX.sel = {}; EX.renaming = null; EX.q = ''; $('ex-search').value = ''; renderExplorer(); if (state.certsState === 'idle') refreshCerts(); } });
+    onOpen: function () { if (appVisible('mot')) { EX.hist = ['root', 'mot', 'mot/all']; EX.idx = 2; } else { EX.hist = ['root']; EX.idx = 0; } EX.sel = {}; EX.renaming = null; EX.q = ''; $('ex-search').value = ''; FS.tried = false; FS.state = {}; renderExplorer(); if (state.certsState === 'idle') refreshCerts(); } });
 
   fillIcons();
   renderTaskbar();

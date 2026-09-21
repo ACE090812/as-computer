@@ -1,0 +1,10 @@
+/* File Explorer files (Documents, Downloads, shared job folder) and the text editor window. */
+.fl-name{font-size:15px;word-break:break-all}
+.fl-snip{margin:8px 0 4px;padding:8px 10px;border:1px solid #e1e4ea;border-radius:7px;background:#fbfbfd;color:#3b4252;font-size:12.5px;line-height:1.4;max-height:150px;overflow:hidden;white-space:pre-wrap;word-break:break-word}
+.nav-item.drop,.crumb.drop{outline:2px solid #3b8dea;outline-offset:-2px;background:#e3ecf9}
+.fe{position:absolute;inset:0;display:flex;flex-direction:column;background:#fff;font-family:var(--ui-font);color:#1b1f27}
+.fe *{box-sizing:border-box}
+.fe-bar{flex:none;display:flex;align-items:center;gap:12px;padding:7px 12px;border-bottom:1px solid #e1e4ea;background:#f3f4f7;font-size:12.5px;color:#5b6472}
+.fe-grow{flex:1}
+.fe-st.bad{color:#b3261e;font-weight:600}
+.fe-ta{flex:1;min-height:0;width:100%;border:0;outline:0;resize:none;padding:14px 16px;font:15px/1.45 Consolas,'Courier New',monospace;color:#1b1f27;background:#fff;user-select:text;-webkit-user-select:text}

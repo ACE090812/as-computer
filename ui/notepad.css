@@ -1,0 +1,34 @@
+/* Notepad app (Los Santos OS). Everything is scoped to #win-notepad / .np so it cannot touch other windows. */
+#win-notepad .win-body{background:#f3f4f7;font-family:var(--ui-font);color:#1b1f27}
+html.dark #win-notepad .win-body{filter:invert(.9) hue-rotate(180deg)}
+.np{position:absolute;inset:0;display:flex;font-size:14.5px;line-height:1.35}
+.np *{box-sizing:border-box}
+.np button,.np input,.np textarea{font:inherit;color:inherit}
+.np button{cursor:pointer}
+.np input,.np textarea{user-select:text;-webkit-user-select:text}
+.np .hidden{display:none}
+.np-rail{width:270px;flex:none;background:#fbfbfd;border-right:1px solid #e1e4ea;display:flex;flex-direction:column;min-height:0}
+.np-rail-h{padding:12px 12px 8px}
+.np-search{padding:0 12px 8px}
+.np-search input{width:100%;border:1px solid #c9ced8;border-radius:7px;background:#fff;padding:7px 10px}
+.np-list{flex:1;overflow:auto;padding:2px 8px 10px;display:flex;flex-direction:column;gap:2px}
+.np-item{border:0;background:none;text-align:left;border-radius:8px;padding:9px 10px;display:block;width:100%}
+.np-item:hover{background:#eceff5}
+.np-item.on{background:#e3ecf9}
+.np-item .t{font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.np-item .s{color:#6b7280;font-size:12.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-top:2px}
+.np-item .s .d{color:#4b5563;font-weight:600;margin-right:4px}
+.np-empty{color:#8a909c;text-align:center;padding:26px 14px;font-size:13.5px}
+.np-empty.big{padding:90px 24px;font-size:15px}
+.np-btn{border:1px solid #c9ced8;background:#fff;border-radius:7px;padding:7px 14px;white-space:nowrap}
+.np-btn:hover{background:#f0f2f7}
+.np-btn.pri{background:#0f6cbd;border-color:#0f6cbd;color:#fff;width:100%}.np-btn.pri:hover{background:#0c5da3}
+.np-btn.danger{background:#c42b1c;border-color:#c42b1c;color:#fff}
+.np-main{flex:1;min-width:0;display:flex;flex-direction:column;background:#fff}
+.np-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-bottom:1px solid #e1e4ea;min-height:52px}
+.np-status{color:#6b7280;font-size:13px}
+.np-tools{display:flex;gap:8px}
+.np-err{background:#fde8e6;color:#8a1c12;padding:8px 16px;font-size:13.5px;border-bottom:1px solid #f4c5c0}
+.np-body{flex:1;min-height:0;display:flex}
+.np-body textarea{flex:1;border:0;outline:0;resize:none;padding:16px 20px;background:#fff;line-height:1.5;font-family:'Segoe UI',Consolas,monospace}
+.np-foot{flex:none;padding:6px 16px;border-top:1px solid #e1e4ea;color:#6b7280;font-size:12.5px;min-height:30px}

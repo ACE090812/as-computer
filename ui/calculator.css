@@ -1,0 +1,33 @@
+/* Calculator app (Los Santos OS). Everything is scoped to #win-calculator / .cl so it cannot touch other windows. */
+#win-calculator .win-body{background:#f3f4f7;font-family:var(--ui-font);color:#1b1f27}
+html.dark #win-calculator .win-body{filter:invert(.9) hue-rotate(180deg)}
+.cl{position:absolute;inset:0;display:flex;outline:none;user-select:none;-webkit-user-select:none}
+.cl *{box-sizing:border-box}
+.cl button{font:inherit;cursor:pointer}
+.cl-main{flex:1;min-width:0;display:flex;flex-direction:column;padding:10px 12px 14px}
+.cl-top{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 6px}
+.cl-title{font-weight:600;font-size:15px}
+.cl-hbtn{border:0;background:none;border-radius:6px;width:34px;height:30px;font-size:18px;color:#374151}.cl-hbtn:hover{background:#e3e6ed}
+.cl-disp{background:#fff;border:1px solid #e1e4ea;border-radius:10px;padding:8px 14px 10px;text-align:right;min-height:104px;display:flex;flex-direction:column;justify-content:flex-end;margin-bottom:10px;position:relative}
+.cl-mem{position:absolute;left:12px;top:8px;font-size:12px;font-weight:700;color:#0f6cbd}
+.cl-expr{color:#6b7280;font-size:14px;min-height:20px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.cl-cur{font-size:44px;font-weight:600;line-height:1.15;overflow:hidden;white-space:nowrap}
+.cl-cur.sm{font-size:32px}.cl-cur.xs{font-size:24px}
+.cl-cur.err{font-size:20px;color:#c42b1c;white-space:normal}
+.cl-keys{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.cl-k{border:0;border-radius:8px;background:#fff;color:#1b1f27;font-size:19px;min-height:44px;box-shadow:0 1px 0 #d8dce4}
+.cl-k:hover{background:#eef1f7}.cl-k:active{background:#dfe4ee}
+.cl-k:disabled{opacity:.4;cursor:default}
+.cl-k.num{font-weight:600}
+.cl-k.fn,.cl-k.mem{background:#e9ecf2;font-size:16px}
+.cl-k.mem{font-size:13px;font-weight:600;color:#374151;min-height:34px}
+.cl-k.op{background:#e3ecf9;color:#0f4c8a;font-size:22px}
+.cl-k.eq{background:#0f6cbd;color:#fff;font-size:24px;box-shadow:0 1px 0 #0a4f8e}.cl-k.eq:hover{background:#0c5da3}
+.cl-side{position:absolute;left:12px;right:12px;top:168px;bottom:14px;border:1px solid #e1e4ea;border-radius:10px;background:#fbfbfd;display:flex;flex-direction:column;min-height:0;box-shadow:0 8px 24px rgba(0,0,0,.14)}
+.cl-side.hidden{display:none}
+.cl-side-h{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 8px}
+.cl-link{border:0;background:none;color:#0f6cbd;font-size:12.5px}.cl-link:hover{text-decoration:underline}
+.cl-hist{flex:1;overflow:auto;padding:0 8px 10px;display:flex;flex-direction:column;gap:4px}
+.cl-h{border:0;background:none;text-align:right;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}.cl-h:hover{background:#eceff5}
+.cl-h .e{color:#6b7280;font-size:12.5px;overflow:hidden;text-overflow:ellipsis}.cl-h .r{font-size:20px;font-weight:600}
+.cl-empty{color:#8a909c;text-align:center;padding:26px 10px;font-size:13.5px}
