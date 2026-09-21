@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Los Santos OS</title>
+<script>document.documentElement.classList.add(/[?&]dui=1/.test(location.search) ? "dui" : "overlay");</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app" id="app">
+
+  <div id="wallpaper"><div class="wm"><span data-i18n="ui_brand_os">Los Santos OS</span></div></div>
+
+  <!-- desktop icons -->
+  <div id="desktop">
+    <div class="dicon hidden" data-app="mot"><span class="ic" data-ic="mot"></span><span class="l" data-i18n="ui_service_mot">MOT Testing Service</span></div>
+    <div class="dicon" data-app="explorer"><span class="ic" data-ic="folder"></span><span class="l" data-i18n="ui_app_explorer">File Explorer</span></div>
+    <div class="dicon hidden" data-app="browser"><span class="ic" data-ic="brglobe"></span><span class="l" data-i18n="ui_app_browser">Scout</span></div>
+    <div class="dicon hidden" data-app="store"><span class="ic" data-ic="store"></span><span class="l" data-i18n="ui_app_store">Store</span></div>
+    <div class="dicon hidden" data-app="calendar"><span class="ic" data-ic="calendar"></span><span class="l" data-i18n="ui_app_calendar">Calendar</span></div>
+    <div class="dicon" data-app="bin"><span class="ic" data-ic="bin"></span><span class="l" data-i18n="ui_app_bin">Recycle Bin</span></div>
+  </div>
+
+  <!-- windows -->
+  <div id="windows">
+
+    <div class="win" id="win-mot" data-title-key="ui_service_mot">
+      <div class="win-body"><div class="mot-root">
+  <!-- ===== VIEW: lookup ===== -->
+  <div class="view active" data-view="lookup">
+    <div class="gov-header">
+      <div class="gov-header-inner">
+        <div class="crown-logo"><svg viewBox="0 0 132 97" xmlns="http://www.w3.org/2000/svg"><path d="M25 30l8 10-4 12 12-4 10 8 10-8 12 4-4-12 8-10-12-2 2-12-12 6-8-10-8 10-12-6 2 12z"/></svg><span data-i18n="ui_brand_gov">LosSantos.GOV</span></div>
+        <div class="header-divider"></div>
+        <div class="service-title" data-i18n="ui_service_mot">MOT Testing Service</div>
+      </div>
+    </div>
+    <div class="beta-banner"><div class="beta-banner-inner"><span class="phase-tag" data-i18n="ui_beta">Beta</span><span data-i18n="ui_beta_text">This is a new service</span></div></div>
+    <div class="page-body"><div class="page-inner">
+      <h1 class="title" data-i18n="ui_lookup_title">Check or start a vehicle test</h1>
+      <p class="caption" data-i18n="ui_lookup_caption">Enter the vehicle's registration number to continue</p>
+      <div class="form-group">
+        <label for="reg" data-i18n="ui_reg_label">Registration number</label>
+        <p class="hint" data-i18n="ui_reg_hint">For example, LX19 KTP</p>
+        <input type="text" id="reg" placeholder="LX19 KTP" data-i18n-placeholder="ui_reg_placeholder" autocomplete="off">
+      </div>
+      <button class="govuk-button" data-action="lookup" data-i18n="ui_continue">Continue</button>
+    </div></div>
+  </div>
+
+  <!-- ===== VIEW: overview / history ===== -->
+  <div class="view" data-view="overview">
+    <div class="gov-header">
+      <div class="gov-header-inner">
+        <div class="crown-logo"><svg viewBox="0 0 132 97" xmlns="http://www.w3.org/2000/svg"><path d="M25 30l8 10-4 12 12-4 10 8 10-8 12 4-4-12 8-10-12-2 2-12-12 6-8-10-8 10-12-6 2 12z"/></svg><span data-i18n="ui_brand_gov">LosSantos.GOV</span></div>
+        <div class="header-divider"></div>
+        <div class="service-title" data-i18n="ui_service_history">Check MOT history</div>
+      </div>
+    </div>
+    <div class="page-body scroll-body"><div class="page-inner">
+      <button class="back-link" data-goto="lookup" data-i18n="ui_back">Back</button>
+      <p class="reg-caption" id="ov-plate">LX19 KTP</p>
+      <h1 class="vehicle-title" id="ov-name">Ford Mustang GT</h1>
+      <span class="check-another" data-goto="lookup" style="cursor:pointer" data-i18n="ui_check_another">Check another vehicle</span>
+      <div class="valid-block">
+        <div class="k" data-i18n="ui_mot_status">MOT status</div>
+        <div class="v" id="ov-status">—</div>
+        <p class="ov-booking hidden" id="ov-booking"></p>
+      </div>
+      <hr class="divider">
+      <h2 class="history-heading" data-i18n="ui_history_heading">MOT history</h2>
+      <p class="history-sub" data-i18n="ui_history_sub">Mileage, defects and advisories for past tests</p>
+      <div id="history-mount"></div>
+      <hr class="divider">
+      <div class="form-group">
+        <label for="mileage" data-i18n="ui_mileage_label">Current mileage</label>
+        <p class="hint" id="mileage-hint"></p>
+        <input type="text" id="mileage" placeholder="e.g. 41208" data-i18n-placeholder="ui_mileage_placeholder" autocomplete="off">
+      </div>
+      <button class="govuk-button" data-goto="checklist" data-i18n="ui_start_inspection">Start new inspection</button>
+    </div></div>
+  </div>
+
+  <!-- ===== VIEW: checklist ===== -->
+  <div class="view" data-view="checklist">
+    <div class="gov-header">
+      <div class="gov-header-inner">
+        <div class="crown-logo"><svg viewBox="0 0 132 97" xmlns="http://www.w3.org/2000/svg"><path d="M25 30l8 10-4 12 12-4 10 8 10-8 12 4-4-12 8-10-12-2 2-12-12 6-8-10-8 10-12-6 2 12z"/></svg><span data-i18n="ui_brand_gov">LosSantos.GOV</span></div>
+        <div class="header-divider"></div>
+        <div class="service-title" data-i18n="ui_service_mot">MOT Testing Service</div>
+      </div>
+    </div>
+    <div class="page-body scroll-body"><div class="page-inner">
+      <button class="back-link" data-goto="overview" data-i18n="ui_back">Back</button>
+      <h1 class="title" data-i18n="ui_checklist_title">Inspection checklist</h1>
+      <p class="caption" id="ck-caption">—</p>
+
+      <div id="checklist-mount"><!-- populated by renderChecklist() --></div>
+
+      <hr class="divider">
+      <button class="govuk-button" data-action="submit" data-i18n="ui_submit">Submit result</button>
+      <button class="govuk-button secondary" data-goto="overview" style="margin-left:14px" data-i18n="ui_cancel">Cancel</button>
+    </div></div>
+  </div>
+
+  <!-- ===== VIEW: result ===== -->
+  <div class="view" data-view="result">
+    <div class="gov-header">
+      <div class="gov-header-inner">
+        <div class="crown-logo"><svg viewBox="0 0 132 97" xmlns="http://www.w3.org/2000/svg"><path d="M25 30l8 10-4 12 12-4 10 8 10-8 12 4-4-12 8-10-12-2 2-12-12 6-8-10-8 10-12-6 2 12z"/></svg><span data-i18n="ui_brand_gov">LosSantos.GOV</span></div>
+        <div class="header-divider"></div>
+        <div class="service-title" data-i18n="ui_service_mot">MOT Testing Service</div>
+      </div>
+    </div>
+    <div class="page-body scroll-body"><div class="page-inner">
+      <div class="confirmation-panel fail" id="result-panel">
+        <h1 id="result-heading"></h1>
+        <div class="ref" id="result-plate">—</div>
+      </div>
+      <div id="result-failed-wrap">
+        <h2 style="font-size:24px;margin-bottom:16px" data-i18n="ui_failed_items">Items that failed</h2>
+        <table class="gov-table">
+          <thead><tr><th data-i18n="ui_category">Category</th><th data-i18n="ui_item">Item</th><th data-i18n="ui_notes">Notes</th></tr></thead>
+          <tbody id="result-failed-body"></tbody>
+        </table>
+      </div>
+      <div id="result-advisory-wrap">
+        <h2 style="font-size:24px;margin-bottom:16px" data-i18n="ui_advisories">Advisories</h2>
+        <table class="gov-table">
+          <thead><tr><th data-i18n="ui_category">Category</th><th data-i18n="ui_item">Item</th><th data-i18n="ui_notes">Notes</th></tr></thead>
+          <tbody id="result-advisory-body"></tbody>
+        </table>
+      </div>
+      <div class="inset-text" data-i18n="ui_saved_note">This result has been saved to the vehicle's MOT history.</div>
+      <button class="govuk-button" data-action="viewcert" data-i18n="ui_cert_view">View certificate</button>
+      <button class="govuk-button secondary" data-action="history" style="margin-left:14px" data-i18n="ui_view_history">View MOT history</button>
+      <button class="govuk-button secondary" data-goto="lookup" style="margin-left:14px" data-i18n="ui_start_inspection">Start new inspection</button>
+    </div></div>
+  </div>
+      </div></div>
+    </div>
+
+    <div class="win" id="win-browser" data-title-key="ui_app_browser">
+      <div class="win-body"><div class="br">
+        <div class="br-tabs" id="br-tabs"></div>
+        <div class="br-bar" id="br-bar">
+          <button class="tbtn" id="br-back"><span class="ic" data-ic="back"></span></button>
+          <button class="tbtn" id="br-fwd"><span class="ic" data-ic="fwd"></span></button>
+          <button class="tbtn" id="br-reload"><span class="ic" data-ic="refresh"></span></button>
+          <button class="tbtn" id="br-home"><span class="ic" data-ic="brhome"></span></button>
+          <div class="br-url"><span class="lk" id="br-lock"></span><input type="text" id="br-url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Search Scout or type an address" data-i18n-placeholder="ui_br_search_ph"><button class="star" id="br-star"></button></div>
+          <button class="tbtn" id="br-menu"><span class="ic" data-ic="brmore"></span></button>
+        </div>
+        <div class="br-bm hidden" id="br-bm"></div>
+        <div class="br-view" id="br-view"></div>
+        <div class="br-toast" id="br-toast"></div>
+      </div></div>
+    </div>
+
+    <div class="win" id="win-calendar" data-title-key="ui_app_calendar">
+      <div class="win-body"><div class="cal">
+        <div class="cal-side">
+          <button class="cal-new" data-cal="new"><span class="ic" data-ic="brplus"></span><span data-i18n="ui_cal_new_event">New event</span></button>
+          <div class="cal-mini" id="cal-mini"></div>
+        </div>
+        <div class="cal-main">
+          <div class="cal-head">
+            <button class="cal-today" data-cal="today" data-i18n="ui_cal_today">Today</button>
+            <button class="tbtn" data-cal="prev"><span class="ic" data-ic="back"></span></button>
+            <button class="tbtn" data-cal="next"><span class="ic" data-ic="fwd"></span></button>
+            <div class="cal-title" id="cal-title"></div>
+            <div class="cal-status" id="cal-status"></div>
+            <div class="cal-views">
+              <button data-view="day" data-i18n="ui_cal_day">Day</button>
+              <button data-view="week" data-i18n="ui_cal_week">Week</button>
+              <button data-view="month" data-i18n="ui_cal_month">Month</button>
+            </div>
+          </div>
+          <div class="cal-body" id="cal-body"></div>
+        </div>
+        <div class="cal-form hidden" id="cal-form" data-cur-color="blue">
+          <div class="cf-box">
+            <div class="cf-heading" id="cf-heading">New event</div>
+            <input type="text" id="cf-title" maxlength="80" autocomplete="off" placeholder="Add a title" data-i18n-placeholder="ui_cal_title_ph">
+            <div class="cf-row"><label data-i18n="ui_cal_date">Date</label><input type="date" id="cf-date"></div>
+            <div class="cf-row"><label></label><label class="chk"><input type="checkbox" id="cf-allday"> <span data-i18n="ui_cal_allday">All day</span></label></div>
+            <div class="cf-row" id="cf-times"><label data-i18n="ui_cal_time">Time</label><span class="tt"><input type="time" id="cf-start"><i>–</i><input type="time" id="cf-end"></span></div>
+            <div class="cf-row"><label data-i18n="ui_cal_colour">Colour</label><span class="dots">
+              <button data-color="blue" class="c-blue"></button><button data-color="green" class="c-green"></button><button data-color="red" class="c-red"></button><button data-color="orange" class="c-orange"></button><button data-color="purple" class="c-purple"></button><button data-color="grey" class="c-grey"></button></span></div>
+            <textarea id="cf-notes" maxlength="300" placeholder="Add details" data-i18n-placeholder="ui_cal_notes_ph"></textarea>
+            <div class="cf-err" id="cf-err"></div>
+            <div class="cf-foot"><span class="by" id="cf-by"></span>
+              <button class="btn danger hidden" id="cf-delete" data-cf="delete" data-i18n="ui_cal_delete">Delete</button>
+              <button class="btn" data-cf="cancel" data-i18n="ui_cal_cancel">Cancel</button>
+              <button class="btn primary" id="cf-save" data-cf="save" data-i18n="ui_cal_save">Save</button></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="win" id="win-explorer" data-title-key="ui_app_explorer">
+      <div class="win-body"><div class="ex">
+        <div class="ex-toolbar">
+          <button class="tbtn" id="ex-back"><span class="ic" data-ic="back"></span></button>
+          <button class="tbtn" id="ex-fwd"><span class="ic" data-ic="fwd"></span></button>
+          <button class="tbtn" id="ex-up"><span class="ic" data-ic="up"></span></button>
+          <button class="tbtn" id="ex-refresh"><span class="ic" data-ic="refresh"></span></button>
+          <div class="ex-addr" id="ex-addr"></div>
+          <div class="ex-search"><span class="ic" data-ic="search"></span><input type="text" id="ex-search" autocomplete="off" placeholder="Search" data-i18n-placeholder="ui_fx_search"></div>
+        </div>
+        <div class="ex-cmd hidden" id="ex-cmd"></div>
+        <div class="ex-main">
+          <div class="ex-nav" id="ex-nav"></div>
+          <div class="ex-list">
+            <div class="ex-head" id="ex-head"></div>
+            <div class="ex-rows" id="ex-rows"></div>
+          </div>
+          <div class="ex-prev" id="ex-prev"></div>
+        </div>
+        <div class="ex-status"><span id="ex-count"></span><span id="ex-sel"></span></div>
+      </div></div>
+    </div>
+
+
+    <div class="win" id="win-settings" data-title-key="ui_app_settings">
+      <div class="win-body"><div class="se" id="se-root">
+        <div class="se-nav">
+          <div class="se-user" id="se-user"></div>
+          <div class="se-find"><input type="text" id="se-q" maxlength="40" autocomplete="off" placeholder="Find a setting" data-i18n-placeholder="se_find"><span class="ic" data-ic="search"></span>
+            <div class="se-results hidden" id="se-results"></div></div>
+          <div class="se-navlist" id="se-navlist"></div>
+        </div>
+        <div class="se-main"><div class="se-scroll" id="se-page"></div></div>
+      </div></div>
+    </div>
+
+    <div class="win" id="win-store" data-title-key="ui_app_store">
+      <div class="win-body"><div class="st" id="st-root">
+        <div class="st-rail" id="st-rail">
+          <button class="st-nav" data-st="home"><span class="ic" data-ic="sthome"></span><span data-i18n="ui_store_home">Home</span></button>
+          <button class="st-nav" data-st="apps"><span class="ic" data-ic="stapps"></span><span data-i18n="ui_store_apps">Apps</span></button>
+          <button class="st-nav" data-st="lib"><span class="ic" data-ic="stlib"></span><span data-i18n="ui_store_library">Library</span></button>
+        </div>
+        <div class="st-main">
+          <div class="st-top">
+            <div class="st-search"><span class="ic" data-ic="search"></span><input type="text" id="st-q" maxlength="40" autocomplete="off" placeholder="Search apps" data-i18n-placeholder="ui_store_search"></div>
+            <div class="st-chip" id="st-chip"></div>
+          </div>
+          <div class="st-body" id="st-body"></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- start menu -->
+  <div id="startmenu" class="hidden">
+    <div class="sm-search"><span class="ic" data-ic="search"></span><input type="text" id="sm-q" autocomplete="off" placeholder="Type here to search" data-i18n-placeholder="ui_start_search"></div>
+    <div class="sm-sec" data-i18n="ui_start_pinned">Pinned</div>
+    <div class="sm-pins" id="sm-pins"></div>
+    <div class="sm-sec" data-i18n="ui_start_recommended">Recommended</div>
+    <div class="sm-rec" id="sm-rec"></div>
+    <div class="sm-foot">
+      <div class="sm-user"><span class="avatar"><span class="ic" data-ic="user"></span></span><span id="sm-user">—</span></div>
+      <button id="sm-power"><span class="ic" data-ic="power"></span></button>
+      <div id="power-menu" class="hidden">
+        <div data-power="lock"><span class="ic" data-ic="lock"></span><span data-i18n="ui_power_lock">Lock</span></div>
+        <div data-power="off"><span class="ic" data-ic="power"></span><span data-i18n="ui_power_off">Shut down</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- taskbar -->
+  <div id="taskbar">
+    <div class="tb-left"><span class="dot"></span><span data-i18n="ui_net_online">Test network online</span></div>
+    <div class="tb-center">
+      <button class="tbbtn" id="tb-start"><span class="ic" data-ic="start"></span></button>
+      <div class="tb-search" id="tb-search"><span class="ic" data-ic="search"></span><span data-i18n="ui_start_search">Type here to search</span></div>
+      <div id="tb-apps"></div>
+    </div>
+    <div class="tb-tray">
+      <div class="tray-ic" id="tb-wifi"><span class="ic" data-ic="wifi"></span></div>
+      <div class="tray-ic"><span class="ic" data-ic="volume"></span></div>
+      <div class="tray-clock" id="tray-clock"><div id="tb-time">--:--</div><div id="tb-date">--/--/----</div></div>
+    </div>
+  </div>
+
+  <div id="night"></div>
+  <div id="dim"></div>
+
+  <!-- context menu + dialog -->
+  <div id="ctxmenu" class="hidden"></div>
+  <div id="dialog" class="hidden"><div class="dlg">
+    <div class="dlg-title" id="dlg-title"></div>
+    <div class="dlg-body" id="dlg-body"></div>
+    <div class="dlg-foot" id="dlg-foot"></div>
+  </div></div>
+
+  <!-- lock screen -->
+  <div id="lock" class="hidden">
+    <div class="l-time" id="lock-time">--:--</div>
+    <div class="l-date" id="lock-date"></div>
+    <div class="l-user">
+      <div class="l-avatar"><span class="ic" data-ic="user"></span></div>
+      <div class="l-name" id="lock-name">—</div>
+      <div class="l-btn" data-i18n="ui_lock_signin">Sign in</div>
+    </div>
+    <div class="l-hint" data-i18n="ui_lock_hint">Click or press Enter to sign in</div>
+  </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
