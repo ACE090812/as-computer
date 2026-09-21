@@ -2,13 +2,6 @@
 
 A Windows-style desktop ("Los Santos OS") on a prop monitor: Store, MOT Testing Service, File Explorer (with Recycle Bin), Scout browser (as-browser sites), Calendar and the Mechanic app. Formerly `mot-dui`.
 
-## Rename from mot-dui
-1. Rename the resource folder `mot-dui` to `as-computer` and change the `ensure mot-dui` line in `server.cfg` to `ensure as-computer` (after `as-browser`).
-2. `provide 'mot-dui'` in `fxmanifest.lua` keeps any script that calls `exports['mot-dui']` working. Remove that line when nothing uses the old name.
-3. Debug commands are now `/computer_coords`, `/computer_open`, `/computer_goto`, `/computer_screen` (were `/mot_*`).
-4. `client/config.lua` and `shared/checklist.lua` are empty stubs now. Nothing loads them, delete both files.
-5. The `mot_history` and `mot_calendar` tables and the `stream/` files keep their names, so no data moves.
-
 ## Config layout
 Every app has its own file, so no single file grows. Nothing is hard-coded to a list of apps: the manifest loads `config/apps/*.lua`, so a new file there is picked up automatically.
 
