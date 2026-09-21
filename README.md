@@ -168,7 +168,7 @@ jg-mechanic exposes that.
   doesn't follow what the interacting player is doing.
 - **Fee/payment logic** — deliberately not built (mechanics paid via wage/bonus).
 - **txd in `config/config.lua`** — `securitymonitor` confirmed as an embedded texture
-  in `lgmods_sinner_monitor.ydr` (no separate .ytd), so txd = model name is right.
+  in `ascomputer_monitor.ydr` (no separate .ytd), so txd = model name is right.
   Still worth an in-game test.
 
 ## Scout (as-browser websites on the desktop)
