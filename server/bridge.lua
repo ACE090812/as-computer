@@ -42,7 +42,14 @@ function Bridge.GetName(src)
   local p = Bridge.GetPlayer(src)
   if not p then return GetPlayerName(src) end
   if framework == 'esx' then
-    return ('%s %s'):format(p.getName and p.getName() or '', ''):gsub('^%s+', ''):gsub('%s+$', '')
+    -- string.gsub returns (result, count), so a bare chained-gsub return here would leak that count
+    -- as a second value - harmless almost everywhere it's called, but fatal when this ends up as the
+    -- LAST item in a parameter table (e.g. server/apps.lua's install query), where Lua splices every
+    -- return value from a table constructor's final expression, turning a 5-column INSERT into 6.
+    local full = ('%s %s'):format(p.getName and p.getName() or '', '')
+    full = full:gsub('^%s+', '')
+    full = (full:gsub('%s+$', ''))
+    return full
   end
   local charinfo = p.PlayerData and p.PlayerData.charinfo
   if charinfo then return ('%s %s'):format(charinfo.firstname, charinfo.lastname) end

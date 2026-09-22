@@ -28,7 +28,7 @@ Config.Store = {
   --   'esx_society'   esx_addonaccount / esx_society
   --   'custom'        fill in the three functions below
   -- Only used when an app has a price above 0.
-  bank = 'renewed',
+  bank = 'auto',
   logTransactions = true,   -- record the purchase on the society's transaction list when the bank supports it
   custom = {
     -- balance(account) -> number
