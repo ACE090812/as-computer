@@ -1,0 +1,23 @@
+-- English text for printing from the computer (needs the as-printer resource).
+LocaleExtra('en', {
+  pr_title = 'Print',
+  pr_print = 'Print',
+  pr_looking = 'Looking for printers nearby…',
+  pr_none = 'There is no printer within range. Move closer to one.',
+  pr_off = 'Printing is not available.',
+  pr_printer = 'Printer',
+  pr_mode = 'Colour',
+  pr_bw = 'Black and white',
+  pr_colour = 'Colour',
+  pr_design = 'Paper design',
+  pr_letterhead = 'Letterhead',
+  pr_no_letterhead = 'None',
+  pr_restricted = 'restricted',
+  pr_levels = 'paper %s, black %s, colour %s',
+  pr_sent = 'Sent to %s. Collect it from the tray in about %s seconds.',
+  pr_err_not_authorised = 'You cannot print from this computer.',
+  pr_err_invalid = 'That cannot be printed.',
+  pr_err_network = 'Could not reach the server.',
+  pr_err_no_printer = 'There is no printer nearby.',
+  pr_err_error = 'Printing failed. Try again.',
+})

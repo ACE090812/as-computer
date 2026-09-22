@@ -170,6 +170,7 @@
     h.innerHTML = '<div class="np-status" id="np-status"></div><div class="np-tools">' +
       '<button type="button" class="np-btn" data-a="smaller" title="' + esc(T('np_font_smaller', 'Smaller text')) + '">A−</button>' +
       '<button type="button" class="np-btn" data-a="bigger" title="' + esc(T('np_font_bigger', 'Larger text')) + '">A+</button>' +
+      (S.state.printer && N.cur && String(N.cur.body || '').trim() ? '<button type="button" class="np-btn" data-a="print">' + esc(T('pr_print', 'Print')) + '</button>' : '') +
       '<button type="button" class="np-btn" data-a="export" title="' + esc(T('np_export_tip', 'Save a copy to Documents in File Explorer')) + '">' + esc(T('np_export', 'Save to Documents')) + '</button>' +
       '<button type="button" class="np-btn ' + (N.confirmDel ? 'danger' : '') + '" data-a="del">' + esc(N.confirmDel ? T('np_confirm_delete', 'Click again to delete') : T('np_delete', 'Delete note')) + '</button></div>';
     paintStatus();
@@ -215,6 +216,7 @@
       var a = e.target.closest('[data-a]');
       if (!a) return;
       if (a.dataset.a === 'del') return remove();
+      if (a.dataset.a === 'print') return S.print({ kind: 'text', title: titleOf(N.cur.body) || T('np_untitled', 'Untitled note'), text: N.cur.body });
       if (a.dataset.a === 'export') return exportNote();
       N.font = Math.max(11, Math.min(28, N.font + (a.dataset.a === 'bigger' ? 1 : -1)));
       renderBody();

@@ -38,6 +38,12 @@ local drivers = {
         remove  = function(a, n) return exports['okokBanking']:RemoveMoney(a, n) end,
         add     = function(a, n) return exports['okokBanking']:AddMoney(a, n) end,
     },
+    okokbankingv2 = {
+        resource = 'okokBankingv2',
+        balance = function(a) return exports['okokBankingv2']:GetAccount(a) end,
+        remove  = function(a, n) return exports['okokBankingv2']:RemoveMoney(a, n) end,
+        add     = function(a, n) return exports['okokBankingv2']:AddMoney(a, n) end,
+    },
     fd_banking = {
         resource = 'fd_banking',
         balance = function(a) return exports['fd_banking']:GetAccount(a) end,
@@ -64,7 +70,7 @@ local drivers = {
     },
 }
 
-local ORDER = { 'renewed', 'qb-banking', 'okokbanking', 'fd_banking', 'qb-management', 'esx_society' }
+local ORDER = { 'renewed', 'qb-banking', 'okokbankingv2', 'okokbanking', 'fd_banking', 'qb-management', 'esx_society' }
 
 local active, activeName
 

@@ -22,6 +22,7 @@
     user: '',
     lockEnabled: true,
     canPrint: false,
+    printer: false,
     manageOthers: false,
     certs: null,            // array of certificates (server order: newest first)
     certsState: 'idle',     // idle | loading | ok | error
@@ -99,6 +100,10 @@
     start: '<svg viewBox="0 0 24 24"><path d="M12 1.6l9 5.2v10.4l-9 5.2-9-5.2V6.8z" fill="#1d70b8"/><path d="M12 1.6l9 5.2-9 5.2-9-5.2z" fill="#4da3e8"/><text x="12" y="17.2" font-size="7.4" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">LS</text></svg>',
     crest: '<svg viewBox="0 0 24 24"><path d="M12 1.6l9 5.2v10.4l-9 5.2-9-5.2V6.8z" fill="#1d70b8"/><text x="12" y="15.6" font-size="7.4" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">LS</text></svg>',
     folder: '<svg viewBox="0 0 24 24"><path d="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" fill="#e5b12b"/><path d="M2 9.5a1.5 1.5 0 0 1 1.5-1.5h17A1.5 1.5 0 0 1 22 9.5V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" fill="#f9d566"/></svg>',
+    fileimg: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.4" fill="#fff" stroke="#8a93a3" stroke-width="1.1"/><circle cx="8.6" cy="9.4" r="1.7" fill="#f5b83d"/><path d="M4.6 18l4.6-5 3.4 3.6 2.6-2.8 4.2 4.2z" fill="#5fae6e"/></svg>',
+    filevid: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.4" fill="#3b4a63"/><path d="M10 9.2l5 2.8-5 2.8z" fill="#fff"/></svg>',
+    fileaud: '<svg viewBox="0 0 24 24"><path d="M5 2.5h9.2L19 7.3V21a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1z" fill="#fff" stroke="#8a93a3" stroke-width="1.1"/><path d="M11 17.2V10l4-1v6.2" fill="none" stroke="#7a5ac8" stroke-width="1.5"/><circle cx="9.8" cy="17.4" r="1.6" fill="#7a5ac8"/><circle cx="13.9" cy="15.6" r="1.6" fill="#7a5ac8"/></svg>',
+    filegen: '<svg viewBox="0 0 24 24"><path d="M5 2.5h9.2L19 7.3V21a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1z" fill="#fff" stroke="#8a93a3" stroke-width="1.1"/><path d="M14 2.6V7.5h5" fill="#e6e9ef" stroke="#8a93a3" stroke-width="1.1"/><path d="M8 13.5h8M8 16.5h5" stroke="#8a93a3" stroke-width="1.3" stroke-linecap="round"/></svg>',
     filetxt: '<svg viewBox="0 0 24 24"><path d="M5 2.5h9.2L19 7.3V21a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1z" fill="#fff" stroke="#8a93a3" stroke-width="1.1"/><path d="M14 2.6V7.5h5" fill="#e6e9ef" stroke="#8a93a3" stroke-width="1.1"/><path d="M7.4 11h9.2M7.4 14h9.2M7.4 17h5.6" stroke="#5b6b85" stroke-width="1.3" stroke-linecap="round"/></svg>',
     pc: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1.6" fill="#3b8dea"/><rect x="4.5" y="5.5" width="15" height="9" rx=".8" fill="#9fd0ff"/><path d="M8 20h8M12 16v4" stroke="#556" stroke-width="1.6" stroke-linecap="round"/></svg>',
     mot: '<svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="18.5" rx="2.6" fill="#1d70b8"/><rect x="8" y="1.6" width="8" height="4.2" rx="1.6" fill="#003078"/><path d="M8 13.4l3 3 5-6" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -478,7 +483,7 @@
       { id: 'browser', icon: 'brglobe', name: t('ui_app_browser', 'Scout') },
       { id: 'calendar', icon: 'calendar', name: t('ui_app_calendar', 'Calendar') },
       { id: 'certs', icon: 'certpass', name: t('ui_fx_mot', 'MOT Certificates') },
-      { id: 'bin', icon: binCerts().length ? 'binfull' : 'bin', name: t('ui_app_bin', 'Recycle Bin') }
+      { id: 'bin', icon: binCount() ? 'binfull' : 'bin', name: t('ui_app_bin', 'Recycle Bin') }
     ].concat(Object.keys(EXT).map(function (k) { return { id: k, icon: EXT[k].icon, name: EXT[k].name() }; }))
       .filter(function (p) { return (p.id === 'certs' ? appVisible('mot') : appVisible(p.id)) && (!q || p.name.toLowerCase().indexOf(q) !== -1); });
     $('sm-pins').innerHTML = pins.map(function (p) {
@@ -506,6 +511,7 @@
   function signIn() {
     $('lock').classList.add('hidden');
     if (state.certsState === 'idle') refreshCerts();
+    if (FS.bin.state === 'idle') fsBinLoad(true);
   }
 
   // ================================================================ MOT window (GOV.UK look)
@@ -816,7 +822,7 @@
     var p = e.target.closest('[data-print]');
     if (p && state.canPrint) {
       var c = certStore[p.dataset.print];
-      if (c) postToClient('printCertificate', c);
+      if (c) printCert(c);
     }
   });
 
@@ -837,7 +843,7 @@
   function binCerts() { return (state.certs || []).filter(function (c) { return c.deleted; }); }
   function updateBinIcon() {
     var el = document.querySelector('.dicon[data-app="bin"] .ic');
-    if (el) el.innerHTML = ic(binCerts().length ? 'binfull' : 'bin');
+    if (el) el.innerHTML = ic(binCount() ? 'binfull' : 'bin');
   }
   function nowStr() {
     var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -875,22 +881,53 @@
     });
   }
   function nodeName(k) { return k === 'jobf' && FS.job ? fmt(t('fl_shared', '%s (shared)'), FS.job) : t(NODES[k].key, NODES[k].def); }
-  function nodeIcon(k) { return k === 'bin' ? (binCerts().length ? 'binfull' : 'bin') : NODES[k].ic; }
+  function nodeIcon(k) { return k === 'bin' ? (binCount() ? 'binfull' : 'bin') : NODES[k].ic; }
 
   var EX = { hist: ['root'], idx: 0, sel: {}, anchor: null, sortKey: 'date', sortDir: -1, q: '', view: [], renaming: null, renameVal: '' };
 
   // ================================================================ Files: Documents, Downloads, shared job folder
-  // Text files kept on the server (server/files.lua). Every call goes through the 'filesApi' NUI callback (client/files.lua);
-  // the server decides who may see or change what, this page only shows it.
+  // Folders (which can nest), text files, and links to images / video / audio / other files, kept on the server
+  // (server/files.lua). Every call goes through the 'filesApi' NUI callback (client/files.lua); the server decides who may see
+  // or change what, this page only shows it. An Explorer location is 'docs' | 'dl' | 'jobf', or 'docs:12' for the folder with
+  // id 12 inside it.
   var FILE_KEY = { docs: 'docs', dl: 'dl', jobf: 'job' };
-  var FS = { tried: false, enabled: true, job: null, isBoss: false, limits: {}, state: {}, data: {}, seq: {}, edit: {} };
+  var FS = { tried: false, enabled: true, job: null, isBoss: false, phone: false, recycle: true, limits: {}, state: {}, data: {}, seq: {}, edit: {}, bin: { state: 'idle', data: [], days: 0, seq: 0 } };
+  var KIND_ICON = { folder: 'folder', text: 'filetxt', image: 'fileimg', video: 'filevid', audio: 'fileaud', file: 'filegen' };
 
-  function isFileFolder(k) { return Object.prototype.hasOwnProperty.call(FILE_KEY, k); }
+  function fsBase(k) { return String(k).split(':')[0]; }
+  function fsPid(k) { var p = String(k).split(':')[1]; return p ? (parseInt(p, 10) || 0) : 0; }
+  function fsKey(base, pid) { return pid ? base + ':' + pid : base; }
+  function isFileFolder(k) { return Object.prototype.hasOwnProperty.call(FILE_KEY, fsBase(k)) && String(k).split(':').length <= 2; }
+  function fsPlace(k) { return FILE_KEY[fsBase(k)]; }
+  function isMedia(f) { return f.kind === 'image' || f.kind === 'video' || f.kind === 'audio'; }
+  function safeUrl(u) { return /^https:\/\//i.test(String(u || '')) ? String(u) : ''; }
+  function hostOf(u) { try { return new URL(u).host; } catch (e) { return ''; } }
+  function kindLabel(k) {
+    return { folder: t('fl_type_folder', 'File folder'), text: t('fl_type_text', 'Text document'), image: t('fl_type_image', 'Image'),
+      video: t('fl_type_video', 'Video'), audio: t('fl_type_audio', 'Audio'), file: t('fl_type_file', 'File') }[k] || t('fl_type_file', 'File');
+  }
+
   function fileById(id) {
     var f = null;
     Object.keys(FS.data).forEach(function (k) { (FS.data[k] || []).forEach(function (x) { if (String(x.id) === String(id)) f = x; }); });
     return f;
   }
+  // A folder the Explorer has been told about (from a list or from opening it) becomes a node so the address bar and Back work.
+  function fsNode(key, parentKey, name) {
+    if (!NODES[key]) NODES[key] = { k: key, parent: parentKey, ic: 'folder', key: '', def: name, kids: [], dyn: true };
+    else { NODES[key].def = name; NODES[key].parent = parentKey; }
+  }
+  // Rows that no longer exist (deleted): drop every cache that mentions them.
+  function fsForget(ids) {
+    var gone = {};
+    ids.forEach(function (i) { gone[i] = true; var w = wins['file:' + i]; if (w) closeWin(w.id); });
+    Object.keys(NODES).forEach(function (key) { if (NODES[key].dyn && gone[fsPid(key)]) delete NODES[key]; });
+    Object.keys(FS.data).forEach(function (key) {
+      if (gone[fsPid(key)]) { delete FS.data[key]; delete FS.state[key]; }
+      else FS.data[key] = (FS.data[key] || []).filter(function (x) { return !gone[x.id]; });
+    });
+  }
+
   function fsApi(name, data) {
     if (isDui) return Promise.resolve({ ok: false, reason: 'network' });
     return fetch('https://' + (window.GetParentResourceName ? window.GetParentResourceName() : 'as-computer') + '/filesApi', {
@@ -905,7 +942,12 @@
     invalid: ['fl_err_invalid', 'That could not be done.'],
     too_long: ['fl_err_too_long', 'This file is at its length limit.'],
     too_many: ['fl_err_too_many', 'This folder is full. Delete a file first.'],
+    too_deep: ['fl_err_too_deep', 'Folders cannot be nested any deeper.'],
+    inside: ['fl_err_inside', 'A folder cannot be put inside itself.'],
     forbidden: ['fl_err_forbidden', 'You can only change your own files in this folder.'],
+    bad_link: ['fl_err_bad_link', 'That is not a valid https link.'],
+    host: ['fl_err_host', 'Links from that website are not allowed. Ask an admin to add it to the allowed hosts.'],
+    unavailable: ['fl_err_unavailable', 'Your phone is not available right now.'],
     busy: ['fl_err_busy', 'Slow down, try again in a moment.'],
     network: ['fl_err_network', 'Could not reach the server.'],
     error: ['fl_err_error', 'Something went wrong.']
@@ -929,28 +971,120 @@
       FS.enabled = res.data.enabled !== false;
       FS.job = res.data.job || null;
       FS.isBoss = !!res.data.isBoss;
+      FS.phone = !!res.data.phone;
+      FS.recycle = res.data.recycleBin !== false;
+      fsBinLoad(true);
       FS.limits = res.data.limits || {};
       renderExplorer();
     });
   }
   function fsEnsure(k) { if (FS.state[k] === undefined) fsLoad(k, true); }
-  function fsLoad(k, quiet) {
+  function fsLoad(k, quiet, keep) {   // keep: read again without hiding what is already shown
     var seq = (FS.seq[k] = (FS.seq[k] || 0) + 1);
-    FS.state[k] = 'loading';
+    if (!keep || FS.state[k] !== 'ok') FS.state[k] = 'loading';
     if (!quiet) renderExplorer();
-    fsApi('list', { folder: FILE_KEY[k] }).then(function (res) {
+    fsApi('list', { folder: fsPlace(k), parent: fsPid(k) }).then(function (res) {
       if (seq !== FS.seq[k]) return;
-      if (res.ok && res.data) { FS.data[k] = res.data.files || []; FS.state[k] = 'ok'; }
-      else FS.state[k] = 'error';
+      if (res.ok && res.data) {
+        FS.data[k] = res.data.files || []; FS.state[k] = 'ok';
+        var base = fsBase(k), prev = base;
+        (res.data.path || []).forEach(function (p) { var key = fsKey(base, p.id); fsNode(key, prev, p.name); prev = key; });
+      } else if (res.reason === 'invalid' && fsPid(k)) {      // the folder was deleted or moved away
+        delete NODES[k]; delete FS.state[k];
+        if (curFolder() === k) EX.hist[EX.idx] = fsBase(k);
+      } else FS.state[k] = 'error';
       renderExplorer();
     });
   }
-  function refreshCurrent() { if (isFileFolder(curFolder())) fsLoad(curFolder()); else refreshCerts(); }
+  function refreshCurrent() {
+    if (isFileFolder(curFolder())) fsLoad(curFolder());
+    else { if (curFolder() === 'bin') fsBinLoad(); refreshCerts(); }
+  }
+
+  // ---- Recycle Bin: certificates (loaded by the MOT code) plus deleted files (from the server, see 'binList')
+  function binFiles() { return FS.bin.data || []; }
+  function binCount() { return binCerts().length + binFiles().length; }
+  function binCanEmpty() { return binCerts().some(canManage) || binFiles().some(function (f) { return f.manage; }); }
+  function selBinFiles() {
+    return EX.view.filter(function (it) { return it.type === 'bfile' && EX.sel['b:' + it.f.id]; }).map(function (it) { return it.f; });
+  }
+  function fsBinLoad(quiet) {
+    if (!FS.enabled) return;
+    var seq = (FS.bin.seq += 1);
+    if (!quiet && FS.bin.state !== 'ok') FS.bin.state = 'loading';
+    fsApi('binList').then(function (res) {
+      if (seq !== FS.bin.seq) return;
+      if (res.ok && res.data) { FS.bin.data = res.data.files || []; FS.bin.days = res.data.days || 0; FS.bin.state = 'ok'; }
+      else if (FS.bin.state !== 'ok') FS.bin.state = 'error';
+      updateBinIcon();
+      if (curFolder() === 'bin') renderExplorer();
+    });
+  }
+  function fsResetCache() { FS.state = {}; FS.data = {}; }   // restored items appear in their folders: read them again when opened
+  function fsBinEach(files, op, after) {
+    var chain = Promise.resolve(), failed = null;
+    files.forEach(function (f) {
+      chain = chain.then(function () {
+        return fsApi(op, { id: f.id }).then(function (res) {
+          if (res.ok) FS.bin.data = FS.bin.data.filter(function (x) { return x.id !== f.id; });
+          else failed = failed || res;
+        });
+      });
+    });
+    chain.then(function () {
+      if (after) after();
+      EX.sel = {}; fsBinLoad(true); renderExplorer();
+      if (failed) fsErrDlg(failed);
+    });
+  }
+  function fsRestoreFiles(files) { fsBinEach(files, 'restore', fsResetCache); }
+  function fsPurgeFiles(files) { fsBinEach(files, 'purge'); }
+  function restoreBin(certs, files) {
+    certs = certs.filter(canManage); files = files.filter(function (f) { return f.manage; });
+    if (certs.length) restoreCerts(certs);
+    if (files.length) fsRestoreFiles(files);
+  }
+  function binPlaceName(pl) { return nodeName(pl === 'job' ? 'jobf' : pl); }
+  function binFileRow(f, key, selCls) {
+    return '<div class="ex-row' + selCls + '" data-key="' + esc(key) + '"><div class="nm">' + icSpan(KIND_ICON[f.kind] || 'filetxt') + '<span>' + esc(f.name) + '</span></div>' +
+      '<div class="dim">' + esc(fmtDate(f.deletedAt)) + '</div><div class="dim">' + esc(kindLabel(f.kind)) + '</div><div class="dim">' + esc(f.deletedBy || '—') + '</div></div>';
+  }
+  function binFilePreview(f) {
+    function kv(k, v) { return '<div class="pv-kv"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div></div>'; }
+    return '<div class="pv-badge">' + icSpan(KIND_ICON[f.kind] || 'filetxt') + '<b>' + esc(kindLabel(f.kind)) + '</b></div>' +
+      '<div class="pv-plate fl-name">' + esc(f.name) + '</div>' +
+      kv(t('ui_fx_col_deleted', 'Date deleted'), fmtDate(f.deletedAt)) + kv(t('ui_fx_col_deletedby', 'Deleted by'), f.deletedBy || '—') +
+      kv(t('fl_orig_loc', 'Original location'), binPlaceName(f.place)) + kv(t('fl_by', 'Created by'), f.by || '—') +
+      (FS.bin.days > 0 ? kv(t('fl_bin_until', 'Removed for good'), fmtDate((f.deletedAt || 0) + FS.bin.days * 86400)) : '') +
+      '<div class="btn primary' + (f.manage ? '' : ' off') + '" data-binrestore="1" style="margin-top:6px">' + esc(t('ui_ctx_restore', 'Restore')) + '</div>';
+  }
+  function showBinFileProps(f) {
+    function row(k, v) { return '<div>' + esc(k) + '</div><div><b>' + esc(v) + '</b></div>'; }
+    showDlg({
+      title: t('ui_ctx_props', 'Properties'),
+      html: '<div class="pr">' + row(t('ui_fx_col_name', 'Name'), f.name) + row(t('fl_col_type', 'Type'), kindLabel(f.kind)) +
+        row(t('fl_orig_loc', 'Original location'), binPlaceName(f.place)) + row(t('fl_by', 'Created by'), f.by || '—') +
+        row(t('ui_fx_col_deleted', 'Date deleted'), fmtDate(f.deletedAt)) + row(t('ui_fx_col_deletedby', 'Deleted by'), f.deletedBy || '—') + '</div>',
+      buttons: [{ label: t('ui_dlg_ok', 'OK'), primary: true }]
+    });
+  }
+  function sortBin(items) {
+    var key = EX.sortKey, dir = EX.sortDir;
+    function val(it) {
+      var c = it.c, f = it.f;
+      if (key === 'name') return (c ? certName(c) : f.name).toLowerCase();
+      if (key === 'result') return c ? (c.passed ? 'pass' : 'fail') : kindLabel(f.kind).toLowerCase();
+      if (key === 'expires') return String((c ? c.deletedBy : f.deletedBy) || '').toLowerCase();
+      var d = c ? parseTs(c.deletedAt) : parseTs(f.deletedAt); return d === null ? 0 : d;
+    }
+    return items.slice().sort(function (a, b) { var x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+  }
 
   function fmtSize(n) {
     n = Number(n) || 0;
     return n < 1024 ? fmt(t('fl_bytes', '%s B'), n.toLocaleString(loc())) : fmt(t('fl_kb', '%s KB'), (n / 1024).toLocaleString(loc(), { maximumFractionDigits: 1 }));
   }
+  function itemsText(n) { return n === 1 ? t('ui_fx_item_one', '1 item') : fmt(t('ui_fx_items', '%s items'), n); }
   function sortFiles(list) {
     var key = EX.sortKey, dir = EX.sortDir;
     function val(f) {
@@ -959,40 +1093,52 @@
       if (key === 'date') return f.updated || 0;
       return String(f.name || '').toLowerCase();
     }
-    return list.slice().sort(function (a, b) { var x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+    return list.slice().sort(function (a, b) {
+      if ((a.kind === 'folder') !== (b.kind === 'folder')) return a.kind === 'folder' ? -1 : 1;   // folders first
+      var x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : 0) * dir;
+    });
   }
   function fileRow(f, key, selCls) {
     var nameHtml = (EX.renaming === key)
       ? '<input class="rn" type="text" maxlength="' + esc(String(FS.limits.maxNameLength || 80)) + '" autocomplete="off" value="' + esc(EX.renameVal) + '">'
       : '<span>' + esc(f.name) + '</span>';
-    return '<div class="ex-row' + selCls + '" draggable="true" data-key="' + esc(key) + '"><div class="nm">' + icSpan('filetxt') + nameHtml + '</div>' +
-      '<div class="dim">' + esc(fmtDate(f.updated)) + '</div><div class="dim">' + esc(fmtSize(f.size)) + '</div><div class="dim">' + esc(f.by || '—') + '</div></div>';
+    var size = f.kind === 'folder' ? itemsText(f.size || 0) : f.kind === 'text' ? fmtSize(f.size) : kindLabel(f.kind);
+    return '<div class="ex-row' + selCls + '" draggable="true" data-key="' + esc(key) + '"><div class="nm">' + icSpan(KIND_ICON[f.kind] || 'filetxt') + nameHtml + '</div>' +
+      '<div class="dim">' + esc(fmtDate(f.updated)) + '</div><div class="dim">' + esc(size) + '</div><div class="dim">' + esc(f.by || '—') + '</div></div>';
   }
   function filePreview(f) {
     function kv(k, v) { return '<div class="pv-kv"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div></div>'; }
-    return '<div class="pv-badge">' + icSpan('filetxt') + '<b>' + esc(t('fl_type_text', 'Text document')) + '</b></div>' +
+    var url = isMedia(f) || f.kind === 'file' ? safeUrl(f.url) : '';
+    return '<div class="pv-badge">' + icSpan(KIND_ICON[f.kind] || 'filetxt') + '<b>' + esc(kindLabel(f.kind)) + '</b></div>' +
       '<div class="pv-plate fl-name">' + esc(f.name) + '</div>' +
+      (f.kind === 'image' && url ? '<img class="fl-thumb" alt="" referrerpolicy="no-referrer" src="' + esc(url) + '">' : '') +
       kv(t('fl_col_modified', 'Date modified'), fmtDate(f.updated)) +
-      kv(t('fl_col_size', 'Size'), fmtSize(f.size)) +
+      (f.kind === 'folder' ? kv(t('fl_contains', 'Contains'), itemsText(f.size || 0)) : f.kind === 'text' ? kv(t('fl_col_size', 'Size'), fmtSize(f.size)) : kv(t('fl_source', 'Source'), hostOf(url) || '—')) +
       kv(t('fl_by', 'Created by'), f.by || '—') +
-      '<div class="fl-snip">' + (f.snippet ? esc(f.snippet) : '<i>' + esc(t('fl_empty_preview', '(empty file)')) + '</i>') + '</div>' +
+      (f.kind === 'text' ? '<div class="fl-snip">' + (f.snippet ? esc(f.snippet) : '<i>' + esc(t('fl_empty_preview', '(empty file)')) + '</i>') + '</div>' : '') +
       '<div class="btn primary" data-fsopen="1" style="margin-top:6px">' + esc(t('fl_open', 'Open')) + '</div>';
   }
   function renderFileCmd(bar) {
-    var files = selFiles(), one = files.length === 1 ? files[0] : null;
+    var files = selFiles(), one = files.length === 1 ? files[0] : null, ready = FS.state[curFolder()] !== 'ok';
     var manage = files.length > 0 && files.every(function (f) { return f.manage; });
     bar.classList.remove('hidden');
-    bar.innerHTML = cmdBtn('fs-new', 'filetxt', t('fl_new', 'New text document'), FS.state[curFolder()] !== 'ok') +
+    bar.innerHTML = cmdBtn('fs-new', 'filetxt', t('fl_new', 'New text document'), ready) +
+      cmdBtn('fs-newdir', 'folder', t('fl_newdir', 'New folder'), ready) +
+      cmdBtn('fs-add', '', t('fl_add', 'Add') + ' ▾', ready) +
       cmdBtn('fs-open', '', t('fl_open', 'Open'), !one) +
       cmdBtn('fs-rename', 'rename', t('ui_fx_cmd_rename', 'Rename'), !(one && one.manage)) +
       cmdBtn('fs-delete', 'trash', t('ui_fx_cmd_delete', 'Delete'), !manage) +
-      cmdBtn('fs-copy', '', t('fl_copy_to', 'Copy to') + ' ▾', !files.length);
+      (state.printer ? cmdBtn('fs-print', 'printer', t('pr_print', 'Print'), !(one && (one.kind === 'text' || one.kind === 'image'))) : '') +
+      cmdBtn('fs-copy', '', t('fl_copy_to', 'Copy to') + '…', !files.length) +
+      cmdBtn('fs-move', '', t('fl_move_to', 'Move to') + '…', !manage);
   }
 
-  function fsNew() {
+  function fsNewItem(op, name) {
     var k = curFolder();
     if (!isFileFolder(k) || FS.state[k] !== 'ok') return;
-    fsApi('save', { folder: FILE_KEY[k], name: t('fl_new_name', 'New Text Document.txt'), body: '' }).then(function (res) {
+    var d = { folder: fsPlace(k), parent: fsPid(k), name: name };
+    if (op === 'save') d.body = '';
+    fsApi(op, d).then(function (res) {
       if (!res.ok) { fsErrDlg(res); return; }
       var f = res.data.file;
       (FS.data[k] = FS.data[k] || []).push(f);
@@ -1000,7 +1146,17 @@
       renderExplorer();
     });
   }
+  function fsNew() { fsNewItem('save', t('fl_new_name', 'New Text Document.txt')); }
+  function fsNewDir() { fsNewItem('folder', t('fl_newdir_name', 'New folder')); }
+
+  function fsOpenFolder(f) {
+    var cur = curFolder(), key = fsKey(fsBase(cur), f.id);
+    fsNode(key, cur, f.name);
+    navigate(key);
+  }
   function fsOpen(f) {
+    if (f.kind === 'folder') { fsOpenFolder(f); return; }
+    if (f.kind !== 'text') { openMediaViewer(f); return; }
     fsApi('get', { id: f.id }).then(function (res) {
       if (!res.ok) { fsErrDlg(res); if (res.reason === 'invalid') refreshCurrent(); return; }
       openFileEditor(res.data.file);
@@ -1022,6 +1178,7 @@
       f.name = res.data.file.name; f.updated = res.data.file.updated;
       var w = wins['file:' + f.id];
       if (w) { w.title = f.name; setTitle(w.id); }
+      Object.keys(NODES).forEach(function (nk) { if (NODES[nk].dyn && fsPid(nk) === f.id) NODES[nk].def = f.name; });
       renderExplorer();
     });
     renderExplorer();
@@ -1029,58 +1186,175 @@
   function fsDelete() {
     var files = selFiles().filter(function (f) { return f.manage; });
     if (!files.length) return;
-    confirmDlg(t('ui_dlg_delete_title', 'Delete'),
-      files.length === 1 ? t('fl_delete_one', 'Are you sure you want to permanently delete this file?') : fmt(t('fl_delete_many', 'Are you sure you want to permanently delete these %s files?'), files.length),
-      function () {
-        var k = curFolder(), chain = Promise.resolve(), failed = null;
+    var hasDir = files.some(function (f) { return f.kind === 'folder'; }), bin = FS.recycle;
+    var msg;
+    if (bin) {
+      msg = files.length === 1
+        ? (hasDir ? t('fl_bin_folder', 'Move this folder and everything in it to the Recycle Bin?') : t('fl_bin_one', 'Move this file to the Recycle Bin?'))
+        : fmt(t('fl_bin_many', 'Move these %s items to the Recycle Bin?'), files.length);
+    } else {
+      msg = files.length === 1
+        ? (hasDir ? t('fl_delete_folder', 'Are you sure you want to permanently delete this folder and everything in it?') : t('fl_delete_one', 'Are you sure you want to permanently delete this file?'))
+        : fmt(hasDir ? t('fl_delete_many_dir', 'Are you sure you want to permanently delete these %s items, and everything inside any folders?') : t('fl_delete_many', 'Are you sure you want to permanently delete these %s files?'), files.length);
+    }
+    confirmDlg(t('ui_dlg_delete_title', 'Delete'), msg, function () {
+        var chain = Promise.resolve(), failed = null, binned = false;
         files.forEach(function (f) {
           chain = chain.then(function () {
             return fsApi('delete', { id: f.id }).then(function (res) {
-              if (res.ok) { FS.data[k] = (FS.data[k] || []).filter(function (x) { return x.id !== f.id; }); var w = wins['file:' + f.id]; if (w) closeWin(w.id); }
+              if (res.ok) { binned = binned || !!(res.data && res.data.binned); fsForget((res.data && res.data.removed) || [f.id]); }
               else failed = failed || res;
             });
           });
         });
-        chain.then(function () { EX.sel = {}; renderExplorer(); if (failed) fsErrDlg(failed); });
+        chain.then(function () { EX.sel = {}; if (binned) fsBinLoad(true); renderExplorer(); if (failed) fsErrDlg(failed); });
       });
   }
-  function fsDests(from) {
-    return ['docs', 'dl', 'jobf'].filter(function (d) { return d !== from && (d !== 'jobf' || !!FS.job); });
-  }
-  function fsDestLabel(d) {
-    return d === 'docs' ? t('fl_copy_docs', 'Copy to Documents') : d === 'dl' ? t('fl_copy_dl', 'Download to Downloads') : fmt(t('fl_copy_job', 'Upload to %s'), FS.job || '');
-  }
-  function fsCopy(files, dest) {
-    if (!files.length || !isFileFolder(dest) || dest === curFolder()) return;
+
+  // ---- copy / move (a picker for the destination, or drag and drop)
+  function fsTransfer(files, destKey, mode) {
+    if (!files.length || !isFileFolder(destKey)) return;
     var chain = Promise.resolve(), ok = 0, failed = null;
     files.forEach(function (f) {
       chain = chain.then(function () {
-        return fsApi('copy', { id: f.id, to: FILE_KEY[dest] }).then(function (res) { if (res.ok) ok++; else failed = failed || res; });
+        return fsApi(mode, { id: f.id, to: fsPlace(destKey), parent: fsPid(destKey) }).then(function (res) { if (res.ok) ok++; else failed = failed || res; });
       });
     });
     chain.then(function () {
-      FS.state[dest] = undefined;   // reloaded the next time that folder is opened
-      if (ok) flash(fmt(t('fl_copied', 'Copied to %s'), nodeName(dest)));
+      FS.state = {};   // every folder is read again the next time it is shown
+      EX.sel = {};
+      if (ok) flash(fmt(mode === 'move' ? t('fl_moved', 'Moved to %s') : t('fl_copied', 'Copied to %s'), NODES[destKey] ? nodeName(destKey) : nodeName(fsBase(destKey))));
+      renderExplorer();
       if (failed) fsErrDlg(failed);
     });
   }
-  function fsCopyMenu() {
-    var files = selFiles();
-    return fsDests(curFolder()).map(function (d) { return { label: fsDestLabel(d), run: function () { fsCopy(selFiles().length ? selFiles() : files, d); } }; });
+  function fsPick(mode, files) {
+    if (!files.length) return;
+    fsApi('tree').then(function (res) {
+      if (!res.ok) { fsErrDlg(res); return; }
+      var folders = res.data.folders || [], byPlace = { docs: [], dl: [], job: [] }, kids = {}, block = {};
+      folders.forEach(function (f) { (byPlace[f.place] = byPlace[f.place] || []).push(f); (kids[f.parent] = kids[f.parent] || []).push(f.id); });
+      files.forEach(function (f) { if (f.kind === 'folder') (function m(id) { block[id] = true; (kids[id] || []).forEach(m); })(f.id); });
+      var cur = curFolder(), html = '<div class="fl-pick">';
+      function line(key, label, depth, off) {
+        html += '<label class="fl-pk' + (off ? ' off' : '') + '" style="padding-left:' + (8 + depth * 18) + 'px"><input type="radio" name="fspick" value="' + esc(key) + '"' + (off ? ' disabled' : '') + '>' +
+          icSpan('folder') + '<span>' + esc(label) + '</span></label>';
+      }
+      ['docs', 'dl', 'jobf'].forEach(function (base) {
+        if (base === 'jobf' && !FS.job) return;
+        line(base, nodeName(base), 0, mode === 'move' && cur === base);
+        (function walk(parent, depth) {
+          (byPlace[FILE_KEY[base]] || []).filter(function (f) { return f.parent === parent; }).forEach(function (f) {
+            var key = fsKey(base, f.id);
+            line(key, f.name, depth, !!block[f.id] || (mode === 'move' && cur === key));
+            walk(f.id, depth + 1);
+          });
+        })(0, 1);
+      });
+      html += '</div>';
+      showDlg({
+        title: mode === 'move' ? t('fl_move_title', 'Move to') : t('fl_copy_title', 'Copy to'), html: html,
+        buttons: [
+          { label: mode === 'move' ? t('fl_move_here', 'Move here') : t('fl_copy_here', 'Copy here'), primary: true, run: function () {
+            var r = document.querySelector('#dlg-body input[name=fspick]:checked');
+            if (r) fsTransfer(files, r.value, mode);
+          } },
+          { label: t('fl_cancel', 'Cancel') }
+        ]
+      });
+    });
+  }
+
+  // ---- adding images and other files (links, phone photos)
+  function fsAddLink() {
+    var k = curFolder();
+    showDlg({
+      title: t('fl_add_link', 'Add an image or file from a link'),
+      html: '<div class="fl-form"><label for="fl-url">' + esc(t('fl_link_label', 'Link (https://…)')) + '</label><input id="fl-url" type="text" maxlength="500" autocomplete="off" placeholder="https://i.imgur.com/…">' +
+        '<label for="fl-lname">' + esc(t('fl_link_name', 'Name (optional)')) + '</label><input id="fl-lname" type="text" maxlength="' + esc(String(FS.limits.maxNameLength || 80)) + '" autocomplete="off">' +
+        '<div class="fl-hint">' + esc(t('fl_link_hint', 'Images, video and audio open in the viewer. Only links from allowed websites work.')) + '</div></div>',
+      buttons: [
+        { label: t('fl_add', 'Add'), primary: true, run: function () {
+          var url = ($('fl-url').value || '').trim(), nm = ($('fl-lname').value || '').trim();
+          if (!url) return;
+          fsApi('link', { folder: fsPlace(k), parent: fsPid(k), url: url, name: nm }).then(function (res) {
+            if (!res.ok) { fsErrDlg(res); return; }
+            (FS.data[k] = FS.data[k] || []).push(res.data.file);
+            renderExplorer();
+          });
+        } },
+        { label: t('fl_cancel', 'Cancel') }
+      ]
+    });
+    setTimeout(function () { var i = $('fl-url'); if (i) i.focus(); }, 30);
+  }
+  function fsAddPhone() {
+    var k = curFolder();
+    fsApi('phoneList').then(function (res) {
+      if (!res.ok) { fsErrDlg(res); return; }
+      var photos = (res.data && res.data.photos) || [], html;
+      if (!photos.length) html = '<div>' + esc(t('fl_phone_none', 'There are no photos on your phone yet.')) + '</div>';
+      else html = '<div class="fl-ph">' + photos.map(function (p) {
+        var u = safeUrl(p.url);
+        return '<label class="fl-phi"><input type="checkbox" data-ph="' + esc(p.id) + '">' +
+          (p.isVideo || !u ? '<span class="fl-phv">' + ic('filevid') + '</span>' : '<img alt="" loading="lazy" referrerpolicy="no-referrer" src="' + esc(u) + '">') + '</label>';
+      }).join('') + '</div><div class="fl-hint">' + esc(t('fl_phone_hint', 'Pick up to 20 photos.')) + '</div>';
+      showDlg({
+        title: t('fl_phone_title', 'Import from phone Photos'), html: html,
+        buttons: (photos.length ? [{ label: t('fl_import', 'Import'), primary: true, run: function () {
+          var ids = [].slice.call(document.querySelectorAll('#dlg-body input[data-ph]:checked')).map(function (c) { return c.dataset.ph; }).slice(0, 20);
+          if (!ids.length) return;
+          fsApi('phoneImport', { folder: fsPlace(k), parent: fsPid(k), ids: ids }).then(function (r2) {
+            if (!r2.ok) { fsErrDlg(r2); return; }
+            var made = (r2.data && r2.data.files) || [];
+            made.forEach(function (f) { (FS.data[k] = FS.data[k] || []).push(f); });
+            flash(fmt(t('fl_imported', 'Imported %s photos'), made.length));
+            renderExplorer();
+            if (r2.data && r2.data.skipped) fsErrDlg({ reason: 'too_many' });
+          });
+        } }] : []).concat([{ label: photos.length ? t('fl_cancel', 'Cancel') : t('fl_ok', 'OK'), primary: !photos.length }])
+      });
+    });
+  }
+  function fsAddMenu() {
+    return [
+      { label: t('fl_add_link_short', 'Image or file from a link…'), run: fsAddLink },
+      { label: t('fl_add_phone', 'Photos from your phone…'), off: !FS.phone, run: fsAddPhone }
+    ];
+  }
+
+  function fsPrint(f) {
+    if (f.kind === 'image') { openPrintDialog({ kind: 'image', title: f.name, url: f.url }); return; }
+    fsApi('get', { id: f.id }).then(function (res) {
+      if (!res.ok) { fsErrDlg(res); return; }
+      openPrintDialog({ kind: 'text', title: f.name, text: res.data.file.body || '' });
+    });
+  }
+  function fsSendToPhone(f) {
+    fsApi('toPhone', { id: f.id }).then(function (res) { if (res.ok) flash(t('fl_sent_phone', 'Saved to your phone')); else fsErrDlg(res); });
   }
   function fsRowMenu(key) {
     var files = selFiles(), one = files.length === 1 ? files[0] : null, manage = files.length > 0 && files.every(function (f) { return f.manage; });
-    return [
-      { label: t('fl_open', 'Open'), bold: true, off: !one, run: function () { fsOpen(one); } },
-      { sep: true }
-    ].concat(fsCopyMenu(), [
+    var items = [{ label: t('fl_open', 'Open'), bold: true, off: !one, run: function () { fsOpen(one); } }];
+    if (one && (isMedia(one) || one.kind === 'file')) {
+      items.push({ label: t('fl_copy_link', 'Copy link'), run: function () { copyText(one.url || ''); flash(t('fl_link_copied', 'Link copied')); } });
+      if (FS.phone && (one.kind === 'image' || one.kind === 'video')) items.push({ label: t('fl_send_phone', 'Send to phone Photos'), run: function () { fsSendToPhone(one); } });
+    }
+    if (one && state.printer && (one.kind === 'text' || one.kind === 'image')) items.push({ label: t('pr_print', 'Print'), run: function () { fsPrint(one); } });
+    return items.concat([
+      { sep: true },
+      { label: t('fl_copy_to', 'Copy to') + '…', run: function () { fsPick('copy', selFiles()); } },
+      { label: t('fl_move_to', 'Move to') + '…', off: !manage, run: function () { fsPick('move', selFiles()); } },
       { sep: true },
       { label: t('ui_fx_cmd_rename', 'Rename'), hint: 'F2', off: !(one && one.manage), run: fsStartRename },
       { label: t('ui_fx_cmd_delete', 'Delete'), hint: 'Del', off: !manage, run: fsDelete }
     ]);
   }
   function fsAreaMenu() {
-    var items = [{ label: t('fl_new', 'New text document'), off: FS.state[curFolder()] !== 'ok', run: fsNew }, { sep: true }];
+    var busy = FS.state[curFolder()] !== 'ok';
+    var items = [{ label: t('fl_new', 'New text document'), off: busy, run: fsNew }, { label: t('fl_newdir', 'New folder'), off: busy, run: fsNewDir },
+      { label: t('fl_add_link_short', 'Image or file from a link…'), off: busy, run: fsAddLink },
+      { label: t('fl_add_phone', 'Photos from your phone…'), off: busy || !FS.phone, run: fsAddPhone }, { sep: true }];
     [['name', t('ui_fx_col_name', 'Name')], ['date', t('fl_col_modified', 'Date modified')], ['size', t('fl_col_size', 'Size')], ['by', t('fl_col_author', 'Author')]].forEach(function (c) {
       items.push({ label: (EX.sortKey === c[0] ? '✓  ' : '      ') + fmt(t('ui_ctx_sort', 'Sort by %s'), c[1].toLowerCase()), run: function () { setSort(c[0]); } });
     });
@@ -1089,14 +1363,56 @@
   }
   function fsCmd(id, el) {
     if (id === 'fs-new') fsNew();
+    else if (id === 'fs-newdir') fsNewDir();
     else if (id === 'fs-open') { var one = selFiles()[0]; if (one) fsOpen(one); }
+    else if (id === 'fs-print') { var pf = selFiles()[0]; if (pf && !el.classList.contains('off')) fsPrint(pf); }
     else if (id === 'fs-rename') fsStartRename();
     else if (id === 'fs-delete') fsDelete();
-    else if (id === 'fs-copy') {
+    else if (id === 'fs-copy') { if (!el.classList.contains('off')) fsPick('copy', selFiles()); }
+    else if (id === 'fs-move') { if (!el.classList.contains('off')) fsPick('move', selFiles()); }
+    else if (id === 'fs-add') {
       if (el.classList.contains('off')) return;
       var r = el.getBoundingClientRect();
-      showCtx({ clientX: r.left, clientY: r.bottom }, fsCopyMenu());
+      showCtx({ clientX: r.left, clientY: r.bottom }, fsAddMenu());
     }
+  }
+
+  // ---- viewer for images, video, audio and other linked files (one window per file)
+  function openMediaViewer(f) {
+    var id = 'file:' + f.id;
+    if (wins[id]) { openWin(id); return; }
+    var url = safeUrl(f.url);
+    var win = document.createElement('div');
+    win.innerHTML = '<div class="win-body"><div class="fe fm"><div class="fe-bar"><span class="fe-st"></span><span class="fe-grow"></span>' +
+      (state.printer && f.kind === 'image' ? '<div class="btn fm-print">' + esc(t('pr_print', 'Print')) + '</div>' : '') +
+      '<div class="btn fm-copy">' + esc(t('fl_copy_link', 'Copy link')) + '</div>' +
+      (FS.phone && (f.kind === 'image' || f.kind === 'video') ? '<div class="btn fm-phone">' + esc(t('fl_send_phone', 'Send to phone Photos')) + '</div>' : '') +
+      '</div><div class="fm-stage"></div></div></div>';
+    $('windows').appendChild(win);
+    var stage = win.querySelector('.fm-stage'), st = win.querySelector('.fe-st'), el;
+    function status(msg, bad) { st.textContent = msg; st.classList.toggle('bad', !!bad); }
+    if (!url) { stage.textContent = t('fl_err_bad_link', 'That is not a valid https link.'); }
+    else if (f.kind === 'image') {
+      el = document.createElement('img'); el.referrerPolicy = 'no-referrer'; el.alt = f.name;
+      el.onerror = function () { stage.textContent = t('fl_load_failed', 'Could not load this file. The link may have expired.'); };
+      el.src = url; stage.appendChild(el);
+    } else if (f.kind === 'video' || f.kind === 'audio') {
+      el = document.createElement(f.kind === 'video' ? 'video' : 'audio'); el.controls = true; el.preload = 'metadata'; el.referrerPolicy = 'no-referrer';
+      el.onerror = function () { status(t('fl_load_failed', 'Could not load this file. The link may have expired.'), true); };
+      el.src = url; stage.appendChild(el);
+    } else {
+      stage.innerHTML = '<div class="fm-card">' + icSpan('filegen') + '<b></b><span></span></div>';
+      stage.querySelector('b').textContent = f.name; stage.querySelector('span').textContent = hostOf(url);
+    }
+    win.querySelector('.fm-copy').addEventListener('click', function () { copyText(f.url || ''); status(t('fl_link_copied', 'Link copied')); });
+    var pr = win.querySelector('.fm-print');
+    if (pr) pr.addEventListener('click', function () { openPrintDialog({ kind: 'image', title: f.name, url: f.url }); });
+    var ph = win.querySelector('.fm-phone');
+    if (ph) ph.addEventListener('click', function () {
+      fsApi('toPhone', { id: f.id }).then(function (res) { if (res.ok) status(t('fl_sent_phone', 'Saved to your phone')); else status(fsErrText(res), true); });
+    });
+    defWin(id, { el: win, icon: KIND_ICON[f.kind] || 'filegen', dynamic: true, w: 900, h: 660, title: f.name, onClose: function () { if (el && el.pause) el.pause(); } });
+    openWin(id);
   }
 
   // ---- the text editor window (one per open file; saves by itself a moment after typing stops)
@@ -1105,7 +1421,7 @@
     if (wins[id]) { openWin(id); return; }
     var win = document.createElement('div');
     win.innerHTML = '<div class="win-body"><div class="fe"><div class="fe-bar"><span class="fe-st"></span><span class="fe-grow"></span><span class="fe-cnt"></span>' +
-      '<div class="btn primary fe-save">' + esc(t('fl_save', 'Save')) + '</div></div><textarea class="fe-ta" spellcheck="false"></textarea></div></div>';
+      (state.printer ? '<div class="btn fe-print">' + esc(t('pr_print', 'Print')) + '</div>' : '') + '<div class="btn primary fe-save">' + esc(t('fl_save', 'Save')) + '</div></div><textarea class="fe-ta" spellcheck="false"></textarea></div></div>';
     $('windows').appendChild(win);
     var ta = win.querySelector('.fe-ta'), st = win.querySelector('.fe-st'), cnt = win.querySelector('.fe-cnt'), btn = win.querySelector('.fe-save');
     var E = { dirty: false, saving: false, again: false, timer: null };
@@ -1140,16 +1456,26 @@
       e.stopPropagation();
     });
     btn.addEventListener('click', save);
+    var pb = win.querySelector('.fe-print');
+    if (pb) pb.addEventListener('click', function () { openPrintDialog({ kind: 'text', title: f.name, text: ta.value }); });
     count();
     defWin(id, { el: win, icon: 'filetxt', dynamic: true, w: 820, h: 620, title: f.name, onClose: function () { save(); delete FS.edit[id]; } });
     openWin(id);
     ta.focus();
   }
 
-  // drag files onto a folder in the tree (or the address bar) to copy them there
+  // drag files onto a folder in the tree, the address bar or the list: the same place moves them, another place copies them
   function fsDropTarget(e) {
-    var nav = e.target.closest && e.target.closest('[data-nav]');
-    return nav && EX.dragging && isFileFolder(nav.dataset.nav) && nav.dataset.nav !== curFolder() && fsDests(curFolder()).indexOf(nav.dataset.nav) !== -1 ? nav : null;
+    if (!EX.dragging || !e.target.closest) return null;
+    var cur = curFolder();
+    var nav = e.target.closest('[data-nav]');
+    if (nav) { var nk = nav.dataset.nav; return isFileFolder(nk) && nk !== cur ? { key: nk, el: nav } : null; }
+    var row = e.target.closest('.ex-row');
+    if (row && row.dataset.key.indexOf('x:') === 0 && !EX.sel[row.dataset.key]) {
+      var f = fileById(row.dataset.key.slice(2));
+      if (f && f.kind === 'folder' && isFileFolder(cur)) return { key: fsKey(fsBase(cur), f.id), el: row };
+    }
+    return null;
   }
 
   function certsFor(k) {
@@ -1184,7 +1510,7 @@
   }
 
   // ---- selection ----
-  function keyOfItem(it) { return it.type === 'folder' ? 'f:' + it.k : it.type === 'file' ? 'x:' + it.f.id : 'c:' + it.c.testNumber; }
+  function keyOfItem(it) { return it.type === 'folder' ? 'f:' + it.k : it.type === 'file' ? 'x:' + it.f.id : it.type === 'bfile' ? 'b:' + it.f.id : 'c:' + it.c.testNumber; }
   function selFiles() {
     return EX.view.filter(function (it) { return it.type === 'file' && EX.sel['x:' + it.f.id]; }).map(function (it) { return it.f; });
   }
@@ -1206,6 +1532,8 @@
     EX.sel = {}; EX.anchor = null; EX.renaming = null;
     EX.q = '';
     $('ex-search').value = '';
+    if (isFileFolder(k) && FS.state[k] === 'ok') fsLoad(k, true, true);   // counts and names may have changed
+    if (k === 'bin') fsBinLoad(true);
     renderExplorer();
   }
 
@@ -1218,10 +1546,10 @@
     if (isFileFolder(k)) { renderFileCmd(bar); return; }
     if (k === 'bin') {
       bar.classList.remove('hidden');
-      var all = binCerts();
-      bar.innerHTML = cmdBtn('empty', 'trash', t('ui_fx_cmd_empty', 'Empty Recycle Bin'), !all.some(canManage)) +
-        (certs.length ? cmdBtn('restore', 'restore', t('ui_fx_cmd_restore_sel', 'Restore the selected items'), !manage)
-                      : cmdBtn('restoreall', 'restore', t('ui_fx_cmd_restore_all', 'Restore all items'), !all.some(canManage)));
+      var bfs = selBinFiles(), bmanage = manage || bfs.some(function (f) { return f.manage; });
+      bar.innerHTML = cmdBtn('empty', 'trash', t('ui_fx_cmd_empty', 'Empty Recycle Bin'), !binCanEmpty()) +
+        (certs.length || bfs.length ? cmdBtn('restore', 'restore', t('ui_fx_cmd_restore_sel', 'Restore the selected items'), !bmanage)
+                      : cmdBtn('restoreall', 'restore', t('ui_fx_cmd_restore_all', 'Restore all items'), !binCanEmpty()));
     } else if (k.indexOf('mot/') === 0) {
       bar.classList.remove('hidden');
       bar.innerHTML = cmdBtn('rename', 'rename', t('ui_fx_cmd_rename', 'Rename'), !(one && canManage(one))) +
@@ -1234,14 +1562,16 @@
   }
 
   function renderExplorer() {
-    var k = curFolder(), inBin = k === 'bin', isFile = isFileFolder(k);
+    var k = curFolder();
+    if (!NODES[k]) { k = (isFileFolder(k) && NODES[fsBase(k)]) ? fsBase(k) : 'root'; EX.hist[EX.idx] = k; }
+    var inBin = k === 'bin', isFile = isFileFolder(k);
     if (!FS.tried) fsLoadFolders();
     if (isFile) fsEnsure(k);
     // nav tree
     var nav = '';
     (function walk(key, depth) {
       var n = NODES[key];
-      nav += '<div class="nav-item' + (key === k ? ' sel' : '') + '" data-nav="' + esc(key) + '" style="padding-left:' + (8 + depth * 16) + 'px">' + icSpan(nodeIcon(key)) + '<span>' + esc(nodeName(key)) + '</span></div>';
+      nav += '<div class="nav-item' + ((key === k || (isFile && key === fsBase(k))) ? ' sel' : '') + '" data-nav="' + esc(key) + '" style="padding-left:' + (8 + depth * 16) + 'px">' + icSpan(nodeIcon(key)) + '<span>' + esc(nodeName(key)) + '</span></div>';
       kidsOf(key).forEach(function (c) { walk(c, depth + 1); });
     })('root', 0);
     $('ex-nav').innerHTML = nav;
@@ -1273,13 +1603,17 @@
     var items = [];
     if (!q) kidsOf(k).forEach(function (sub) { items.push({ type: 'folder', k: sub }); });
     var msg = '';
-    if (isCertFolder) {
+    if (isCertFolder && !(inBin && !appVisible('mot'))) {   // (a job without the MOT app has no certificates, only files, in its bin)
       if (state.certsState === 'loading' || state.certsState === 'idle') msg = esc(t('ui_fx_loading', 'Loading…'));
       else if (state.certsState === 'error') msg = esc(t('ui_fx_error', "Couldn't load certificates")) + '<br><div class="btn" data-retry="1">' + esc(t('ui_fx_retry', 'Try again')) + '</div>';
       else {
         var certs = certsFor(k).filter(function (c) { return !q || certMatches(c, q); });
         sortCerts(certs).forEach(function (c) { items.push({ type: 'cert', c: c }); });
       }
+    }
+    if (inBin) {
+      binFiles().filter(function (f) { return !q || f.name.toLowerCase().indexOf(q.toLowerCase()) !== -1; }).forEach(function (f) { items.push({ type: 'bfile', f: f }); });
+      items = sortBin(items);
     }
     if (isFile) {
       var fst = FS.state[k];
@@ -1299,6 +1633,7 @@
     var rows = items.map(function (it) {
       var key = keyOfItem(it), selCls = EX.sel[key] ? ' sel' : '';
       if (it.type === 'file') return fileRow(it.f, key, selCls);
+      if (it.type === 'bfile') return binFileRow(it.f, key, selCls);
       if (it.type === 'folder') {
         var cnt = (state.certsState === 'ok' && (it.k.indexOf('mot/') === 0)) ? '<span class="dim" style="margin-left:8px">' + certsFor(it.k).length + '</span>' : '';
         return '<div class="ex-row' + selCls + '" data-key="' + esc(key) + '"><div class="nm">' + icSpan(nodeIcon(it.k)) + '<span>' + esc(nodeName(it.k)) + '</span>' + cnt + '</div><div></div><div></div><div></div></div>';
@@ -1335,6 +1670,8 @@
     var certs = selCerts();
     var pf = selFiles();
     if (pf.length === 1 && count === 1) { el.innerHTML = filePreview(pf[0]); return; }
+    var pb = selBinFiles();
+    if (pb.length === 1 && count === 1) { el.innerHTML = binFilePreview(pb[0]); return; }
     if (certs.length !== 1) {
       el.innerHTML = '<div class="hint">' + esc(count > 1 ? fmt(t('ui_fx_selected_n', '%s items selected'), count) : t('ui_fx_select', 'Select a file to preview')) + '</div>';
       return;
@@ -1364,6 +1701,7 @@
     if (!key) return;
     if (key.indexOf('f:') === 0) { navigate(key.slice(2)); return; }
     if (key.indexOf('x:') === 0) { var ff = fileById(key.slice(2)); if (ff) fsOpen(ff); return; }
+    if (key.indexOf('b:') === 0) { var bf0 = binFiles().filter(function (x) { return String(x.id) === key.slice(2); })[0]; if (bf0) showBinFileProps(bf0); return; }
     var c = null, tn = key.slice(2);
     EX.view.forEach(function (it) { if (it.type === 'cert' && it.c.testNumber === tn) c = it.c; });
     if (!c) return;
@@ -1396,6 +1734,72 @@
     if (run) run();
   });
 
+
+  // ---- printing (as-printer): pick a printer near you, colour or black and white, a design and a letterhead
+  //   job = { kind: 'cert' | 'text' | 'image', title, text, url, testNumber }
+  function prApi(name, data) {
+    if (isDui) return Promise.resolve({ ok: false, reason: 'network' });
+    return fetch('https://' + (window.GetParentResourceName ? window.GetParentResourceName() : 'as-computer') + '/printApi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({ name: name, data: data || {} })
+    }).then(function (r) { return r.json(); }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false, reason: 'error' }; })
+      .catch(function () { return { ok: false, reason: 'network' }; });
+  }
+  function prErr(res) {
+    if (res && res.message) return res.message;
+    var m = { not_authorised: ['pr_err_not_authorised', 'You cannot print from this computer.'], invalid: ['pr_err_invalid', 'That cannot be printed.'],
+      network: ['pr_err_network', 'Could not reach the server.'], no_printer: ['pr_err_no_printer', 'There is no printer nearby.'] };
+    var e = m[res && res.reason] || ['pr_err_error', 'Printing failed. Try again.'];
+    return t(e[0], e[1]);
+  }
+  function openPrintDialog(job) {
+    if (!state.printer || !job) return;
+    showDlg({ title: t('pr_title', 'Print'), html: '<div class="pr-msg">' + esc(t('pr_looking', 'Looking for printers nearby…')) + '</div>', buttons: [{ label: t('ui_dlg_cancel', 'Cancel') }] });
+    var mine = ++prSeq;
+    prApi('options').then(function (res) {
+      if (mine !== prSeq) return;
+      var d = res && res.ok && res.data;
+      if (!d || !d.available || !(d.printers || []).length) {
+        showDlg({ title: t('pr_title', 'Print'), html: '<div class="pr-msg">' + esc(d && d.available ? t('pr_none', 'There is no printer within range. Move closer to one.') : (res && res.ok ? t('pr_off', 'Printing is not available.') : prErr(res))) + '</div>',
+          buttons: [{ label: t('ui_dlg_ok', 'OK'), primary: true }] });
+        return;
+      }
+      var first = null;
+      var popts = d.printers.map(function (p) {
+        var bad = !p.allowed || p.paper <= 0 || p.black <= 0;
+        if (!bad && !first) first = p.key;
+        return '<option value="' + esc(p.key) + '"' + (bad ? ' disabled' : '') + '>' + esc(p.label + ' · ' + Math.round(p.distance) + ' m · ' + (p.allowed ? fmt(t('pr_levels', 'paper %s, black %s, colour %s'), p.paper, p.black, p.colour) : t('pr_restricted', 'restricted'))) + '</option>';
+      }).join('');
+      var dopts = (d.designs || []).map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.label) + '</option>'; }).join('');
+      var lopts = '<option value="">' + esc(t('pr_no_letterhead', 'None')) + '</option>' + (d.letterheads || []).map(function (x) { return '<option value="' + esc(x.id) + '">' + esc(x.label) + '</option>'; }).join('');
+      showDlg({
+        title: t('pr_title', 'Print') + ' — ' + (job.title || ''),
+        html: '<div class="pr-form"><label>' + esc(t('pr_printer', 'Printer')) + '</label><select id="pr-printer">' + popts + '</select>' +
+          '<label>' + esc(t('pr_mode', 'Colour')) + '</label><select id="pr-colour"><option value="0">' + esc(t('pr_bw', 'Black and white')) + '</option><option value="1">' + esc(t('pr_colour', 'Colour')) + '</option></select>' +
+          (job.kind === 'cert' ? '' : '<label>' + esc(t('pr_design', 'Paper design')) + '</label><select id="pr-design">' + dopts + '</select>') +
+          '<label>' + esc(t('pr_letterhead', 'Letterhead')) + '</label><select id="pr-letter">' + lopts + '</select></div>',
+        buttons: [
+          { label: t('pr_print', 'Print'), primary: true, run: function () {
+            var sel = $('pr-printer'), body = {
+              printer: sel ? sel.value : '', colour: !!($('pr-colour') && $('pr-colour').value === '1'),
+              design: $('pr-design') ? $('pr-design').value : '', letterhead: $('pr-letter') ? $('pr-letter').value : '',
+              title: job.title, text: job.text, url: job.url, testNumber: job.testNumber
+            };
+            prApi(job.kind, body).then(function (r2) {
+              showDlg({ title: t('pr_title', 'Print'), html: '<div class="pr-msg">' + esc(r2 && r2.ok ? fmt(t('pr_sent', 'Sent to %s. Collect it from the tray in about %s seconds.'), r2.data.printer || t('pr_printer', 'Printer'), r2.data.seconds || 0) : prErr(r2)) + '</div>',
+                buttons: [{ label: t('ui_dlg_ok', 'OK'), primary: true }] });
+            });
+          } },
+          { label: t('ui_dlg_cancel', 'Cancel') }
+        ]
+      });
+      if (first && $('pr-printer')) $('pr-printer').value = first;
+    });
+  }
+  var prSeq = 0;
+  function printCert(c) { if (state.printer) openPrintDialog({ kind: 'cert', title: certName(c), testNumber: c.testNumber }); else postToClient('printCertificate', c); }
+
   function showProps(c) {
     function row(k, v) { return '<div>' + esc(k) + '</div><div><b>' + esc(v) + '</b></div>'; }
     var result = c.passed ? ((c.advisoryItems || []).length ? t('ui_word_pass_adv', 'PASS (with advisories)') : t('ui_word_pass', 'PASS')) : t('ui_word_fail', 'FAIL');
@@ -1418,16 +1822,22 @@
 
   function deleteSelected() {
     if (isFileFolder(curFolder())) { fsDelete(); return; }
-    var certs = selCerts().filter(canManage);
-    if (!certs.length) return;
-    if (curFolder() === 'bin') {
+    var certs = selCerts().filter(canManage), inBin = curFolder() === 'bin';
+    var bfs = inBin ? selBinFiles().filter(function (f) { return f.manage; }) : [];
+    if (!certs.length && !bfs.length) return;
+    if (inBin) {
+      var total = certs.length + bfs.length;
       confirmDlg(t('ui_dlg_delete_title', 'Delete'),
-        certs.length === 1 ? t('ui_dlg_delete_one', 'Are you sure you want to permanently delete this certificate?') : fmt(t('ui_dlg_delete_many', 'Are you sure you want to permanently delete these %s certificates?'), certs.length),
+        total === 1 ? (certs.length ? t('ui_dlg_delete_one', 'Are you sure you want to permanently delete this certificate?') : t('fl_bin_delete_one', 'Are you sure you want to permanently delete this item?'))
+          : (bfs.length ? fmt(t('fl_bin_delete_many', 'Are you sure you want to permanently delete these %s items?'), total) : fmt(t('ui_dlg_delete_many', 'Are you sure you want to permanently delete these %s certificates?'), certs.length)),
         function () {
-          var gone = {}; tnList(certs).forEach(function (n) { gone[n] = true; });
-          state.certs = (state.certs || []).filter(function (c) { return !gone[c.testNumber]; });
+          if (certs.length) {
+            var gone = {}; tnList(certs).forEach(function (n) { gone[n] = true; });
+            state.certs = (state.certs || []).filter(function (c) { return !gone[c.testNumber]; });
+            postToClient('certPurge', { list: tnList(certs) });
+          }
           EX.sel = {}; renderExplorer();
-          postToClient('certPurge', { list: tnList(certs) });
+          if (bfs.length) fsPurgeFiles(bfs);
         });
     } else {
       certs.forEach(function (c) { c.deleted = true; c.deletedAt = nowStr(); c.deletedBy = state.user; });
@@ -1443,13 +1853,19 @@
     postToClient('certRestore', { list: tnList(certs) });
   }
   function emptyBin() {
-    var certs = binCerts().filter(canManage);
-    if (!certs.length) return;
-    confirmDlg(t('ui_dlg_delete_title', 'Delete'), fmt(t('ui_dlg_empty', 'Are you sure you want to permanently delete all %s items in the Recycle Bin?'), certs.length), function () {
-      var gone = {}; tnList(certs).forEach(function (n) { gone[n] = true; });
-      state.certs = (state.certs || []).filter(function (c) { return !gone[c.testNumber]; });
+    var certs = binCerts().filter(canManage), files = binFiles().filter(function (f) { return f.manage; });
+    if (!certs.length && !files.length) return;
+    confirmDlg(t('ui_dlg_delete_title', 'Delete'), fmt(t('ui_dlg_empty', 'Are you sure you want to permanently delete all %s items in the Recycle Bin?'), certs.length + files.length), function () {
+      if (certs.length) {
+        var gone = {}; tnList(certs).forEach(function (n) { gone[n] = true; });
+        state.certs = (state.certs || []).filter(function (c) { return !gone[c.testNumber]; });
+        postToClient('certPurge', { list: tnList(certs) });
+      }
+      if (files.length) {
+        FS.bin.data = binFiles().filter(function (f) { return !f.manage; });
+        fsApi('binEmpty').then(function (res) { fsBinLoad(true); if (!res.ok) fsErrDlg(res); });
+      }
       EX.sel = {}; renderExplorer();
-      postToClient('certPurge', { list: tnList(certs) });
     });
   }
 
@@ -1537,17 +1953,18 @@
     if (key.indexOf('x:') === 0) return fsRowMenu(key);
     var certs = selCerts(), one = certs.length === 1 ? certs[0] : null, manage = certs.some(canManage);
     if (curFolder() === 'bin') {
+      var bfs = selBinFiles(), bmanage = manage || bfs.some(function (f) { return f.manage; });
       return [
-        { label: t('ui_ctx_restore', 'Restore'), bold: true, off: !manage, run: function () { restoreCerts(selCerts()); } },
+        { label: t('ui_ctx_restore', 'Restore'), bold: true, off: !bmanage, run: function () { restoreBin(selCerts(), selBinFiles()); } },
         { sep: true },
-        { label: t('ui_fx_cmd_delete', 'Delete'), hint: 'Del', off: !manage, run: deleteSelected },
+        { label: t('ui_fx_cmd_delete', 'Delete'), hint: 'Del', off: !bmanage, run: deleteSelected },
         { sep: true },
-        { label: t('ui_ctx_props', 'Properties'), off: !one, run: function () { showProps(one); } }
+        { label: t('ui_ctx_props', 'Properties'), off: certs.length + bfs.length !== 1, run: function () { if (one) showProps(one); else showBinFileProps(bfs[0]); } }
       ];
     }
     return [
       { label: t('ui_ctx_open', 'Open'), bold: true, off: !one, run: function () { openCert(one); } },
-      { label: t('ui_fx_cmd_print', 'Print'), off: !(state.canPrint && one), run: function () { postToClient('printCertificate', one); } },
+      { label: t('ui_fx_cmd_print', 'Print'), off: !(state.canPrint && one), run: function () { printCert(one); } },
       { label: t('ui_ctx_copy', 'Copy test number'), off: !one, run: function () { copyText(one.testNumber); } },
       { sep: true },
       { label: t('ui_fx_cmd_rename', 'Rename'), hint: 'F2', off: !(one && canManage(one)), run: startRename },
@@ -1560,7 +1977,7 @@
   function areaMenu() {
     if (isFileFolder(curFolder())) return fsAreaMenu();
     var k = curFolder(), inBin = k === 'bin', items = [];
-    if (inBin) items.push({ label: t('ui_fx_cmd_empty', 'Empty Recycle Bin'), off: !binCerts().some(canManage), run: emptyBin }, { sep: true });
+    if (inBin) items.push({ label: t('ui_fx_cmd_empty', 'Empty Recycle Bin'), off: !binCanEmpty(), run: emptyBin }, { sep: true });
     if (inBin || k.indexOf('mot/') === 0) {
       [['name', t('ui_fx_col_name', 'Name')], ['date', inBin ? t('ui_fx_col_deleted', 'Date deleted') : t('ui_date_tested', 'Date tested')],
        ['result', t('ui_fx_col_result', 'Result')], ['expires', inBin ? t('ui_fx_col_deletedby', 'Deleted by') : t('ui_fx_col_expires', 'Expires')]].forEach(function (c) {
@@ -1589,13 +2006,13 @@
     else if (nav && exWin.contains(nav)) {
       var nk = nav.dataset.nav;
       items = [{ label: t('ui_ctx_open', 'Open'), bold: true, run: function () { navigate(nk); } }];
-      if (nk === 'bin') items.push({ label: t('ui_fx_cmd_empty', 'Empty Recycle Bin'), off: !binCerts().some(canManage), run: emptyBin });
+      if (nk === 'bin') items.push({ label: t('ui_fx_cmd_empty', 'Empty Recycle Bin'), off: !binCanEmpty(), run: emptyBin });
     }
     else if (e.target.closest('#ex-rows') || e.target.closest('.ex-list')) { setSel([]); items = areaMenu(); }
     else if (icon) {
       var app_ = icon.dataset.app;
       items = [{ label: t('ui_ctx_open', 'Open'), bold: true, run: function () { openApp(app_); } }];
-      if (app_ === 'bin') items.push({ label: t('ui_fx_cmd_empty', 'Empty Recycle Bin'), off: !binCerts().some(canManage), run: emptyBin });
+      if (app_ === 'bin') items.push({ label: t('ui_fx_cmd_empty', 'Empty Recycle Bin'), off: !binCanEmpty(), run: emptyBin });
     }
     else if (e.target.closest('#desktop') || e.target.closest('#wallpaper')) {
       items = [{ label: t('ui_ctx_open_explorer', 'Open File Explorer'), run: function () { openWin('explorer'); } }]
@@ -1658,12 +2075,13 @@
       if (id.indexOf('fs-') === 0) { fsCmd(id, cmd); return; }
       if (id === 'rename') startRename();
       else if (id === 'delete') deleteSelected();
-      else if (id === 'print') { var one = selCerts()[0]; if (one && state.canPrint) postToClient('printCertificate', one); }
+      else if (id === 'print') { var one = selCerts()[0]; if (one && state.canPrint) printCert(one); }
       else if (id === 'empty') emptyBin();
-      else if (id === 'restore') restoreCerts(selCerts());
-      else if (id === 'restoreall') restoreCerts(binCerts());
+      else if (id === 'restore') restoreBin(selCerts(), selBinFiles());
+      else if (id === 'restoreall') restoreBin(binCerts(), binFiles());
       return;
     }
+    if (e.target.closest('[data-binrestore]')) { restoreBin([], selBinFiles()); return; }
     if (e.target.closest('[data-fsopen]')) { var pf1 = selFiles()[0]; if (pf1) fsOpen(pf1); return; }
     if (e.target.closest('[data-openpv]')) { var sc = selCerts()[0]; if (sc) openCert(sc); return; }
     var row = e.target.closest('.ex-row');
@@ -1697,13 +2115,13 @@
   });
   exWin.addEventListener('dragover', function (e) {
     exWin.querySelectorAll('.drop').forEach(function (n) { n.classList.remove('drop'); });
-    var nav = fsDropTarget(e);
-    if (nav) { e.preventDefault(); nav.classList.add('drop'); }
+    var d = fsDropTarget(e);
+    if (d) { e.preventDefault(); d.el.classList.add('drop'); }
   });
   exWin.addEventListener('drop', function (e) {
-    var nav = fsDropTarget(e);
+    var d = fsDropTarget(e);
     exWin.querySelectorAll('.drop').forEach(function (n) { n.classList.remove('drop'); });
-    if (nav) { e.preventDefault(); fsCopy(selFiles(), nav.dataset.nav); }
+    if (d) { e.preventDefault(); fsTransfer(selFiles(), d.key, (e.ctrlKey || fsBase(d.key) !== fsBase(curFolder())) ? 'copy' : 'move'); }
     EX.dragging = false;
   });
   exWin.addEventListener('dragend', function () {
@@ -3639,7 +4057,8 @@
     if (d.action === 'open') {
       state.rect = d.rect || null;
       state.user = d.user || '';
-      state.canPrint = !!d.print;
+      state.canPrint = !!d.print || !!d.printer;
+      state.printer = !!d.printer;
       state.browser = !!d.browser;
       state.calendar = !!d.calendar;
       if (d.calendar && typeof d.calendar === 'object') CAL.weekStart = d.calendar.weekStart === 0 ? 0 : 1;
@@ -3703,7 +4122,7 @@
   // The server decides who has the app (Config.Apps.<id> + the Store), exactly like the built-in ones.
   window.LSOS = {
     t: t, fmt: fmt, esc: esc, fmtPlate: fmtPlate, ic: ic, icSpan: icSpan, fillIcons: fillIcons, confirmDlg: confirmDlg,
-    showDlg: showDlg, closeDlg: closeDlg, isDui: isDui, state: state,
+    showDlg: showDlg, closeDlg: closeDlg, print: openPrintDialog, isDui: isDui, state: state,
     winOpen: function (id) { return !!(wins[id] && wins[id].open); },
     registerApp: function (o) {
       if (EXT[o.id] || isDui) return null;

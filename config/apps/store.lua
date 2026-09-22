@@ -23,6 +23,7 @@ Config.Store = {
   --   'qb-banking'    qb-banking
   --   'qb-management' qb-management         
   --   'okokbanking'   okokBanking
+  --   'okokbankingv2' okokBankingv2
   --   'fd_banking'    fd_banking            
   --   'esx_society'   esx_addonaccount / esx_society
   --   'custom'        fill in the three functions below

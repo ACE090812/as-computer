@@ -2,6 +2,13 @@
 
 A Windows-style desktop ("Los Santos OS") on a prop monitor: Store, MOT Testing Service, File Explorer (with Recycle Bin), Scout browser (as-browser sites), Calendar and the Mechanic app. Formerly `mot-dui`.
 
+## Rename from mot-dui
+1. Rename the resource folder `mot-dui` to `as-computer` and change the `ensure mot-dui` line in `server.cfg` to `ensure as-computer` (after `as-browser`).
+2. `provide 'mot-dui'` in `fxmanifest.lua` keeps any script that calls `exports['mot-dui']` working. Remove that line when nothing uses the old name.
+3. Debug commands are now `/computer_coords`, `/computer_open`, `/computer_goto`, `/computer_screen` (were `/mot_*`).
+4. `client/config.lua` and `shared/checklist.lua` are empty stubs now. Nothing loads them, delete both files.
+5. The `mot_history` and `mot_calendar` tables and the `stream/` files keep their names, so no data moves.
+
 ## Config layout
 Every app has its own file, so no single file grows. Nothing is hard-coded to a list of apps: the manifest loads `config/apps/*.lua`, so a new file there is picked up automatically.
 
@@ -178,13 +185,13 @@ Add `exports['as-browser']:getVehicleStatus(plate)`, `isRoadLegal(plate)`, `getV
 
 ### Inventory and items
 
-as-computer does not use items. Nothing to add to ox_inventory or qb-inventory. Certificate printing is not built (`Config.PrintEvent`).
+as-computer does not use items. Nothing to add to ox_inventory or qb-inventory. Printing needs the `as-printer` resource (see its README); without it the Print buttons are hidden. `Config.PrintEvent` is still supported as a fallback for certificates.
 
 ### What is not done or not tested
 
 - Not run on a real ESX server (see Vehicles and plates).
 - The Mail app and Mechanic card payments have not been tested in game.
-- Certificate printing (`Config.PrintEvent`) is a hook only.
+- Printing goes through `as-printer` (`config/apps/printing.lua`: `Config.Printing.enabled`). `Config.PrintEvent` remains a fallback hook for certificates.
 - The prop, texture names (`txd`, `txn`) and the `stream/` files need an in-game check on your server.
 
 ## What's real vs placeholder here
@@ -322,14 +329,19 @@ Two built-in apps for every character that may use the computer (`store = false`
 
 ## File Explorer files (Documents, Downloads, shared job folder)
 
-The File Explorer's **Documents** and **Downloads** folders (and a **shared folder for the character's job**, shown as "Mechanic (shared)") now hold real text files kept on the server. The MOT Certificates part and the Recycle Bin for certificates work as before.
+The File Explorer's **Documents** and **Downloads** folders (and a **shared folder for the character's job**, shown as "Mechanic (shared)") hold real files kept on the server. The MOT Certificates part and the Recycle Bin for certificates work as before.
 
-- **Documents / Downloads** belong to the character and follow them to any computer. **The shared folder** belongs to the job: everyone on the job can open files, add files and copy them out; only the author can rename or delete a file (and the job boss can too, unless `bossManagesAll = false`).
-- **Files:** New text document, Open (a built-in text editor that saves by itself), Rename (F2), Delete (Del, asks first), Search, sorting. Names are cleaned (no `\ / : * ? " < > |`), `.txt` is added if there is no extension, and a duplicate name becomes `name (2).txt`.
-- **Upload and download:** select files, then **Copy to** (or right-click, or drag onto a folder in the left tree). From Documents or Downloads it offers "Upload to <Job>"; from the shared folder it offers "Download to Downloads". Copies are independent files.
+- **Folders inside folders:** New folder, open with a double-click, Back / Forward / Up and the address bar all follow the path. `maxDepth` (default 8) limits how deep, `maxPerFolder` how many items per folder and `maxTotal` how many per place.
+- **Text files:** New text document, a built-in editor that saves by itself, Rename (F2), Delete (Del, asks first; deleting a folder takes everything in it to the Recycle Bin), search and sorting (folders first). Names are cleaned (no `\ / : * ? " < > |`), `.txt` is added to text files with no extension, and a duplicate name becomes `name (2).txt`.
+- **Images, video, audio and other files:** the server never stores the file itself, only a **link** to media hosted somewhere. **Add > Image or file from a link** takes an https address (Imgur, Discord CDN, and so on). Images, video and audio open in a viewer window; other files show their details with Copy link. A thumbnail shows in the preview pane.
+  - Because a player's game loads the link, which tells the host their IP address, only hosts in `Config.Files.allowedHosts` work (`'*.example.com'` allows every sub-domain). The default list is a starting point; edit it. `allowAnyHost = true` lifts the limit (not recommended). The address must be https, without a port or `user@`, and is shown as text, never as HTML.
+  - **Phone Photos (sd-phone):** **Add > Photos from your phone** lists the character's own photos and imports the ones ticked (up to 20 at a time). **Send to phone Photos** (right-click, or in the viewer) saves an image or video back to the phone. This uses sd-phone's public `getPhotos` and `addPhoto` exports, so nothing in sd-phone is edited; `phoneImport = false` switches it off. Photos already on the phone do not need to be in `allowedHosts`.
+- **Copy and move:** select items, then **Copy to...** or **Move to...** (a picker with every folder), or right-click, or drag. Dragging onto a folder (in the list or the left tree, or the address bar) moves within the same place and copies to another place (hold Ctrl to copy). Copying a folder copies everything inside it.
+- **Who can do what:** Documents and Downloads belong to the character. In the shared folder everyone on the job can open, add and copy; only the author can rename, delete or move a file or folder, and the job boss can too unless `bossManagesAll = false`. A folder that holds a workmate's file can only be deleted by the boss.
 - **Notepad:** a "Save to Documents" button saves a copy of the open note as a text file.
-- Settings in `config/apps/files.lua` (`Config.Files`): `enabled`, `maxPerFolder` (200), `maxLength` (50000 characters), `maxNameLength`, `sharedFolders` (`'auto'` = every job that may use the computer, or a list like `{ mechanic = true }`), `excludeJobs`, `bossManagesAll`. Table `computer_files` is created automatically. Text is in `locales/files_en.lua` (`fl_*`).
-- Not done: real uploads from your own PC (FiveM cannot pick files from the player's disk), binary files or images, a Recycle Bin for deleted files (deleting a file is permanent, after a confirmation), folders inside folders. Not tested in game.
+- **Recycle Bin for files:** deleting a file or folder moves it to the same Recycle Bin the MOT certificates use (a folder goes in as one item and comes back whole). In the bin you can Restore (back to where it was, or to the top level of that place if the folder is gone or full; a name clash becomes `name (2)`), Delete permanently, or Empty Recycle Bin. Items leave the bin by themselves after `Config.Files.binDays` days (default 30, 0 = never); `recycleBin = false` makes deleting permanent again. In the shared job folder the whole job sees the bin, but only the author or the boss can restore or delete a given item (Empty skips what you may not manage). Binned items do not count toward the folder limits. A table from before the bin is upgraded on start (columns `deleted_at`, `del_root`, `deleted_by`).
+- Settings in `config/apps/files.lua` (`Config.Files`): `enabled`, `maxPerFolder`, `maxTotal`, `maxDepth`, `maxLength`, `maxNameLength`, `sharedFolders` (`'auto'` = every job that may use the computer, or a list like `{ mechanic = true }`), `excludeJobs`, `bossManagesAll`, `allowedHosts`, `allowAnyHost`, `phoneImport`, `phoneResource`, `recycleBin`, `binDays`. Table `computer_files` is created automatically, and a table from the earlier text-only version is upgraded on start. Text is in `locales/files_en.lua` (`fl_*`).
+- Not done: uploading a file from a player's own PC (FiveM cannot pick files from the player's disk), storing the file bytes on the server, cut and paste with the keyboard. Not tested in game.
 
 ## Mail
 

@@ -24,6 +24,7 @@ client_scripts {
   'client/mail.lua',
   'client/notepad.lua',
   'client/files.lua',
+  'client/printing.lua',
 }
 
 server_scripts {
@@ -38,6 +39,7 @@ server_scripts {
   'server/mail.lua',
   'server/notepad.lua',
   'server/files.lua',
+  'server/printing.lua',
   'server/main.lua',
 }
 
