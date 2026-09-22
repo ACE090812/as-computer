@@ -20,6 +20,13 @@ function Bridge.VehicleTable()
   return 'player_vehicles' -- qbcore / qbox default
 end
 
+-- Owner column on that table: esx's owned_vehicles uses `owner` (an identifier), qb/qbox's
+-- player_vehicles uses `citizenid`. Never hardcode either name directly in a query.
+function Bridge.VehicleOwnerColumn()
+  if framework == 'esx' then return 'owner' end
+  return 'citizenid' -- qbcore / qbox default
+end
+
 function Bridge.GetPlayer(src)
   if framework == 'qbox' then
     return exports.qbx_core:GetPlayer(src)

@@ -620,8 +620,11 @@ end
 
 local function ownedRow(plate)
   local ok, row = pcall(function()
+    -- esx's owned_vehicles has no `citizenid` column (it's `owner`); alias whichever this
+    -- framework actually uses back to `citizenid` so every caller below keeps working unchanged.
     return MySQL.single.await(
-      ('SELECT plate, vehicle, citizenid FROM `%s` WHERE UPPER(REPLACE(plate, " ", "")) = ?'):format(Bridge.VehicleTable()), { plate })
+      ('SELECT plate, vehicle, `%s` AS citizenid FROM `%s` WHERE UPPER(REPLACE(plate, " ", "")) = ?')
+        :format(Bridge.VehicleOwnerColumn(), Bridge.VehicleTable()), { plate })
   end)
   if ok then return row end
   return nil

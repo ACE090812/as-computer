@@ -107,8 +107,9 @@ MotCallback.Register('lookupVehicle', function(src, respond, plateInput)
   if plate == '' then return respond({ found = false, reason = 'empty' }) end
 
   local vehicleTable = Bridge.VehicleTable()
+  local ownerColumn = Bridge.VehicleOwnerColumn()
   local vehicleRow = MySQL.single.await(
-    ('SELECT plate, vehicle, citizenid FROM `%s` WHERE UPPER(REPLACE(plate, " ", "")) = ?'):format(vehicleTable),
+    ('SELECT plate, vehicle, `%s` AS owner_ref FROM `%s` WHERE UPPER(REPLACE(plate, " ", "")) = ?'):format(ownerColumn, vehicleTable),
     { plate }
   )
 
