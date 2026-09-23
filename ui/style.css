@@ -30,9 +30,13 @@ input{user-select:text;-webkit-user-select:text}
 #wallpaper .wm{position:absolute;left:0;right:0;top:36%;text-align:center;color:rgba(255,255,255,.14);font-size:150px;font-weight:700;letter-spacing:.08em}
 #wallpaper .wm small{display:block;font-size:29.9px;letter-spacing:.35em;font-weight:400;margin-top:-6px}
 
-/* ---- desktop icons ---- */
-#desktop{position:absolute;left:0;top:0;bottom:var(--tb-h);width:220px;padding:20px 12px;display:flex;flex-direction:column;align-items:flex-start;gap:6px}
-.dicon{width:104px;padding:8px 4px 6px;border:1px solid transparent;border-radius:6px;display:flex;flex-direction:column;align-items:center;gap:6px;color:#fff;cursor:default;text-align:center}
+/* ---- desktop icons ----
+   Icons are free-positioned: #desktop now spans the whole screen (minus the taskbar) instead of a
+   narrow left strip, and each .dicon is placed with an inline left/top set by layoutIcons() in
+   app.js (snapped to a GRID cell). Dragging an icon updates its saved grid cell (prefs.iconPos). */
+#desktop{position:absolute;left:0;top:0;right:0;bottom:var(--tb-h);padding:14px;overflow:hidden}
+.dicon{position:absolute;width:104px;padding:8px 4px 6px;border:1px solid transparent;border-radius:6px;display:flex;flex-direction:column;align-items:center;gap:6px;color:#fff;cursor:default;text-align:center;transition:left .12s ease,top .12s ease;user-select:none}
+.dicon.dragging{transition:none;z-index:60;background:rgba(255,255,255,.16);cursor:grabbing}
 .dicon .ic{width:52px;height:52px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
 .dicon span.l{font-size:16.1px;line-height:1.2;text-shadow:0 1px 3px rgba(0,0,0,.8);word-break:break-word}
 .dicon:hover{background:rgba(255,255,255,.12)}
@@ -120,12 +124,17 @@ input{user-select:text;-webkit-user-select:text}
 #lock .l-date{margin-top:8px;font-size:34px;font-weight:400;text-shadow:0 2px 12px rgba(0,0,0,.3)}
 #lock .l-org{margin-top:38px;font-size:18.4px;letter-spacing:.32em;text-transform:uppercase;opacity:.75}
 #lock .l-user{position:absolute;left:0;right:0;bottom:170px;display:flex;flex-direction:column;align-items:center;gap:14px}
-#lock .l-avatar{width:112px;height:112px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.5);display:grid;place-items:center}
+#lock .l-avatar{width:112px;height:112px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.5);display:grid;place-items:center;background-size:cover;background-position:center}
 #lock .l-avatar .ic{width:58px;height:58px}
 #lock .l-name{font-size:32.2px}
-#lock .l-btn{margin-top:6px;padding:10px 38px;border-radius:6px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);font-size:18.4px}
+#lock .l-btn{margin-top:6px;padding:10px 38px;border-radius:6px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);font-size:18.4px;cursor:pointer}
 #lock:hover .l-btn{background:rgba(255,255,255,.3)}
 #lock .l-hint{position:absolute;left:0;right:0;bottom:72px;text-align:center;font-size:17.2px;opacity:.8}
+#lock .l-pwbox{display:flex;flex-direction:column;align-items:center;gap:8px}
+#lock .l-pwbox.hidden{display:none}
+#lock .l-pwinput{width:240px;height:38px;border-radius:6px;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.14);color:#fff;font-size:16px;padding:0 12px;text-align:center}
+#lock .l-pwinput::placeholder{color:rgba(255,255,255,.65)}
+#lock .l-pwerr{min-height:18px;font-size:13.5px;color:#ffb4a8;text-shadow:0 1px 4px rgba(0,0,0,.4)}
 
 /* ---- File Explorer ---- */
 .ex{display:flex;flex-direction:column;height:100%;background:#fff;font-size:16.1px;color:#1b1b1b}
@@ -387,6 +396,51 @@ html.dui #startmenu,html.dui #lock,html.dui #windows{display:none!important}
 #br-menu.on{background:#e1e5f0}
 .br-toast{position:absolute;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);background:#222;color:#fff;padding:10px 20px;border-radius:8px;font-size:15.5px;opacity:0;pointer-events:none;transition:.2s;z-index:5}
 .br-toast.on{opacity:.96;transform:translateX(-50%)}
+
+/* ---- Scout: Settings (3-dot menu > Settings) ---- */
+.br-settings h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:#777;margin:26px 0 10px;font-weight:600}
+.br-settings h2:first-of-type{margin-top:6px}
+.br-segrow{display:flex;background:#eef0f5;border-radius:11px;padding:3px;gap:3px}
+.br-seg{flex:1;text-align:center;padding:9px 6px;border:none;background:none;border-radius:8px;font-weight:600;font-size:14.5px;color:#666;font-family:inherit}
+.br-seg.on{background:#fff;color:#111;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.br-rows{background:#f8f9fc;border-radius:11px;overflow:hidden}
+.br-rows .br-row{border-radius:0}
+
+/* ---- Scout: its own theme override (3-dot menu > Settings > Appearance), independent of the PC's mode ---- */
+#win-browser.br-dark .br,#win-browser.br-dark .br-view,#win-browser.br-dark .br-tabview,#win-browser.br-dark .br-frame{background:#1b1e24}
+#win-browser.br-dark .br-tabs{background:#111318}
+#win-browser.br-dark .br-tab{color:#c7cad1}
+#win-browser.br-dark .br-tab:hover{background:rgba(255,255,255,.08)}
+#win-browser.br-dark .br-tab.active{background:#1b1e24;color:#f3f4f6}
+#win-browser.br-dark .br-plus{color:#c7cad1}
+#win-browser.br-dark .br-plus:hover{background:rgba(255,255,255,.1)}
+#win-browser.br-dark .br-bar{background:#1b1e24;border-color:#2b2f37}
+#win-browser.br-dark .br-url{background:#111318;border-color:#2b2f37;color:#f3f4f6}
+#win-browser.br-dark .br-url input{color:#f3f4f6}
+#win-browser.br-dark .br-url .star{color:#c7cad1}
+#win-browser.br-dark .br-bm{background:#1b1e24;border-color:#2b2f37}
+#win-browser.br-dark .br-chip{color:#e5e7ec}
+#win-browser.br-dark .br-chip:hover{background:rgba(255,255,255,.08)}
+#win-browser.br-dark .br-dd{background:#22262e;border-color:#3a3f49;color:#f3f4f6}
+#win-browser.br-dark .dd-i:hover:not(.off),#win-browser.br-dark .dd-zc button:hover{background:rgba(255,255,255,.08)}
+#win-browser.br-dark .dd-i.off{color:#8a8f99}
+#win-browser.br-dark .dd-sep{background:#3a3f49}
+#win-browser.br-dark .br-row .t,#win-browser.br-dark .br-list h1{color:#f3f4f6}
+#win-browser.br-dark .br-segrow,#win-browser.br-dark .br-rows{background:#111318}
+#win-browser.br-dark .br-seg{color:#9ca3af}
+#win-browser.br-dark .br-seg.on{background:#2b2f37;color:#f3f4f6}
+#win-browser.br-dark .br-settings h2{color:#9ca3af}
+
+/* ---- Scout: text size (3-dot menu > Settings > Text size) ---- */
+#win-browser{--br-ts:1}
+#win-browser .br-tab{font-size:calc(15.5px * var(--br-ts,1))}
+#win-browser .br-url input{font-size:calc(16px * var(--br-ts,1))}
+#win-browser .br-row .t{font-size:calc(17px * var(--br-ts,1))}
+#win-browser .br-row .u,#win-browser .br-row .d{font-size:calc(14px * var(--br-ts,1))}
+#win-browser .br-chip{font-size:calc(14.5px * var(--br-ts,1))}
+#win-browser .br-dd{font-size:calc(15.5px * var(--br-ts,1))}
+#win-browser .br-seg{font-size:calc(14.5px * var(--br-ts,1))}
+#win-browser .br-list h1{font-size:calc(28px * var(--br-ts,1))}
 
 .br-page{min-height:100%;padding:0 40px 40px;user-select:text}
 .br-home{max-width:780px;margin:0 auto;padding-top:92px;text-align:center}
@@ -741,6 +795,24 @@ html.dark .se-tag.warn{color:#f2a06e}
 .se-note{margin:0 0 16px;padding:11px 16px;border-radius:6px;font-size:14px;background:rgba(15,108,189,.12);border:1px solid rgba(15,108,189,.3)}
 .se-note.err{background:rgba(212,53,28,.13);border-color:rgba(212,53,28,.4)}
 .se-note.ok{background:rgba(16,137,62,.14);border-color:rgba(16,137,62,.4)}
+
+/* Network & internet > Wi-Fi: the available-networks picker */
+.se-netlist{display:flex;flex-direction:column}
+.se-netrow{display:flex;align-items:center;gap:16px;min-height:60px;padding:11px 18px;border-top:1px solid var(--se-line)}
+.se-netlist .se-netrow:first-child{border-top:0}
+.se-netrow.click{cursor:default}
+.se-netrow.click:hover{background:var(--se-card-h)}
+.se-netrow.on .se-rn{font-weight:600}
+.se-net-ok{color:#0f7a37}
+html.dark .se-net-ok{color:#6ccb8f}
+.se-bars{display:flex;align-items:flex-end;gap:2px;width:16px;height:14px;flex:none}
+.se-bar{width:3px;border-radius:1px;background:var(--se-line)}
+.se-bar.on{background:var(--se-text)}
+.se-inp{width:100%;height:34px;border:1px solid var(--se-inp-l);border-radius:5px;background:var(--se-inp);color:var(--se-text);padding:0 10px;font:inherit;font-size:14px;display:block}
+.se-netform{padding:4px 18px 16px;border-top:0}
+.se-netform .se-inp{max-width:320px;margin-bottom:10px}
+.se-netform-btns{display:flex;gap:8px}
+.se-netform .se-note{margin:0 0 10px;max-width:320px}
 /* controls */
 .se-tgl{display:inline-flex;align-items:center;gap:12px}
 .se-tglt{font-size:13.5px;min-width:22px;text-align:right}
@@ -760,6 +832,19 @@ html.dark .se-tag.warn{color:#f2a06e}
 .se-btn:hover{background:var(--se-card-h)}
 .se-btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink,#fff)}
 .se-btn.primary:hover{filter:brightness(.92)}
+.se-btn.danger{color:#c42b1c}
+.se-btn.danger:hover{background:rgba(196,43,28,.1)}
+.se-ava.xl{width:88px;height:88px;font-size:34px}
+.se-avarow{display:flex;align-items:center;gap:20px;padding:22px 20px}
+.se-avarow .an{font-weight:600;font-size:18px}
+.se-avarow .aj{font-size:13px;color:var(--se-sub);margin-bottom:10px}
+.se-avarow .abtns{display:flex;gap:10px}
+.se-pwform{padding:16px 18px;border-top:1px solid var(--se-line)}
+.se-pwform .se-rd{margin-bottom:12px}
+.se-pwform-fields{display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap}
+.se-pwform-fields .field{flex:1;min-width:180px;display:flex;flex-direction:column;gap:6px}
+.se-pwform-fields label{font-size:12.5px;color:var(--se-sub)}
+.se-pwform-btns{display:flex;gap:8px;justify-content:flex-end}
 .se-urlrow{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .se-urlrow input{flex:1;min-width:0;height:36px;padding:0 12px;border:1px solid var(--se-btn-l);border-bottom:1px solid var(--se-inp-l);border-radius:5px;background:var(--se-inp);color:var(--se-text);font:inherit;font-size:14.5px;outline:none}
 .se-urlrow input:focus{border-bottom:2px solid var(--accent)}

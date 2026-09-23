@@ -29,6 +29,19 @@ html.dark #win-notepad .win-body{filter:invert(.9) hue-rotate(180deg)}
 .np-status{color:#6b7280;font-size:13px}
 .np-tools{display:flex;gap:8px}
 .np-err{background:#fde8e6;color:#8a1c12;padding:8px 16px;font-size:13.5px;border-bottom:1px solid #f4c5c0}
-.np-body{flex:1;min-height:0;display:flex}
-.np-body textarea{flex:1;border:0;outline:0;resize:none;padding:16px 20px;background:#fff;line-height:1.5;font-family:'Segoe UI',Consolas,monospace}
+.np-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.np-toolbar{flex:none;display:flex;align-items:center;gap:2px;padding:6px 14px;border-bottom:1px solid #e1e4ea;background:#fafbfc}
+.np-tsep{width:1px;align-self:stretch;background:#dfe2e8;margin:2px 6px}
+.np-tbtn{width:30px;height:28px;border:0;background:none;border-radius:6px;font-size:14px;font-family:inherit;color:#1b1f27}
+.np-tbtn:hover{background:#eceff5}
+.np-tbtn.on{background:#dde7fb;color:#0f6cbd}
+.np-tsel{height:28px;border:1px solid #d7dbe2;border-radius:6px;background:#fff;font-size:12.5px;color:#1b1f27;padding:0 4px;margin-right:4px}
+.np-tfont{max-width:130px}
+.np-tcolor{width:28px;height:28px;padding:2px;border:1px solid #d7dbe2;border-radius:6px;background:#fff;margin-right:2px;cursor:pointer}
+.np-ed{flex:1;min-height:0;overflow:auto;outline:0;padding:16px 20px;background:#fff;line-height:1.5;font-family:'Segoe UI',Consolas,monospace}
+.np-ed ul,.np-ed ol{margin:0 0 0 22px;padding:0}
+.np-ed h1{font-size:1.6em;margin:.4em 0;font-weight:700}
+.np-ed h2{font-size:1.3em;margin:.4em 0;font-weight:700}
+.np-ed h3{font-size:1.1em;margin:.4em 0;font-weight:700}
+.np-ed:empty:before{content:attr(data-placeholder);color:#9aa0ab;pointer-events:none}
 .np-foot{flex:none;padding:6px 16px;border-top:1px solid #e1e4ea;color:#6b7280;font-size:12.5px;min-height:30px}
