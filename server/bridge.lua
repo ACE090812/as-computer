@@ -71,8 +71,14 @@ function Bridge.VehicleModelLabel(raw)
   if not ok or type(data) ~= 'table' then return raw end
   local hash = tonumber(data.model or data.modelName or data.MODEL)
   if not hash then return raw end
+  -- Vehicle hashes are unsigned 32-bit, but this column stores them as a SIGNED int (MySQL/JSON have
+  -- no unsigned type), and joaat() above only ever produces the unsigned form - so a hash above
+  -- 0x7FFFFFFF comes back here negative (e.g. -225539375) and must be masked back to unsigned before
+  -- comparing, or it never matches and, worse, %X on a raw negative Lua integer sign-extends to a
+  -- garbled 16-digit 64-bit hex string (that's the "MODEL 0XFFFFFFFFF28E8AD1" bug).
+  hash = hash & 0xFFFFFFFF
   buildEsxModels()
-  return esxModelsByHash[hash] or ('model 0x%X'):format(hash)
+  return esxModelsByHash[hash] or ('model 0x%08X'):format(hash)
 end
 
 function Bridge.GetPlayer(src)
