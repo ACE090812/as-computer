@@ -1,0 +1,222 @@
+/* MDT app (Los Santos OS): police mobile data terminal.
+   Layout: top command bar (brand + search + nav tabs + officer) with a scrolling content
+   area below; Dashboard uses a briefing strip, People/Vehicles/Reports/BOLOs use a
+   master-detail split (record list left, detail pane right). Flat, no gradients/glow/
+   pulse animation — built from as-computer's own tokens (ui/style.css :root), scoped to
+   #win-mdt / .mdt so it cannot touch other windows.
+*/
+#win-mdt .win-body{background:#12151a;font-family:var(--ui-font);color:#e4e6ea}
+.mdt{position:absolute;inset:0;display:flex;flex-direction:column;font-size:15px;line-height:1.4;color:#e4e6ea}
+.mdt *{box-sizing:border-box}
+.mdt button,.mdt input,.mdt textarea,.mdt select{font:inherit;color:inherit}
+.mdt button{cursor:pointer}
+.mdt input,.mdt textarea{user-select:text;-webkit-user-select:text}
+.mdt .hidden{display:none}
+.mdt svg{fill:none;stroke:currentColor;stroke-width:1.8}
+
+/* ---- command bar ---- */
+.mdt-cmdbar{flex:none;background:#101318;border-bottom:1px solid #2a2e36;padding:0.708rem 1.18rem;display:flex;align-items:center;gap:1.18rem}
+.mdt-brand{display:flex;align-items:center;gap:0.649rem;flex:none}
+.mdt-brand svg{width:2.006rem;height:2.006rem;flex:none}
+.mdt-brand b{font-size:1.086rem;font-weight:700;letter-spacing:.01em;white-space:nowrap}
+.mdt-brand span{display:block;font-size:0.708rem;color:#5c6169;text-transform:uppercase;letter-spacing:.07em;margin-top:-1px}
+.mdt-div{width:1px;height:2.006rem;background:#383d47;flex:none}
+.mdt-cmdbar .mdt-find{flex:1;max-width:30.68rem;position:relative}
+.mdt-cmdbar .mdt-find svg{position:absolute;left:0.826rem;top:50%;transform:translateY(-50%);width:1.121rem;height:1.121rem;color:#5c6169}
+.mdt-cmdbar .mdt-find input{width:100%;height:2.478rem;border-radius:0.295rem;border:1px solid #383d47;background:#1e2229;color:#e4e6ea;padding:0 0.826rem 0 2.36rem;font-size:0.944rem;outline:none}
+.mdt-cmdbar .mdt-find input:focus{border-color:var(--accent)}
+.mdt-tabs{display:flex;gap:0.177rem;flex:1}
+.mdt-ni{display:flex;align-items:center;gap:0.472rem;padding:0.531rem 0.826rem;border-radius:0.236rem;background:none;border:none;color:#8b909b;font-size:0.92rem;font-weight:600;white-space:nowrap}
+.mdt-ni svg{width:1.121rem;height:1.121rem;flex:none}
+.mdt-ni:hover{background:#1e2229;color:#fff}
+.mdt-ni.on{background:#1e2229;color:#fff;border-bottom:2px solid var(--accent)}
+.mdt-user{display:flex;align-items:center;gap:0.649rem;flex:none;padding-left:0.59rem}
+.mdt-ava{width:2.006rem;height:2.006rem;border-radius:0.236rem;background:#1e2229;border:1px solid #383d47;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.732rem;color:#8b909b;flex:none}
+.mdt-user div{font-size:0.826rem;color:#8b909b;line-height:1.2}
+.mdt-user b{display:block;font-size:0.897rem;color:#e4e6ea}
+.mdt-dot{width:0.472rem;height:0.472rem;border-radius:50%;background:#4a9b6e;display:inline-block;margin-right:0.354rem}
+
+/* ---- content ---- */
+.mdt-main{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+.mdt-ctxmenu{position:absolute;z-index:50;min-width:9.5rem;background:#181b21;border:1px solid #2a2e36;border-radius:0.354rem;box-shadow:0 6px 18px rgba(0,0,0,.4);padding:0.24rem;display:flex;flex-direction:column}
+.mdt-ctxitem{background:none;border:0;text-align:left;color:#e7e9ee;padding:0.42rem 0.6rem;border-radius:0.24rem;font-size:0.83rem;cursor:pointer}
+.mdt-ctxitem:hover{background:#22262e}
+.mdt-ctxitem.danger{color:#d9645f}
+.mdt-ctxitem.danger:hover{background:rgba(217,100,95,.12)}
+.mdt-body{flex:1;overflow-y:auto;padding:1.357rem 1.652rem;scrollbar-width:none;-ms-overflow-style:none}
+.mdt-body::-webkit-scrollbar{display:none}
+.mdt-err{background:#2a1a1a;color:#e08787;padding:0.59rem 1.003rem;border-radius:0.295rem;font-size:0.92rem;margin-bottom:0.826rem;border:1px solid #4a2a2a}
+.mdt-pagehead{display:flex;align-items:center;justify-content:space-between;gap:1.18rem;margin-bottom:1.062rem}
+.mdt-pagehead h1{margin:0;font-size:1.18rem;font-weight:700}
+.mdt-pagehead p{margin:0.177rem 0 0;font-size:0.85rem;color:#8b909b}
+
+/* ---- dashboard: briefing strip ---- */
+.mdt-brief{display:flex;gap:1.003rem;margin-bottom:1.298rem}
+.mdt-brief-main{flex:1;background:#181b21;border:1px solid #2a2e36;border-radius:0.295rem;padding:1.121rem 1.298rem;display:flex;align-items:center;gap:1.298rem}
+.mdt-brief-main .num{font-size:2.478rem;font-weight:700;line-height:1}
+.mdt-brief-main .lbl{font-size:0.767rem;text-transform:uppercase;letter-spacing:.06em;color:#8b909b;margin-top:0.177rem}
+.mdt-brief-sep{width:1px;height:2.478rem;background:#383d47;flex:none}
+.mdt-brief-mini{display:flex;flex-direction:column;justify-content:center;gap:0.118rem}
+.mdt-brief-mini b{font-size:1.357rem;font-weight:700}
+.mdt-brief-mini span{font-size:0.779rem;color:#8b909b}
+.mdt-brief-side{width:16.52rem;flex:none;background:#181b21;border:1px solid #2a2e36;border-left:3px solid #c94a4a;border-radius:0.295rem;padding:1.003rem 1.18rem;display:flex;flex-direction:column;justify-content:center}
+.mdt-brief-side .tag{font-size:0.743rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#c94a4a}
+.mdt-brief-side b{display:block;font-size:1.015rem;margin-top:0.354rem}
+.mdt-brief-side span{font-size:0.826rem;color:#8b909b}
+
+.mdt-sec{font-size:0.85rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#8b909b;margin:1.298rem 0 0.649rem}
+.mdt-sec:first-child{margin-top:0}
+.mdt-empty{color:#5c6169;text-align:center;padding:1.888rem 0.944rem;font-size:0.944rem}
+
+/* ---- plain activity rows (dashboard feed) ---- */
+.mdt-row{display:flex;align-items:center;gap:0.826rem;padding:0.767rem 0.944rem;background:#181b21;border:1px solid #2a2e36;border-radius:0.295rem;margin-bottom:0.472rem}
+.mdt-row.clk{cursor:pointer}
+.mdt-row.clk:hover{border-color:var(--accent)}
+.mdt-row .ic{width:2.242rem;height:2.242rem;border-radius:0.236rem;background:#1e2229;display:flex;align-items:center;justify-content:center;flex:none;font-size:1.062rem}
+.mdt-row .tn{font-size:0.979rem;font-weight:600}
+.mdt-row .ts{font-size:0.826rem;color:#8b909b;margin-top:0.118rem}
+
+/* ---- badges / chips ---- */
+/* Small status pills, closer to a native Windows properties/status indicator than an "AI
+   dashboard" badge: a plain coloured dot + regular-case text, no heavy border/background/caps. */
+.mdt-chip{display:inline-flex;align-items:center;gap:0.372rem;margin-left:auto;padding:0.118rem 0.472rem 0.118rem 0.354rem;border-radius:0.177rem;font-weight:600;font-size:0.79rem;flex:none;white-space:nowrap;background:#1e2229;border:1px solid #2a2e36}
+.mdt-chip::before{content:'';width:0.472rem;height:0.472rem;border-radius:50%;background:currentColor;flex:none}
+.mdt-chip.active,.mdt-chip.fail,.mdt-chip.open{color:#d97b7b}
+.mdt-chip.cleared,.mdt-chip.pass{color:#6bb08a}
+.mdt-chip.plain{color:#8fb0e8}
+.mdt-chip.amber{color:#c99a3f}
+
+/* ---- master-detail split (People / Vehicles / Reports / BOLOs) ---- */
+.mdt-split{display:flex;gap:1.003rem;height:100%}
+.mdt-split-list{width:23.6rem;flex:none;display:flex;flex-direction:column;background:#181b21;border:1px solid #2a2e36;border-radius:0.295rem;overflow:hidden}
+.mdt-split-search{padding:0.826rem;border-bottom:1px solid #2a2e36;flex:none}
+.mdt-split-search input{width:100%;height:2.242rem;border-radius:0.236rem;border:1px solid #383d47;background:#1e2229;color:#e4e6ea;padding:0 0.708rem;font-size:0.897rem;outline:none}
+.mdt-split-search input:focus{border-color:var(--accent)}
+.mdt-split-rows{flex:1;overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none}
+.mdt-split-rows::-webkit-scrollbar{display:none}
+.mdt-srow{padding:0.767rem 0.944rem;border-bottom:1px solid #2a2e36;cursor:pointer}
+.mdt-srow:hover{background:#1e2229}
+.mdt-srow.on{background:#1e2229;border-left:3px solid var(--accent)}
+.mdt-srow .t1{font-size:0.944rem;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:0.472rem}
+.mdt-srow .t2{font-size:0.802rem;color:#8b909b;margin-top:0.118rem}
+.mdt-split-detail{flex:1;min-width:0;background:#181b21;border:1px solid #2a2e36;border-radius:0.295rem;overflow-y:auto;scrollbar-width:none;-ms-overflow-style:none}
+.mdt-split-detail::-webkit-scrollbar{display:none}
+.mdt-split-top{padding:0.826rem 0.944rem;border-bottom:1px solid #2a2e36;flex:none;display:flex;align-items:center;justify-content:space-between;gap:0.59rem}
+.mdt-split-top button{flex:none}
+
+/* ---- detail head / body inside the split-detail pane ---- */
+.mdt-dhead{padding:1.062rem 1.357rem;border-bottom:1px solid #22262d;margin-bottom:1.062rem}
+.mdt-dhead .badges{margin-bottom:0.354rem;display:flex;gap:0.413rem;flex-wrap:wrap}
+.mdt-dhead h2{margin:0;font-size:1.062rem;font-weight:600}
+.mdt-phead-top{display:flex;align-items:center;gap:0.826rem;margin-bottom:0.885rem}
+.mdt-pavatar{width:2.83rem;height:2.83rem;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.92rem;flex:none}
+.mdt-psub{font-size:0.79rem;color:#8b909b;margin-top:0.118rem}
+.mdt-dhead .sub{font-size:0.85rem;color:#8b909b;margin-top:0.295rem}
+.mdt-dmeta{display:flex;gap:1.298rem;flex-wrap:wrap;margin-top:0.472rem}
+.mdt-dmeta div{font-size:0.79rem;color:#8b909b}
+.mdt-dmeta div b{display:block;color:#e4e6ea;font-size:0.87rem;font-weight:600;margin-top:0.09rem}
+.mdt-dmeta div b.mdt-link{color:#7fa2e6;cursor:pointer}
+.mdt-dmeta div b.mdt-link:hover{text-decoration:underline}
+.mdt-dbody{padding:0 1.357rem 1.239rem}
+.mdt-dbody h4{font-size:0.72rem;letter-spacing:.02em;color:#767c87;margin:0 0 0.472rem;font-weight:600}
+.mdt-kv{display:grid;grid-template-columns:9.44rem 1fr;align-items:center;gap:0.472rem;font-size:0.87rem;padding:0.531rem 0;border-bottom:1px solid #22262d}
+.mdt-kv:last-child{border-bottom:none}
+.mdt-kv b{color:#8b909b;font-weight:500}
+.mdt-empty-detail{display:flex;align-items:center;justify-content:center;height:100%;color:#5c6169;font-size:0.944rem}
+
+/* ---- property list (Insurance / Tax / MOT / Impound): a bordered panel of label/value rows,
+   like a native properties dialog, rather than a row of separate coloured "AI dashboard" cards. */
+.mdt-proplist{border:1px solid #23272f;border-radius:0.236rem;background:#14171d;padding:0 0.944rem;margin-bottom:1.062rem}
+.mdt-proplist .mdt-kv{padding:0.649rem 0}
+.mdt-proplist .mdt-kv .mdt-chip{margin-left:0}
+.mdt-status-meta{font-size:0.87rem;color:#9aa0aa;margin-top:0.295rem}
+
+/* ---- registered-vehicle card rows (People profile) ---- */
+.mdt-pvehrow{display:flex;align-items:center;gap:0.767rem;padding:0.708rem 0.885rem;border:1px solid #22262d;border-radius:0.236rem;background:#14171d;margin-bottom:0.472rem;cursor:pointer}
+.mdt-pvehrow:hover{border-color:var(--accent)}
+.mdt-pvehrow .ic{width:2.36rem;height:2.36rem;border-radius:50%;background:#1e2229;display:flex;align-items:center;justify-content:center;flex:none;font-size:1.03rem}
+.mdt-pvehrow b{display:block;font-size:0.92rem;font-weight:600}
+.mdt-pvehrow span{display:block;font-size:0.79rem;color:#8b909b;margin-top:0.09rem}
+
+/* ---- buttons ---- */
+.mdt-btn{display:inline-flex;align-items:center;gap:0.413rem;height:2.301rem;padding:0 0.944rem;border:1px solid #383d47;border-radius:0.236rem;background:#1e2229;color:#e4e6ea;font-size:0.897rem;font-weight:600}
+.mdt-btn:hover{background:#262b33}
+.mdt-btn.pri{background:var(--accent);border-color:var(--accent)}
+.mdt-btn.danger{color:#e08787;border-color:#5a3232}
+.mdt-btn.danger:hover{background:#2a1a1a}
+.mdt-back{background:none;border:none;color:#7fa2e6;padding:0;height:auto;margin-bottom:0.826rem;font-size:0.92rem}
+.mdt-back:hover{text-decoration:underline}
+.mdt-actions{display:flex;gap:0.59rem;margin-top:1.003rem}
+
+/* ---- editor (reports / bolos) ---- */
+.mdt-field{display:block;font-size:0.755rem;font-weight:700;color:#8b909b;text-transform:uppercase;letter-spacing:.04em;margin:0.885rem 0 0.354rem}
+.mdt-field:first-child{margin-top:0}
+.mdt-inp,.mdt-sel{background:#1e2229;border:1px solid #383d47;border-radius:0.236rem;color:#e4e6ea;padding:0.59rem 0.767rem;font-family:inherit;font-size:0.944rem;outline:none;width:100%}
+.mdt-inp:focus,.mdt-sel:focus{border-color:var(--accent)}
+.mdt-inp-err{border-color:#c94a4a}
+.mdt-ta{width:100%;min-height:160px;background:#1e2229;border:1px solid #383d47;border-radius:0.236rem;color:#e4e6ea;padding:0.767rem 0.885rem;font-family:inherit;font-size:0.944rem;line-height:1.5;resize:vertical;outline:none}
+.mdt-ta:focus{border-color:var(--accent)}
+.charge-pill{display:inline-flex;align-items:center;gap:0.354rem;padding:0.236rem 0.59rem;border-radius:0.236rem;background:#1e2229;border:1px solid #383d47;font-size:0.85rem;margin:0 0.354rem 0.354rem 0}
+
+/* ---- narrative rich-text editor (report editor) ---- */
+.mdt-rte{border:1px solid #383d47;border-radius:0.236rem;overflow:hidden}
+.mdt-rte-tools{display:flex;align-items:center;gap:0.177rem;padding:0.413rem 0.59rem;background:#1e2229;border-bottom:1px solid #383d47}
+.mdt-rte-tools button{background:none;border:1px solid transparent;border-radius:0.177rem;color:#c7cbd3;font-size:0.83rem;padding:0.236rem 0.531rem;height:auto}
+.mdt-rte-tools button:hover{background:#262b33;border-color:#383d47}
+.mdt-rte-tools .sep{width:1px;height:1.062rem;background:#383d47;margin:0 0.295rem;flex:none}
+.mdt-rte-tools .tpl{margin-left:auto;color:#7fa2e6}
+.mdt-rte-body{min-height:170px;max-height:22rem;overflow-y:auto;padding:0.767rem 0.885rem;font-size:0.944rem;line-height:1.55;background:#1e2229;outline:none}
+.mdt-rte-body b,.mdt-rte-body strong{font-weight:700}
+.mdt-rte-body ul,.mdt-rte-body ol{margin:0.3rem 0 0.3rem 1.2rem;padding:0}
+.mdt-rte-ph{color:#8b909b}
+
+/* ---- name autocomplete (suspect / involved fields) ---- */
+.mdt-ac{position:relative}
+.mdt-ac-list{position:absolute;left:0;right:0;top:calc(100% + 2px);z-index:20;background:#1e2229;border:1px solid #383d47;border-radius:0.236rem;max-height:12rem;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,.4)}
+.mdt-ac-opt{padding:0.5rem 0.7rem;font-size:0.88rem;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:.6rem}
+.mdt-ac-opt:hover{background:#262b33}
+.mdt-ac-opt span{font-size:0.75rem;color:#8b909b;flex:none}
+.mdt-ac-opt+.mdt-ac-opt{border-top:1px solid #2a2e36}
+
+/* ---- vehicle info card (New BOLO: fills in once a plate matches) ---- */
+.mdt-veh-info{background:#12151a;border:1px solid #2a2e36;border-radius:0.236rem;padding:0.2rem 0.7rem;margin:0.5rem 0 0.3rem}
+.mdt-veh-info .mdt-kv{grid-template-columns:5rem 1fr}
+
+/* ---- report detail: charges list + narrative ---- */
+.mdt-charge-list{border:1px solid #2a2e36;border-radius:0.236rem;overflow:hidden}
+.mdt-charge-row{display:flex;align-items:center;gap:0.7rem;padding:0.6rem 0.7rem}
+.mdt-charge-row+.mdt-charge-row{border-top:1px solid #2a2e36}
+.mdt-charge-row .mdt-chip{margin-left:0;flex:none}
+.mdt-charge-row .cc{flex:1;min-width:0;display:flex;flex-direction:column;gap:0.1rem}
+.mdt-charge-row .cc b{font-size:0.85rem;color:#7fa2e6}
+.mdt-charge-row .cc span{font-size:0.85rem;color:#e4e6ea}
+.mdt-charge-row .cn{flex:none;width:4.8rem;text-align:right;display:flex;flex-direction:column;gap:0.05rem}
+.mdt-charge-row .cn b{font-size:0.82rem;font-weight:700}
+.mdt-charge-row .cn span{font-size:0.62rem;color:#5c6169;text-transform:uppercase;letter-spacing:.04em}
+.mdt-charge-total{display:flex;align-items:center;justify-content:flex-end;gap:1rem;padding:0.6rem 0.7rem;font-size:0.82rem}
+.mdt-charge-total span{color:#8b909b;text-transform:uppercase;font-size:0.68rem;letter-spacing:.05em;margin-right:auto}
+.mdt-charge-total b{font-weight:700}
+.mdt-narrative{background:#12151a;border:1px solid #2a2e36;border-radius:0.236rem;padding:0.75rem 0.9rem;font-size:0.88rem;line-height:1.6;color:#dbe0ea;white-space:normal}
+
+/* ---- vehicle notes ---- */
+.mdt-notes{display:flex;flex-direction:column;gap:0.472rem;margin-bottom:0.826rem}
+.mdt-note{border:1px solid #22262d;border-radius:0.236rem;background:#14171d;padding:0.59rem 0.767rem}
+.mdt-note .hd{display:flex;align-items:baseline;justify-content:space-between;gap:0.59rem;margin-bottom:0.236rem}
+.mdt-note .hd b{font-size:0.79rem;color:#9aa0aa;font-weight:600}
+.mdt-note .hd span{font-size:0.72rem;color:#5c6169;flex:none}
+.mdt-note p{margin:0;font-size:0.87rem;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.mdt-note .del{background:none;border:0;color:#5c6169;font-size:0.72rem;padding:0;height:auto}
+.mdt-note .del:hover{color:#d97b7b}
+.mdt-noteform{display:flex;gap:0.472rem;align-items:flex-start;margin-bottom:1.062rem}
+.mdt-noteform textarea{flex:1;min-height:2.478rem;max-height:6rem}
+.mdt-noteform button{flex:none;height:2.478rem}
+
+/* ---- vehicle photos ---- */
+.mdt-photos{display:flex;flex-wrap:wrap;gap:0.59rem;margin-bottom:0.767rem}
+.mdt-photo{position:relative;width:6.5rem;height:6.5rem;border-radius:0.236rem;overflow:hidden;border:1px solid #2a2e36;flex:none;background:#14171d}
+.mdt-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.mdt-photo .del{position:absolute;top:0.177rem;right:0.177rem;width:1.298rem;height:1.298rem;border-radius:50%;background:rgba(10,12,15,.75);border:none;color:#e4e6ea;font-size:0.79rem;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
+.mdt-photo .del:hover{background:#c94a4a}
+.mdt-photoform{display:flex;gap:0.472rem;margin-bottom:1.062rem}
+.mdt-photoform input{flex:1}
+.mdt-photoform button{flex:none}

@@ -3,6 +3,8 @@
 --   job       : shared by the player's current job
 -- A row is a folder, a text file (body kept here), or a link to hosted media (image / video / audio / other file: only the
 -- URL is kept here, never the bytes). The page never sends an owner or a job: both come from the character making the request.
+-- A text file's `body` is a small formatted-text HTML fragment, same rich-text editor and the same sanitize()
+-- allowlist as the Notepad app (server/notepad.lua) - see the comment on ALLOWED_TAGS below for why.
 --   folders  -> { enabled, job = label|nil, isBoss, phone, limits }
 --   tree     -> { folders = { {id,parent,name,place} } }        every folder the player can reach (for the Move / Copy picker)
 --   list     -> { files = { {id,name,kind,size,url,updated,by,mine,manage,snippet} }, path = { {id,name} } }   (folder, parent)
@@ -23,6 +25,88 @@ local function maxName() return math.max(8, math.floor(tonumber(cfg().maxNameLen
 local function binOn() return cfg().recycleBin ~= false end
 local function binDays() return math.max(0, math.floor(tonumber(cfg().binDays) or 30)) end
 local COPY_CAP = 200      -- rows one copy may create
+
+-- Tags the rich-text editor can produce (bold/italic/underline/strikethrough, bulleted/numbered lists,
+-- headings, and font face/color) - exactly the same allowlist as server/notepad.lua. Nothing else survives
+-- as a tag, and every tag is re-emitted with NO attributes at all - EXCEPT `font`, whose `face`/`color` are
+-- individually validated against a fixed font list / a strict #rrggbb pattern below, never passed through raw.
+local ALLOWED_TAGS = {
+  b = true, strong = true, i = true, em = true, u = true, s = true, strike = true,
+  ul = true, ol = true, li = true, br = true, div = true, p = true,
+  h1 = true, h2 = true, h3 = true, font = true,
+}
+local SELF_CLOSING = { br = true }
+
+-- Fixed set of font faces the toolbar can offer. Anything else on a `font face="..."` is dropped.
+local FONTS = {
+  ['arial'] = 'Arial', ['consolas'] = 'Consolas', ['courier new'] = 'Courier New',
+  ['georgia'] = 'Georgia', ['times new roman'] = 'Times New Roman', ['verdana'] = 'Verdana',
+  ['comic sans ms'] = 'Comic Sans MS',
+}
+local function isColor(v) return type(v) == 'string' and v:match('^#%x%x%x%x%x%x$') ~= nil end
+
+local ENTITY_IN = { ['&amp;'] = '&', ['&lt;'] = '<', ['&gt;'] = '>', ['&quot;'] = '"', ['&#39;'] = "'", ['&apos;'] = "'" }
+local function decodeEntities(s) return (s:gsub('&%a+;', ENTITY_IN)) end
+local function encodeEntities(s) return (s:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;')) end
+
+--- Builds a safe `<font ...>` open tag from the client's raw attribute string, keeping only a validated
+--- face and/or color. Falls back to a bare `<font>` if neither survives.
+local function fontTag(attrs)
+  local face = attrs:match('face%s*=%s*"([^"]*)"') or attrs:match("face%s*=%s*'([^']*)'")
+  local color = attrs:match('color%s*=%s*"([^"]*)"') or attrs:match("color%s*=%s*'([^']*)'")
+  face = face and FONTS[face:lower()]
+  color = isColor(color) and color:lower() or nil
+  if not face and not color then return '<font>' end
+  local bits = {}
+  if face then bits[#bits + 1] = 'face="' .. face .. '"' end
+  if color then bits[#bits + 1] = 'color="' .. color .. '"' end
+  return '<font ' .. table.concat(bits, ' ') .. '>'
+end
+
+--- Turns arbitrary client-supplied HTML into a safe fragment: only ALLOWED_TAGS survive as tags (with every
+--- attribute stripped, except `font`'s validated face/color); anything else is emitted back as literal,
+--- escaped text instead of being executed anywhere. Also used on plain text that happens to contain a stray
+--- '<' or '&' (a report body, say) - those come out correctly escaped rather than being treated as markup.
+local function sanitizeBody(html)
+  local out, i, len = {}, 1, #html
+  while i <= len do
+    local s, e, closeSlash, name, attrs = html:find('^<(/?)(%a[%w]*)([^>]-)/?>', i)
+    if s then
+      name = name:lower()
+      if ALLOWED_TAGS[name] then
+        if SELF_CLOSING[name] then out[#out + 1] = '<' .. name .. '>'
+        elseif closeSlash == '/' then out[#out + 1] = '</' .. name .. '>'
+        elseif name == 'font' then out[#out + 1] = fontTag(attrs)
+        else out[#out + 1] = '<' .. name .. '>' end
+      else
+        out[#out + 1] = encodeEntities(html:sub(s, e))
+      end
+      i = e + 1
+    else
+      local ltPos = html:find('<', i, true)
+      if ltPos == i then
+        -- a '<' that isn't the start of any recognisable tag (e.g. "5 < 10"): emit it as literal text and
+        -- move on one character, rather than re-searching from the same spot (which would never advance).
+        out[#out + 1] = '&lt;'
+        i = i + 1
+      else
+        local chunk = ltPos and html:sub(i, ltPos - 1) or html:sub(i)
+        out[#out + 1] = encodeEntities(decodeEntities(chunk))
+        if not ltPos then break end
+        i = ltPos
+      end
+    end
+  end
+  return table.concat(out)
+end
+
+--- Sanitized HTML -> plain text (tags dropped, entities decoded), for snippets and length checks. `html`
+--- may be a LEFT(body, n)-truncated prefix, so also drop a dangling, never-closed tag at the very end.
+local function plainText(html)
+  local text = html:gsub('<br>', '\n'):gsub('</?p>', '\n'):gsub('</div>', '\n'):gsub('</h[123]>', '\n'):gsub('</li>', '\n')
+    :gsub('<[^>]+>', ''):gsub('<[^>]*$', '')
+  return decodeEntities(text)
+end
 local TREE_CAP = 5000     -- rows one move / delete may touch
 
 MySQL.ready(function()
@@ -126,12 +210,48 @@ local function jobFolder(j)
   return sf ~= false and sf ~= 'off'
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- the "legal" group folder: one shared folder visible to SEVERAL jobs at once (Config.LegalFolder),
+-- e.g. police + judges/lawyers/solicitors/barristers sharing MDT reports and other case paperwork.
+-- Config.LegalFolder is read only from inside these function bodies, never at another config
+-- file's top level, so config/apps/*.lua load order never matters.
+-- ---------------------------------------------------------------------------------------------
+local GROUP_OWNER_LEGAL = 'legal'
+
+local function legalCfg()
+  local c = Config.LegalFolder
+  if type(c) == 'table' and c.enabled == true then return c end
+  return nil
+end
+local function inList(list, name)
+  if type(list) ~= 'table' or not name then return false end
+  for _, v in ipairs(list) do if v == name then return true end end
+  return false
+end
+--- Can this job write (add/rename/delete/move/upload) in the legal group folder?
+local function legalCanWrite(jobName)
+  local c = legalCfg()
+  return c ~= nil and inList(c.writeJobs, jobName)
+end
+--- Can this job at least read (list/open) the legal group folder? (writers can always read too)
+local function legalCanRead(jobName)
+  local c = legalCfg()
+  return c ~= nil and (inList(c.writeJobs, jobName) or inList(c.readJobs, jobName))
+end
+
 --- Where a place id points for this player, or nil.
 local function place(src, cid, folder)
   if folder == 'docs' or folder == 'dl' then return { scope = 'personal', owner = cid, folder = folder, key = folder } end
   if folder == 'job' then
     local j = Bridge.GetJob(src)
     if jobFolder(j) then return { scope = 'job', owner = j.name, folder = '', isBoss = j.isBoss == true, key = 'job' } end
+  end
+  if folder == 'legal' then
+    local j = Bridge.GetJob(src)
+    local jobName = j and j.name
+    if legalCanRead(jobName) then
+      return { scope = 'group', owner = GROUP_OWNER_LEGAL, folder = '', isBoss = false, canWrite = legalCanWrite(jobName), key = 'legal' }
+    end
   end
   return nil
 end
@@ -145,6 +265,9 @@ local function placeOfRow(src, cid, row)
     if row.owner ~= cid then return nil end
     return place(src, cid, row.folder)
   end
+  if row.scope == 'group' and row.owner == GROUP_OWNER_LEGAL then
+    return place(src, cid, 'legal')
+  end
   local j = Bridge.GetJob(src)
   if jobFolder(j) and j.name == row.owner then return { scope = 'job', owner = j.name, folder = '', isBoss = j.isBoss == true, key = 'job' } end
   return nil
@@ -152,6 +275,7 @@ end
 
 local function canManage(p, row, cid)
   if p.scope == 'personal' then return true end
+  if p.scope == 'group' then return p.canWrite == true end   -- any writeJobs member may manage any file here (police already trust each other's reports)
   if row.created_by == cid then return true end
   return cfg().bossManagesAll ~= false and p.isBoss == true
 end
@@ -273,11 +397,14 @@ local function uniqueName(p, pid, name, exceptId)
   return nil
 end
 
+--- Basic hygiene plus the same rich-text sanitizing as Notepad - every text file body passes through here
+--- before it's ever stored, whichever caller it comes from (the page's own 'save', or a script writing a
+--- report into someone's Case Files), so nothing downstream needs to sanitize a second time.
 local function cleanBody(body)
   if type(body) ~= 'string' then return nil end
   body = body:gsub('\0', '')   -- (not %z: that is not a class in Lua 5.4 and would strip the letter z)
   if not utf8.len(body) then return nil end
-  return body
+  return sanitizeBody(body)
 end
 
 local function meta(row, cid, p)
@@ -288,8 +415,8 @@ local function meta(row, cid, p)
   if out.kind == 'folder' then
     out.size = row.kids or 0
   elseif out.kind == 'text' then
-    out.size = row.size or (row.body and utf8.len(row.body)) or 0
-    out.snippet = row.snip or (row.body and cut((row.body:gsub('%s+', ' ')), 160)) or ''
+    out.size = row.size or (row.body and utf8.len(plainText(row.body))) or 0
+    out.snippet = row.snip or (row.body and cut((plainText(row.body):gsub('%s+', ' ')), 160)) or ''
   else
     out.size = 0
     out.url = row.url or ''
@@ -318,6 +445,216 @@ local function insertRow(p, pid, kind, name, body, url, cid, cname)
   return MySQL.insert.await(
     'INSERT INTO computer_files (scope, owner, folder, parent_id, kind, name, body, url, created_by, created_by_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     { p.scope, p.owner, p.folder, pid, kind, name, body or '', url or '', cid, cname, now, now })
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- global Files API: other resource files in the same VM (e.g. server/mdt.lua) call these instead
+-- of touching computer_files directly, so a report's paperwork behaves exactly like any other
+-- Explorer file (same table, same Recycle Bin behaviour). Follows this codebase's own pattern of
+-- exposing a plain global table (Settings/Apps/Bank/...) with functions on it.
+-- ---------------------------------------------------------------------------------------------
+Files = Files or {}
+
+local function legalPlaceFixed() return { scope = 'group', owner = GROUP_OWNER_LEGAL, folder = '' } end
+
+--- Creates (or, if one already exists for this reportId, updates in place) a text file in the
+--- shared legal group folder. Returns the file's id, or nil if the legal folder is disabled/full.
+function Files.UpsertLegalReportFile(reportId, name, body, authorCid, authorName)
+  if not legalCfg() or not reportId then return nil end
+  local p = legalPlaceFixed()
+  local tag = ('(#%s)'):format(tostring(reportId))
+  local nm = cleanName(name, 'text') or ('Report ' .. tag .. '.txt')
+  local bd = cleanBody(body) or ''
+  if utf8.len(bd) > maxLen() then bd = cut(bd, maxLen()) end
+  local existing = MySQL.single.await(
+    "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = 0 AND kind = 'text' AND name LIKE ? LIMIT 1",
+    { p.scope, p.owner, p.folder, '%' .. tag })
+  if existing then
+    MySQL.update.await('UPDATE computer_files SET body = ?, updated_at = ? WHERE id = ?', { bd, os.time(), existing.id })
+    return existing.id
+  end
+  if countIn(p, 0) >= maxPer() or countAll(p) >= maxTotal() then return nil end
+  nm = uniqueName(p, 0, nm)
+  if not nm then return nil end
+  return insertRow(p, 0, 'text', nm, bd, '', authorCid or 'system', cut(tostring(authorName or 'System'), 90))
+end
+
+--- Deletes (recycle-bins it, same as a normal Explorer delete, unless the bin is off) the file
+--- matching this reportId in the legal group folder, if one exists. Returns true if something was removed.
+function Files.DeleteLegalReportFile(reportId)
+  if not legalCfg() or not reportId then return false end
+  local p = legalPlaceFixed()
+  local tag = ('(#%s)'):format(tostring(reportId))
+  local row = MySQL.single.await(
+    "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = 0 AND kind = 'text' AND name LIKE ? LIMIT 1",
+    { p.scope, p.owner, p.folder, '%' .. tag })
+  if not row then return false end
+  local bin = binOn()
+  local rows, cutShort = subtree(row.id, TREE_CAP, bin and 'live' or 'all')
+  if cutShort or not rows then return false end
+  local ids = {}
+  for _, r in ipairs(rows) do ids[#ids + 1] = r.id end
+  if bin then
+    local now = os.time()
+    chunked(ids, function(part, ph)
+      local params = { now, 'MDT' }
+      for _, v in ipairs(part) do params[#params + 1] = v end
+      MySQL.update.await('UPDATE computer_files SET deleted_at = ?, deleted_by = ? WHERE id IN (' .. ph .. ')', params)
+    end)
+    MySQL.update.await('UPDATE computer_files SET del_root = 1 WHERE id = ?', { row.id })
+  else
+    chunked(ids, function(part, ph) MySQL.update.await('DELETE FROM computer_files WHERE id IN (' .. ph .. ')', part) end)
+  end
+  return true
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- MDT case folders: one folder per case number at the top level of the legal group folder, named
+-- "<CASE-NUMBER> - <suspect 1>, <suspect 2>, ..." (every suspect currently filed under that case,
+-- deduplicated, in first-added order — server/mdt.lua works that list out and passes it in). Each
+-- report belonging to the case is a text file inside the folder (see Files.UpsertLegalReportFileInCase),
+-- tagged the same "(#<id>)" way Files.UpsertLegalReportFile already tags its flat files, just one
+-- level down. The folder itself is tagged "(<CASE-NUMBER>)" in its name so it can be found again
+-- without a separate lookup table.
+-- ---------------------------------------------------------------------------------------------
+
+--- The case's folder row (kind='folder', top level of the legal group folder), or nil.
+--- buildCaseFolderName always starts the folder's name with the bare case number (with or
+--- without " - <suspects>" after it), so this is a prefix match on that same case number -
+--- it must stay consistent with buildCaseFolderName below, or a folder SyncLegalCase just
+--- created can never be found again by this lookup (which is what let the folder end up
+--- empty: UpsertLegalReportFileInCase calls this to find where to put the report's file, and
+--- silently does nothing when it comes back nil).
+local function findLegalCaseFolder(caseNumber)
+  if not legalCfg() or not caseNumber or caseNumber == '' then return nil end
+  local p = legalPlaceFixed()
+  return MySQL.single.await(
+    "SELECT id, name FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = 0 AND kind = 'folder' AND name LIKE ? LIMIT 1",
+    { p.scope, p.owner, p.folder, caseNumber .. '%' })
+end
+
+--- "<CASE-NUMBER> - <names...>", truncating the suspect-list portion (never the case number) with
+--- an ellipsis when the full name would exceed Config.Files.maxNameLength.
+local function buildCaseFolderName(caseNumber, names)
+  local prefix = tostring(caseNumber)
+  if #names == 0 then return cut(prefix, maxName()) end
+  local suffix = table.concat(names, ', ')
+  local full = prefix .. ' - ' .. suffix
+  local mx = maxName()
+  if utf8.len(full) and utf8.len(full) <= mx then return full end
+  local head = prefix .. ' - '
+  local budget = mx - utf8.len(head) - 1   -- 1 char left over for the ellipsis
+  if budget < 1 then return cut(prefix, mx) end
+  return head .. cut(suffix, budget) .. '…'
+end
+
+--- Ensures the case's folder exists and is named for exactly these suspects (creates it if it does
+--- not exist yet, renames it if the suspect list changed, soft-deletes it if the case now has no
+--- reports left). `hasReports` says whether the case still has any reports at all — this must NOT be
+--- inferred from `names` being empty, since a report can exist with no suspect name filled in (the
+--- folder should still exist in that case, just named without a suspect list). Pass the real report
+--- count/boolean from mdt.lua. If omitted (nil), falls back to the old "empty names = empty case"
+--- guess for backwards compatibility, but every caller should pass it explicitly.
+--- Returns the folder's row id, or nil (case has no reports left, or legal folder is off).
+function Files.SyncLegalCase(caseNumber, names, hasReports)
+  if not legalCfg() or not caseNumber or caseNumber == '' then return nil end
+  names = names or {}
+  if hasReports == nil then hasReports = (#names > 0) end
+  local p = legalPlaceFixed()
+  local existing = findLegalCaseFolder(caseNumber)
+
+  if not hasReports then
+    if existing then
+      local bin = binOn()
+      local rows, cutShort = subtree(existing.id, TREE_CAP, bin and 'live' or 'all')
+      if rows and not cutShort then
+        local ids = {}
+        for _, r in ipairs(rows) do ids[#ids + 1] = r.id end
+        if bin then
+          local now = os.time()
+          chunked(ids, function(part, ph)
+            local params = { now, 'MDT' }
+            for _, v in ipairs(part) do params[#params + 1] = v end
+            MySQL.update.await('UPDATE computer_files SET deleted_at = ?, deleted_by = ? WHERE id IN (' .. ph .. ')', params)
+          end)
+          MySQL.update.await('UPDATE computer_files SET del_root = 1 WHERE id = ?', { existing.id })
+        else
+          chunked(ids, function(part, ph) MySQL.update.await('DELETE FROM computer_files WHERE id IN (' .. ph .. ')', part) end)
+        end
+      end
+    end
+    return nil
+  end
+
+  local desired = buildCaseFolderName(caseNumber, names)
+  if existing then
+    if existing.name ~= desired then
+      MySQL.update.await('UPDATE computer_files SET name = ?, updated_at = ? WHERE id = ?', { desired, os.time(), existing.id })
+    end
+    return existing.id
+  end
+
+  if countIn(p, 0) >= maxPer() or countAll(p) >= maxTotal() then return nil end
+  return insertRow(p, 0, 'folder', desired, '', '', 'system', 'MDT')
+end
+
+--- Creates (or, if one already exists for this reportId in this case's folder, updates in place) the
+--- report's text file inside its case folder. The case folder must already exist (call
+--- Files.SyncLegalCase first) — returns nil if it does not. Returns the file's id, or nil if the
+--- legal folder is disabled/full.
+function Files.UpsertLegalReportFileInCase(caseNumber, reportId, name, body, authorCid, authorName)
+  if not legalCfg() or not reportId then return nil end
+  local folder = findLegalCaseFolder(caseNumber)
+  if not folder then return nil end
+  local p = legalPlaceFixed()
+  local tag = ('(#%s)'):format(tostring(reportId))
+  local nm = cleanName(name, 'text') or ('Report ' .. tag .. '.txt')
+  local bd = cleanBody(body) or ''
+  if utf8.len(bd) > maxLen() then bd = cut(bd, maxLen()) end
+  local existing = MySQL.single.await(
+    "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = ? AND kind = 'text' AND name LIKE ? LIMIT 1",
+    { p.scope, p.owner, p.folder, folder.id, '%' .. tag })
+  if existing then
+    MySQL.update.await('UPDATE computer_files SET body = ?, updated_at = ? WHERE id = ?', { bd, os.time(), existing.id })
+    return existing.id
+  end
+  if countIn(p, folder.id) >= maxPer() or countAll(p) >= maxTotal() then return nil end
+  nm = uniqueName(p, folder.id, nm)
+  if not nm then return nil end
+  return insertRow(p, folder.id, 'text', nm, bd, '', authorCid or 'system', cut(tostring(authorName or 'System'), 90))
+end
+
+--- Deletes (recycle-bins it, same as a normal Explorer delete, unless the bin is off) the file
+--- matching this reportId inside this case's folder, if both exist. Returns true if something was
+--- removed. Does not touch the case folder itself — call Files.SyncLegalCase afterwards with the
+--- case's remaining suspect list to rename it, or remove it once the case is empty.
+function Files.DeleteLegalReportFileInCase(caseNumber, reportId)
+  if not legalCfg() or not reportId then return false end
+  local folder = findLegalCaseFolder(caseNumber)
+  if not folder then return false end
+  local p = legalPlaceFixed()
+  local tag = ('(#%s)'):format(tostring(reportId))
+  local row = MySQL.single.await(
+    "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = ? AND kind = 'text' AND name LIKE ? LIMIT 1",
+    { p.scope, p.owner, p.folder, folder.id, '%' .. tag })
+  if not row then return false end
+  local bin = binOn()
+  local rows, cutShort = subtree(row.id, TREE_CAP, bin and 'live' or 'all')
+  if cutShort or not rows then return false end
+  local ids = {}
+  for _, r in ipairs(rows) do ids[#ids + 1] = r.id end
+  if bin then
+    local now = os.time()
+    chunked(ids, function(part, ph)
+      local params = { now, 'MDT' }
+      for _, v in ipairs(part) do params[#params + 1] = v end
+      MySQL.update.await('UPDATE computer_files SET deleted_at = ?, deleted_by = ? WHERE id IN (' .. ph .. ')', params)
+    end)
+    MySQL.update.await('UPDATE computer_files SET del_root = 1 WHERE id = ?', { row.id })
+  else
+    chunked(ids, function(part, ph) MySQL.update.await('DELETE FROM computer_files WHERE id IN (' .. ph .. ')', part) end)
+  end
+  return true
 end
 
 -- ---------------------------------------------------------------------------------------------
@@ -359,6 +696,12 @@ local function binRoots(src, cid, limit)
       "SELECT id, name, kind, scope, owner, folder, parent_id, created_by, created_by_name, deleted_at, deleted_by FROM computer_files " ..
       "WHERE deleted_at > 0 AND del_root = 1 AND scope = 'job' AND owner = ? ORDER BY deleted_at DESC LIMIT ?", { p.owner, limit }))
   end
+  local pl = place(src, cid, 'legal')
+  if pl then
+    add(MySQL.query.await(
+      "SELECT id, name, kind, scope, owner, folder, parent_id, created_by, created_by_name, deleted_at, deleted_by FROM computer_files " ..
+      "WHERE deleted_at > 0 AND del_root = 1 AND scope = 'group' AND owner = ? ORDER BY deleted_at DESC LIMIT ?", { pl.owner, limit }))
+  end
   table.sort(out, function(a, b) return a.deleted_at > b.deleted_at end)
   return out
 end
@@ -375,10 +718,13 @@ MotCallback.Register('filesApi', function(src, respond, name, data)
 
   if name == 'folders' then
     local j = Bridge.GetJob(src)
+    local lc, legalWrite = legalCfg(), legalCanWrite(j and j.name)
     return respond({ ok = true, data = {
       enabled = true,
       job = jobFolder(j) and (j.label or j.name) or nil,
       isBoss = j and j.isBoss == true or false,
+      legal = (lc and legalCanRead(j and j.name)) and lc.label or nil,
+      legalWrite = legalWrite,
       phone = phoneRes() ~= nil,
       recycleBin = binOn(),
       limits = { maxPerFolder = maxPer(), maxLength = maxLen(), maxDepth = maxDepth(), maxNameLength = maxName() },
@@ -387,7 +733,7 @@ MotCallback.Register('filesApi', function(src, respond, name, data)
 
   if name == 'tree' then
     local out = {}
-    for _, key in ipairs({ 'docs', 'dl', 'job' }) do
+    for _, key in ipairs({ 'docs', 'dl', 'job', 'legal' }) do
       local p = place(src, cid, key)
       if p then
         local rows = MySQL.query.await(
@@ -410,7 +756,7 @@ MotCallback.Register('filesApi', function(src, respond, name, data)
       { p.scope, p.owner, p.folder, pid, maxPer() }) or {}
     local out = {}
     for _, r in ipairs(rows) do
-      r.snip = cut((r.snip or ''):gsub('%s+', ' '), 160)
+      r.snip = cut((plainText(r.snip or '')):gsub('%s+', ' '), 160)
       out[#out + 1] = meta(r, cid, p)
     end
     local path, cur = {}, pid
@@ -457,7 +803,7 @@ MotCallback.Register('filesApi', function(src, respond, name, data)
   if name == 'save' then
     local body = cleanBody(data.body == nil and '' or data.body)
     if not body then return bad() end
-    if utf8.len(body) > maxLen() then return bad('too_long') end
+    if utf8.len(plainText(body)) > maxLen() then return bad('too_long') end
 
     if id > 0 then
       local row = getLive(id)

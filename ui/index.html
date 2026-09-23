@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="calculator.css">
 <link rel="stylesheet" href="notepad.css">
 <link rel="stylesheet" href="files.css">
+<link rel="stylesheet" href="mdt.css">
 </head>
 <body>
 <div class="app" id="app">
@@ -305,11 +306,15 @@
     <div class="l-time" id="lock-time">--:--</div>
     <div class="l-date" id="lock-date"></div>
     <div class="l-user">
-      <div class="l-avatar"><span class="ic" data-ic="user"></span></div>
+      <div class="l-avatar" id="lock-avatar"><span class="ic" data-ic="user"></span></div>
       <div class="l-name" id="lock-name">—</div>
-      <div class="l-btn" data-i18n="ui_lock_signin">Sign in</div>
+      <div class="l-pwbox hidden" id="lock-pwbox">
+        <input type="password" class="l-pwinput" id="lock-pw" autocomplete="off" data-i18n-placeholder="ui_lock_pw_ph" placeholder="Password">
+        <div class="l-pwerr" id="lock-pwerr"></div>
+      </div>
+      <div class="l-btn" id="lock-btn" data-i18n="ui_lock_signin">Sign in</div>
     </div>
-    <div class="l-hint" data-i18n="ui_lock_hint">Click or press Enter to sign in</div>
+    <div class="l-hint" id="lock-hint" data-i18n="ui_lock_hint">Click or press Enter to sign in</div>
   </div>
 
 </div>
@@ -318,5 +323,6 @@
 <script src="mail.js"></script>
 <script src="calculator.js"></script>
 <script src="notepad.js"></script>
+<script src="mdt.js"></script>
 </body>
 </html>

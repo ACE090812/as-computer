@@ -222,6 +222,7 @@ local function OpenMessage(loc, rect, user, info)
     debug  = Config.DebugScreen and true or false,
     user   = user,                                  -- name shown on the lock screen / start menu
     lock   = Config.LockScreen ~= false,            -- show the lock screen before the desktop
+    lockPassword = info and info.hasPassword or false, -- character has a sign-in password set (Settings > Accounts)
     print  = Config.PrintEvent ~= nil,              -- enables the Print button on certificates
     manageOthers = Config.ManageOthers == true,     -- may rename/delete other testers' certificates
     calendar = Config.Calendar and Config.Calendar.enabled ~= false and { weekStart = Config.Calendar.weekStart or 1 } or false,

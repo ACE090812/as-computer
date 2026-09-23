@@ -29,10 +29,18 @@ Config.Settings = {
     -- { id = 'city', label = 'City at night', url = 'https://example.com/city.jpg' },
   },
 
-  -- Let players paste their own image address (Personalisation > Background).
+  -- Let players paste their own image address (Personalisation > Background). The profile picture on
+  -- Settings > Accounts follows the same switch and the same allowed hosts below.
   allowCustomWallpaper = true,
   -- Limit custom images to these websites. nil = any https address.
   customWallpaperHosts = nil,   -- e.g. { 'i.imgur.com', 'cdn.discordapp.com' }
+
+  -- The optional sign-in password on Settings > Accounts (lock screen roleplay, not real account security -
+  -- there is no recovery if a player forgets it, other than removing the row from computer_settings).
+  password = {
+    minLength = 4,
+    maxLength = 32,
+  },
 
   -- Shown on System > About. The computer name is per monitor location.
   device = {

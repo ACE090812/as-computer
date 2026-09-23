@@ -21,6 +21,7 @@
     busy: false,
     user: '',
     lockEnabled: true,
+    lockPassword: false,
     canPrint: false,
     printer: false,
     manageOthers: false,
@@ -420,27 +421,128 @@
     if (lastMotOn !== null && lastMotOn !== motOn) { state.certs = null; state.certsState = 'idle'; certStore = {}; }
     lastMotOn = motOn;
     renderTaskbar();
+    layoutIcons();
     if (typeof renderExplorer === 'function') renderExplorer();
     if (menuOpen) renderStart();
   }
 
+  // ---------------------------------------------------------------- desktop icons: free positioning
+  // Icons snap to a grid cell (GRID.w x GRID.h) inside #desktop. Any icon without a saved position
+  // falls back to the classic top-to-bottom, wrap-to-next-column order. Dragging one saves its cell
+  // to prefs.iconPos (server-validated in server/settings.lua); dropping onto an occupied cell swaps
+  // the two icons instead of stacking them.
+  var GRID = { w: 112, h: 118, padX: 10, padY: 10 };
+  function iconRows() {
+    var h = ($('desktop') && $('desktop').clientHeight) || 600;
+    return Math.max(1, Math.floor((h - GRID.padY * 2) / GRID.h));
+  }
+  function placeIcon(el, c, r) {
+    el.style.left = (GRID.padX + c * GRID.w) + 'px';
+    el.style.top = (GRID.padY + r * GRID.h) + 'px';
+  }
+  function layoutIcons() {
+    var desk = $('desktop'); if (!desk) return;
+    var pos = P().iconPos || {};
+    var rows = iconRows();
+    var icons = Array.prototype.slice.call(desk.querySelectorAll('.dicon:not(.hidden)'));
+    var occupied = {}, withPos = [], withoutPos = [];
+    icons.forEach(function (el) {
+      var id = el.dataset.app, p = pos[id];
+      if (p && typeof p.c === 'number' && typeof p.r === 'number' && p.c >= 0 && p.r >= 0) {
+        withPos.push({ el: el, c: p.c, r: p.r });
+        occupied[p.c + ',' + p.r] = true;
+      } else withoutPos.push(el);
+    });
+    withPos.forEach(function (o) { placeIcon(o.el, o.c, o.r); });
+    var next = 0;
+    withoutPos.forEach(function (el) {
+      while (occupied[Math.floor(next / rows) + ',' + (next % rows)]) next++;
+      var c = Math.floor(next / rows), r = next % rows;
+      occupied[c + ',' + r] = true; next++;
+      placeIcon(el, c, r);
+    });
+  }
+  window.addEventListener('resize', function () { clearTimeout(window.__iconLayoutT); window.__iconLayoutT = setTimeout(layoutIcons, 150); });
+
+  var ICON_DRAG = null;
+  document.addEventListener('mousedown', function (e) {
+    if (isDui) return;
+    var d = e.target.closest('.dicon'); if (!d || e.button !== 0) return;
+    var desk = $('desktop'); if (!desk || !desk.contains(d)) return;
+    ICON_DRAG = {
+      el: d, id: d.dataset.app, moved: false,
+      startX: e.clientX, startY: e.clientY,
+      origLeft: parseFloat(d.style.left) || 0, origTop: parseFloat(d.style.top) || 0
+    };
+  });
+  document.addEventListener('mousemove', function (e) {
+    if (!ICON_DRAG) return;
+    var dx = e.clientX - ICON_DRAG.startX, dy = e.clientY - ICON_DRAG.startY;
+    if (!ICON_DRAG.moved && (Math.abs(dx) + Math.abs(dy)) > 4) { ICON_DRAG.moved = true; ICON_DRAG.el.classList.add('dragging'); }
+    if (ICON_DRAG.moved) {
+      ICON_DRAG.el.style.left = (ICON_DRAG.origLeft + dx) + 'px';
+      ICON_DRAG.el.style.top = (ICON_DRAG.origTop + dy) + 'px';
+    }
+  });
+  document.addEventListener('mouseup', function () {
+    if (!ICON_DRAG) return;
+    var drag = ICON_DRAG; ICON_DRAG = null;
+    drag.el.classList.remove('dragging');
+    if (!drag.moved) return; // a plain click — existing click handlers (select/open) still fire normally
+    var rows = iconRows();
+    var c = Math.max(0, Math.round((parseFloat(drag.el.style.left) - GRID.padX) / GRID.w));
+    var r = Math.min(Math.max(0, rows - 1), Math.max(0, Math.round((parseFloat(drag.el.style.top) - GRID.padY) / GRID.h)));
+    var pos = Object.assign({}, P().iconPos || {});
+    var origC = Math.round((drag.origLeft - GRID.padX) / GRID.w), origR = Math.round((drag.origTop - GRID.padY) / GRID.h);
+    var swapId = null;
+    Object.keys(pos).forEach(function (k) { if (k !== drag.id && pos[k].c === c && pos[k].r === r) swapId = k; });
+    if (swapId) pos[swapId] = { c: origC, r: origR };
+    pos[drag.id] = { c: c, r: r };
+    seSet({ iconPos: pos });
+    layoutIcons();
+  });
+
   // ---------------------------------------------------------------- taskbar
-  var PINNED = [
+  // PINNED_BASE is the factory-default pinned set. Apps registered later via LSOS.registerApp
+  // (Notepad, Mechanic, Mail, Calculator, MDT, ...) are NOT auto-added here any more — they only
+  // show in the taskbar while actually open, unless the player pins them (right-click > Pin to
+  // taskbar), same as real Windows. prefs.pinnedApps, once set, fully replaces this default list.
+  var PINNED_BASE = [
     { id: 'store', icon: 'store', key: 'ui_app_store', def: 'Store' },
     { id: 'explorer', icon: 'folder', key: 'ui_app_explorer', def: 'File Explorer' },
     { id: 'browser', icon: 'brglobe', key: 'ui_app_browser', def: 'Scout' },
     { id: 'calendar', icon: 'calendar', key: 'ui_app_calendar', def: 'Calendar' },
     { id: 'mot', icon: 'mot', key: 'ui_service_mot', def: 'MOT Testing Service' }
   ];
+  function pinnedIds() {
+    var custom = P().pinnedApps;
+    if (Array.isArray(custom)) return custom;
+    return PINNED_BASE.map(function (p) { return p.id; });
+  }
+  function isPinned(id) { return pinnedIds().indexOf(id) >= 0; }
+  function pinMeta(id) {
+    for (var i = 0; i < PINNED_BASE.length; i++) if (PINNED_BASE[i].id === id) return PINNED_BASE[i];
+    if (EXT[id]) return { id: id, icon: id, key: null, def: (EXT[id].name ? EXT[id].name() : id) };
+    return null;
+  }
+  function togglePin(id) {
+    var cur = pinnedIds().slice(), i = cur.indexOf(id);
+    if (i >= 0) cur.splice(i, 1); else cur.push(id);
+    seSet({ pinnedApps: cur });
+    renderTaskbar();
+  }
   function renderTaskbar() {
     var html = '';
     var shown = {};
-    PINNED.forEach(function (p) {
-      if (!appVisible(p.id)) return;
-      shown[p.id] = true;
-      var w = wins[p.id];
-      var cls = 'tbbtn' + (w && w.open ? ' open' : '') + (activeId === p.id && w && !w.min ? ' active' : '');
-      html += '<button class="' + cls + '" data-tb="' + esc(p.id) + '" title="' + esc(t(p.key, p.def)) + '">' + icSpan(p.icon) + '</button>';
+    pinnedIds().forEach(function (id) {
+      if (!appVisible(id)) return;
+      var m = pinMeta(id);
+      if (!m) return;
+      shown[id] = true;
+      var w = wins[id];
+      var cls = 'tbbtn' + (w && w.open ? ' open' : '') + (activeId === id && w && !w.min ? ' active' : '');
+      var label = m.key ? t(m.key, m.def) : m.def;
+      html += '<button class="' + cls + '" data-tb="' + esc(id) + '" title="' + esc(label) + '">' + icSpan(m.icon) + '</button>';
     });
     Object.keys(wins).forEach(function (k) {
       if (shown[k] || !wins[k].open) return;
@@ -505,8 +607,14 @@
   function showLock() {
     setMenu(false);
     $('lock-name').textContent = state.user || '—';
+    var pwbox = $('lock-pwbox'), pw = $('lock-pw');
+    if (pwbox) pwbox.classList.toggle('hidden', !state.lockPassword);
+    if (pw) pw.value = '';
+    showLockErr('');
+    $('lock-hint').classList.toggle('hidden', !!state.lockPassword);
     $('lock').classList.remove('hidden');
     tick();
+    if (state.lockPassword && pw) setTimeout(function () { pw.focus(); }, 30);
   }
   function signIn() {
     $('lock').classList.add('hidden');
@@ -864,6 +972,7 @@
     add('docs', 'root', 'folder', 'ui_fx_docs', 'Documents');
     add('dl', 'root', 'folder', 'ui_fx_dl', 'Downloads');
     add('jobf', 'root', 'folder', 'fl_jobf', 'Shared');
+    add('legalf', 'root', 'folder', 'fl_legalf', 'Case Files');
     add('mot', 'root', 'folder', 'ui_fx_mot', 'MOT Certificates');
     add('mot/all', 'mot', 'folder', 'ui_fx_all', 'All certificates');
     add('mot/mine', 'mot', 'folder', 'ui_fx_mine', 'My tests');
@@ -876,11 +985,16 @@
     return NODES[k].kids.filter(function (c) {
       if (c === 'mot') return appVisible('mot');
       if (c === 'jobf') return !!FS.job;
+      if (c === 'legalf') return !!FS.legal;
       if (c === 'docs' || c === 'dl') return FS.enabled !== false;
       return true;
     });
   }
-  function nodeName(k) { return k === 'jobf' && FS.job ? fmt(t('fl_shared', '%s (shared)'), FS.job) : t(NODES[k].key, NODES[k].def); }
+  function nodeName(k) {
+    if (k === 'jobf' && FS.job) return fmt(t('fl_shared', '%s (shared)'), FS.job);
+    if (k === 'legalf' && FS.legal) return FS.legal;
+    return t(NODES[k].key, NODES[k].def);
+  }
   function nodeIcon(k) { return k === 'bin' ? (binCount() ? 'binfull' : 'bin') : NODES[k].ic; }
 
   var EX = { hist: ['root'], idx: 0, sel: {}, anchor: null, sortKey: 'date', sortDir: -1, q: '', view: [], renaming: null, renameVal: '' };
@@ -890,8 +1004,8 @@
   // (server/files.lua). Every call goes through the 'filesApi' NUI callback (client/files.lua); the server decides who may see
   // or change what, this page only shows it. An Explorer location is 'docs' | 'dl' | 'jobf', or 'docs:12' for the folder with
   // id 12 inside it.
-  var FILE_KEY = { docs: 'docs', dl: 'dl', jobf: 'job' };
-  var FS = { tried: false, enabled: true, job: null, isBoss: false, phone: false, recycle: true, limits: {}, state: {}, data: {}, seq: {}, edit: {}, bin: { state: 'idle', data: [], days: 0, seq: 0 } };
+  var FILE_KEY = { docs: 'docs', dl: 'dl', jobf: 'job', legalf: 'legal' };
+  var FS = { tried: false, enabled: true, job: null, isBoss: false, legal: null, legalWrite: false, phone: false, recycle: true, limits: {}, state: {}, data: {}, seq: {}, edit: {}, bin: { state: 'idle', data: [], days: 0, seq: 0 } };
   var KIND_ICON = { folder: 'folder', text: 'filetxt', image: 'fileimg', video: 'filevid', audio: 'fileaud', file: 'filegen' };
 
   function fsBase(k) { return String(k).split(':')[0]; }
@@ -971,6 +1085,8 @@
       FS.enabled = res.data.enabled !== false;
       FS.job = res.data.job || null;
       FS.isBoss = !!res.data.isBoss;
+      FS.legal = res.data.legal || null;
+      FS.legalWrite = !!res.data.legalWrite;
       FS.phone = !!res.data.phone;
       FS.recycle = res.data.recycleBin !== false;
       fsBinLoad(true);
@@ -1044,7 +1160,7 @@
     if (certs.length) restoreCerts(certs);
     if (files.length) fsRestoreFiles(files);
   }
-  function binPlaceName(pl) { return nodeName(pl === 'job' ? 'jobf' : pl); }
+  function binPlaceName(pl) { return nodeName(pl === 'job' ? 'jobf' : pl === 'legal' ? 'legalf' : pl); }
   function binFileRow(f, key, selCls) {
     return '<div class="ex-row' + selCls + '" data-key="' + esc(key) + '"><div class="nm">' + icSpan(KIND_ICON[f.kind] || 'filetxt') + '<span>' + esc(f.name) + '</span></div>' +
       '<div class="dim">' + esc(fmtDate(f.deletedAt)) + '</div><div class="dim">' + esc(kindLabel(f.kind)) + '</div><div class="dim">' + esc(f.deletedBy || '—') + '</div></div>';
@@ -1415,28 +1531,66 @@
     openWin(id);
   }
 
+  // A file's body is a small rich-text HTML fragment (bold/italic/underline/strikethrough, bulleted/numbered
+  // lists), same editor and same server-side sanitizer allowlist as the Notepad app. Word/character counts,
+  // dirty checks and printing all need the PLAIN TEXT reading of it, never the markup itself.
+  var fePlainDiv = document.createElement('div');
+  function fePlainText(html) { fePlainDiv.innerHTML = String(html || ''); return fePlainDiv.textContent || fePlainDiv.innerText || ''; }
+
+  var FE_TOOLS = [
+    { cmd: 'bold', key: 'np_bold', def: 'Bold', label: 'B', style: 'font-weight:700' },
+    { cmd: 'italic', key: 'np_italic', def: 'Italic', label: 'I', style: 'font-style:italic' },
+    { cmd: 'underline', key: 'np_underline', def: 'Underline', label: 'U', style: 'text-decoration:underline' },
+    { cmd: 'strikeThrough', key: 'np_strike', def: 'Strikethrough', label: 'S', style: 'text-decoration:line-through' },
+    { cmd: 'insertUnorderedList', key: 'np_bullet_list', def: 'Bulleted list', label: '•≡', sep: true },
+    { cmd: 'insertOrderedList', key: 'np_numbered_list', def: 'Numbered list', label: '1.2.' },
+  ];
+  // Fixed font list and heading values, kept in lockstep with server/files.lua's FONTS / allowed h1-h3 tags -
+  // same lists the Notepad app's toolbar uses (ui/notepad.js), so a face or heading picked here always survives a save.
+  var FE_FONT_LIST = ['Arial', 'Consolas', 'Courier New', 'Georgia', 'Times New Roman', 'Verdana', 'Comic Sans MS'];
+  var FE_HEADINGS = [
+    { v: 'P', key: 'np_heading_body', def: 'Body text' },
+    { v: 'H1', key: 'np_heading_1', def: 'Heading 1' },
+    { v: 'H2', key: 'np_heading_2', def: 'Heading 2' },
+    { v: 'H3', key: 'np_heading_3', def: 'Heading 3' },
+  ];
+  function feToolbarHtml() {
+    return '<div class="fe-toolbar">' +
+      '<select class="fe-tsel" data-fe="heading" title="' + esc(t('np_heading', 'Heading style')) + '">' +
+      FE_HEADINGS.map(function (h) { return '<option value="' + h.v + '">' + esc(t(h.key, h.def)) + '</option>'; }).join('') + '</select>' +
+      '<select class="fe-tsel fe-tfont" data-fe="fontname" title="' + esc(t('np_font', 'Font')) + '">' +
+      FE_FONT_LIST.map(function (f) { return '<option value="' + f + '" style="font-family:\'' + f + '\'">' + f + '</option>'; }).join('') + '</select>' +
+      '<input type="color" class="fe-tcolor" data-fe="color" value="#000000" title="' + esc(t('np_color', 'Text colour')) + '">' +
+      '<span class="fe-tsep"></span>' +
+      FE_TOOLS.map(function (b) {
+        return (b.sep ? '<span class="fe-tsep"></span>' : '') +
+          '<button type="button" class="fe-tbtn" data-cmd="' + b.cmd + '" title="' + esc(t(b.key, b.def)) + '" style="' + (b.style || '') + '">' + b.label + '</button>';
+      }).join('') + '</div>';
+  }
+
   // ---- the text editor window (one per open file; saves by itself a moment after typing stops)
   function openFileEditor(f) {
     var id = 'file:' + f.id;
     if (wins[id]) { openWin(id); return; }
     var win = document.createElement('div');
     win.innerHTML = '<div class="win-body"><div class="fe"><div class="fe-bar"><span class="fe-st"></span><span class="fe-grow"></span><span class="fe-cnt"></span>' +
-      (state.printer ? '<div class="btn fe-print">' + esc(t('pr_print', 'Print')) + '</div>' : '') + '<div class="btn primary fe-save">' + esc(t('fl_save', 'Save')) + '</div></div><textarea class="fe-ta" spellcheck="false"></textarea></div></div>';
+      (state.printer ? '<div class="btn fe-print">' + esc(t('pr_print', 'Print')) + '</div>' : '') + '<div class="btn primary fe-save">' + esc(t('fl_save', 'Save')) + '</div></div>' +
+      (f.manage ? feToolbarHtml() : '') + '<div class="fe-ed" contenteditable="' + (f.manage ? 'true' : 'false') + '" spellcheck="false"></div></div></div>';
     $('windows').appendChild(win);
-    var ta = win.querySelector('.fe-ta'), st = win.querySelector('.fe-st'), cnt = win.querySelector('.fe-cnt'), btn = win.querySelector('.fe-save');
+    var ed = win.querySelector('.fe-ed'), st = win.querySelector('.fe-st'), cnt = win.querySelector('.fe-cnt'), btn = win.querySelector('.fe-save');
     var E = { dirty: false, saving: false, again: false, timer: null };
     FS.edit[id] = E;
-    ta.value = f.body || '';
-    ta.maxLength = FS.limits.maxLength || 50000;
-    if (!f.manage) { ta.readOnly = true; btn.style.display = 'none'; }
-    function count() { cnt.textContent = fmt(t('fl_chars', '%s characters'), ta.value.length.toLocaleString(loc())); }
+    ed.innerHTML = f.body || '';
+    ed.setAttribute('data-placeholder', t('fl_placeholder', 'Start typing…'));
+    if (!f.manage) btn.style.display = 'none';
+    function count() { cnt.textContent = fmt(t('fl_chars', '%s characters'), fePlainText(ed.innerHTML).length.toLocaleString(loc())); }
     function status(msg, bad) { st.textContent = msg; st.classList.toggle('bad', !!bad); }
     function save() {
       clearTimeout(E.timer);
       if (!E.dirty || !f.manage) return;
       if (E.saving) { E.again = true; return; }
       E.saving = true; E.dirty = false; status(t('fl_saving', 'Saving…'));
-      var body = ta.value;
+      var body = ed.innerHTML;
       fsApi('save', { id: f.id, body: body }).then(function (res) {
         E.saving = false;
         if (res.ok) {
@@ -1447,21 +1601,81 @@
         if (E.again || E.dirty) { E.again = false; E.timer = setTimeout(save, 300); }
       });
     }
-    ta.addEventListener('input', function () {
+    // one typed character over the limit is trimmed back rather than silently accepted and refused only on
+    // save - same approach as the Notepad app's editor.
+    function onEdit() {
+      if (fePlainText(ed.innerHTML).length > (FS.limits.maxLength || 50000)) { ed.innerHTML = E.lastBody || ''; return; }
+      E.lastBody = ed.innerHTML;
       E.dirty = true; count(); status(t('fl_unsaved', 'Not saved yet'));
       clearTimeout(E.timer); E.timer = setTimeout(save, 1200);
-    });
-    ta.addEventListener('keydown', function (e) {
+    }
+    E.lastBody = ed.innerHTML;
+    ed.addEventListener('input', onEdit);
+    ed.addEventListener('keydown', function (e) {
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); save(); }
       e.stopPropagation();
     });
+    var feLastRange = null;
+    function feRestoreSelection() {
+      ed.focus();
+      if (!feLastRange || !ed.contains(feLastRange.commonAncestorContainer)) return;
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(feLastRange);
+    }
+    win.querySelector('.fe').addEventListener('mousedown', function (e) {
+      var tb = e.target.closest('.fe-tbtn');
+      if (!tb || !f.manage) return;
+      e.preventDefault();
+      ed.focus();
+      try { document.execCommand('styleWithCSS', false, false); } catch (e2) { /* not supported here */ }
+      document.execCommand(tb.dataset.cmd, false, null);
+      onEdit();
+      paintToolbar();
+    });
+    // font/heading/colour pickers steal focus (and so the selection) the moment they're used, so the last
+    // real selection inside the editor is remembered and restored before running their command - same
+    // approach as the Notepad app's toolbar (ui/notepad.js).
+    win.querySelector('.fe').addEventListener('change', function (e) {
+      var fe = e.target.dataset && e.target.dataset.fe;
+      if (!fe || !f.manage) return;
+      if (fe === 'fontname') {
+        feRestoreSelection();
+        try { document.execCommand('styleWithCSS', false, false); } catch (e2) { /* not supported here */ }
+        document.execCommand('fontName', false, e.target.value);
+      } else if (fe === 'heading') {
+        feRestoreSelection();
+        document.execCommand('formatBlock', false, e.target.value);
+      } else if (fe === 'color') {
+        feRestoreSelection();
+        try { document.execCommand('styleWithCSS', false, false); } catch (e2) { /* not supported here */ }
+        document.execCommand('foreColor', false, e.target.value);
+      }
+      onEdit();
+      paintToolbar();
+    });
+    function paintToolbar() {
+      FE_TOOLS.forEach(function (b) {
+        var el = win.querySelector('.fe-tbtn[data-cmd="' + b.cmd + '"]');
+        if (!el) return;
+        var on = false;
+        try { on = document.queryCommandState(b.cmd); } catch (e) { /* not supported here, leave off */ }
+        el.classList.toggle('on', on);
+      });
+    }
+    document.addEventListener('selectionchange', function () {
+      if (document.activeElement !== ed) return;
+      paintToolbar();
+      var sel = window.getSelection();
+      if (sel && sel.rangeCount) feLastRange = sel.getRangeAt(0).cloneRange();
+    });
     btn.addEventListener('click', save);
     var pb = win.querySelector('.fe-print');
-    if (pb) pb.addEventListener('click', function () { openPrintDialog({ kind: 'text', title: f.name, text: ta.value }); });
+    if (pb) pb.addEventListener('click', function () { openPrintDialog({ kind: 'text', title: f.name, text: fePlainText(ed.innerHTML) }); });
     count();
     defWin(id, { el: win, icon: 'filetxt', dynamic: true, w: 820, h: 620, title: f.name, onClose: function () { save(); delete FS.edit[id]; } });
     openWin(id);
-    ta.focus();
+    ed.focus();
   }
 
   // drag files onto a folder in the tree, the address bar or the list: the same place moves them, another place copies them
@@ -2000,7 +2214,7 @@
     if (isDui || !e.target.closest) return;
     if ($('dialog') && !$('dialog').classList.contains('hidden')) return;
     if (!$('lock').classList.contains('hidden')) return;
-    var items = null, row = e.target.closest('.ex-row'), nav = e.target.closest('.nav-item'), icon = e.target.closest('.dicon');
+    var items = null, row = e.target.closest('.ex-row'), nav = e.target.closest('.nav-item'), icon = e.target.closest('.dicon'), tbbtn = e.target.closest('.tbbtn[data-tb]');
     if (row && !e.target.closest('.rn')) items = rowMenu(row.dataset.key);
     else if (e.target.closest('.rn')) return;
     else if (nav && exWin.contains(nav)) {
@@ -2012,7 +2226,16 @@
     else if (icon) {
       var app_ = icon.dataset.app;
       items = [{ label: t('ui_ctx_open', 'Open'), bold: true, run: function () { openApp(app_); } }];
+      if (app_ !== 'bin') {
+        items.push({ label: isPinned(app_) ? t('ui_ctx_unpin_tb', 'Unpin from taskbar') : t('ui_ctx_pin_tb', 'Pin to taskbar'), run: function () { togglePin(app_); } });
+      }
       if (app_ === 'bin') items.push({ label: t('ui_fx_cmd_empty', 'Empty Recycle Bin'), off: !binCanEmpty(), run: emptyBin });
+    }
+    else if (tbbtn) {
+      var tid = tbbtn.dataset.tb;
+      items = [{ label: isPinned(tid) ? t('ui_ctx_unpin_tb', 'Unpin from taskbar') : t('ui_ctx_pin_tb', 'Pin to taskbar'), bold: true, run: function () { togglePin(tid); } }];
+      var tw = wins[tid];
+      if (tw && tw.open) items.push({ sep: true }, { label: t('ui_ctx_close_window', 'Close window'), run: function () { closeWin(tid); } });
     }
     else if (e.target.closest('#desktop') || e.target.closest('#wallpaper')) {
       items = [{ label: t('ui_ctx_open_explorer', 'Open File Explorer'), run: function () { openWin('explorer'); } }]
@@ -2236,7 +2459,15 @@
     if (w) toggleMax(w.id);
   });
 
-  $('lock').addEventListener('click', signIn);
+  $('lock').addEventListener('click', function (e) {
+    if (state.lockPassword) {
+      if (e.target.closest('#lock-pwbox')) return;
+      if (e.target.closest('#lock-btn')) { attemptUnlock(); return; }
+      var pw = $('lock-pw'); if (pw) pw.focus();
+      return;
+    }
+    signIn();
+  });
 
   document.addEventListener('keydown', function (e) {
     if (isDui) return;
@@ -2254,8 +2485,9 @@
     }
     if (ctx.open && e.key === 'Escape') { hideCtx(); return; }
     if (!$('lock').classList.contains('hidden')) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); signIn(); }
-      else if (e.key === 'Escape') postToClient('close');
+      if (e.key === 'Enter') { e.preventDefault(); attemptUnlock(); }
+      else if (e.key === ' ' && !state.lockPassword) { e.preventDefault(); signIn(); }
+      else if (e.key === 'Escape' && !state.lockPassword) postToClient('close');
       return;
     }
     if (e.target && e.target.classList && e.target.classList.contains('rn')) return; // inline rename handles its own keys
@@ -2294,8 +2526,10 @@
   // Chrome-style browser: tabs, address bar, search, bookmarks, history. Websites are as-browser's own pages
   // (sites/<name>/index.html) loaded in an iframe; they talk to this shell with postMessage (sdk/site.js) and
   // the shell forwards their requests to the server through the 'browserApi' NUI callback.
-  var BR = { sites: [], by: {}, sitesOk: true, tabs: [], active: null, bm: [], dict: {}, cur: '£', next: 1, tok: 0, toastT: null };
+  var BR = { sites: [], by: {}, sitesOk: true, tabs: [], active: null, bm: [], dict: {}, cur: '£', next: 1, tok: 0, toastT: null,
+    themeOverride: '', osMode: 'light', textSize: 'normal' };
   var BR_MAX = 8;
+  var BR_TEXT_SCALES = { small: 0.88, normal: 1, large: 1.18 };
   var BR_COLORS = ['#4285f4', '#ea4335', '#f9ab00', '#4285f4', '#34a853', '#ea4335'];
   var brNui = /^cfx-nui-/.test(location.host);
   var brView = $('br-view');
@@ -2351,6 +2585,31 @@
     el.textContent = msg; el.classList.add('on');
     clearTimeout(BR.toastT);
     BR.toastT = setTimeout(function () { el.classList.remove('on'); }, 2200);
+  }
+
+  // ---- Scout's own theme + text size (set from the browser's 3-dot menu > Settings, not the OS Settings app)
+  function brTheme() { return (BR.themeOverride || BR.osMode) === 'dark' ? 'dark' : 'light'; }
+  function brApplyTheme() {
+    var win = $('win-browser');
+    if (win) win.classList.toggle('br-dark', brTheme() === 'dark');
+    BR.tabs.forEach(function (x) { brToFrame(x, { type: 'theme', theme: brTheme() }); });
+  }
+  function brApplyTextSize() {
+    var scale = BR_TEXT_SCALES[BR.textSize] || 1;
+    var win = $('win-browser');
+    if (win) win.style.setProperty('--br-ts', scale);
+    BR.tabs.forEach(function (x) { brToFrame(x, { type: 'textsize', scale: scale }); });
+  }
+  function brSavePrefs() {
+    seApi('settingsApi', { name: 'set', data: { scoutTheme: BR.themeOverride, scoutTextSize: BR.textSize } });
+  }
+  function brSetThemeOverride(v) {
+    BR.themeOverride = (v === 'light' || v === 'dark') ? v : '';
+    brApplyTheme(); brSavePrefs();
+  }
+  function brSetTextSize(v) {
+    BR.textSize = BR_TEXT_SCALES[v] ? v : 'normal';
+    brApplyTextSize(); brSavePrefs();
   }
 
   // ---- tabs
@@ -2619,11 +2878,36 @@
       '<button class="br-pill" data-go="' + esc(q.u ? 'about:search?q=' + encodeURIComponent(q.u) : 'about:newtab') + '">' + esc(q.u ? t('ui_br_search_for', 'Search for it') : t('ui_br_go_start', 'Go to the start page')) + '</button></div>';
     return { html: html, title: t('ui_br_nf_title', "This site can't be reached") };
   }
+  function brSeg(group, options, current) {
+    return '<div class="br-segrow" data-seggroup="' + esc(group) + '">' + options.map(function (o) {
+      return '<button class="br-seg' + (o.value === current ? ' on' : '') + '" data-seg="' + esc(o.value) + '">' + esc(o.label) + '</button>';
+    }).join('') + '</div>';
+  }
+  function brSettingsPage() {
+    var html = '<div class="br-list br-settings"><h1>' + esc(t('ui_br_settings', 'Settings')) + '</h1>' +
+      '<h2>' + esc(t('ui_br_appearance', 'Appearance')) + '</h2>' +
+      brSeg('theme', [
+        { value: 'match', label: t('ui_br_match_pc', 'Match this PC') },
+        { value: 'light', label: t('ui_br_light', 'Light') },
+        { value: 'dark', label: t('ui_br_dark', 'Dark') },
+      ], BR.themeOverride || 'match') +
+      '<h2>' + esc(t('ui_br_textsize', 'Text size')) + '</h2>' +
+      brSeg('textsize', [
+        { value: 'small', label: t('ui_br_small', 'Small') },
+        { value: 'normal', label: t('ui_br_normal', 'Normal') },
+        { value: 'large', label: t('ui_br_large', 'Large') },
+      ], BR.textSize) +
+      '<h2>' + esc(t('ui_br_privacy', 'Privacy')) + '</h2>' +
+      '<div class="br-rows"><button class="br-row" data-act="clearhist"><div class="txt"><div class="t">' + esc(t('ui_br_m_delete', 'Delete browsing data…')) + '</div></div></button></div>' +
+      '</div>';
+    return { html: html, title: t('ui_br_settings', 'Settings') };
+  }
   function brAbout(tab, p) {
     switch (p.name) {
       case 'search': return brSearchPage(p.q.q || '');
       case 'bookmarks': return brBookmarksPage();
       case 'history': return brHistoryPage(tab);
+      case 'settings': return brSettingsPage();
       case 'error': return brErrorPage(p.q);
       default: return brNewTabPage();
     }
@@ -2671,7 +2955,7 @@
     switch (d.type) {
       case 'hello':
         brSetLoading(tab, false);
-        brToFrame(tab, { type: 'init', theme: 'light', domain: domain, currency: BR.cur, path: brParse(brCur(tab)).path, title: tab.title });
+        brToFrame(tab, { type: 'init', theme: brTheme(), textScale: BR_TEXT_SCALES[BR.textSize] || 1, domain: domain, currency: BR.cur, path: brParse(brCur(tab)).path, title: tab.title });
         break;
       case 'locale': brReply(tab, d.id, true, BR.dict); break;
       case 'call':
@@ -2726,6 +3010,17 @@
       BR.bm = Array.isArray(r[2]) ? r[2] : [];
       brRenderBm();
       BR.tabs.forEach(function (x) { var p = brParse(brCur(x)); if (p.kind === 'about' && x.rendered) brShow(x); });
+    });
+    seApi('settingsInfo').then(function (r) {
+      var p = r && r.ok && r.prefs;
+      if (p) {
+        BR.osMode = p.mode === 'dark' ? 'dark' : 'light';
+        BR.themeOverride = (p.scoutTheme === 'light' || p.scoutTheme === 'dark') ? p.scoutTheme : '';
+        BR.textSize = BR_TEXT_SCALES[p.scoutTextSize] ? p.scoutTextSize : 'normal';
+      }
+      brApplyTheme(); brApplyTextSize();
+      var tab = brActive();
+      if (tab && brParse(brCur(tab)).name === 'settings' && tab.rendered) brShow(tab);
     });
   }
 
@@ -2801,6 +3096,7 @@
       '<div class="dd-i" data-dd="history"><span>' + esc(t('ui_br_history', 'History')) + '</span><span class="dd-k">Ctrl+H</span></div>' +
       '<div class="dd-i" data-dd="bm" data-sub="1"><span>' + esc(t('ui_br_bookmarks', 'Bookmarks')) + '</span><span class="dd-k dd-arrow">›</span></div>' +
       '<div class="dd-i" data-dd="clear"><span>' + esc(t('ui_br_m_delete', 'Delete browsing data…')) + '</span></div>' +
+      '<div class="dd-i" data-dd="settings"><span>' + esc(t('ui_br_settings', 'Settings')) + '</span></div>' +
       '<div class="dd-sep"></div>' +
       '<div class="dd-zoom"><span>' + esc(t('ui_br_m_zoom', 'Zoom')) + '</span><span class="dd-zc">' +
         '<button data-dd="zout" title="Ctrl+−">−</button><span class="zv">' + Math.round(brZoomOf(tab) * 100) + '%</span><button data-dd="zin" title="Ctrl++">+</button>' +
@@ -2827,6 +3123,7 @@
       case 'newtab': brMenuClose(); brAddTab(); break;
       case 'history': brMenuClose(); brGo(tab, 'about:history'); break;
       case 'clear': brMenuClose(); brDeleteData(); break;
+      case 'settings': brMenuClose(); brGo(tab, 'about:settings'); break;
       case 'zin': brZoomStep(tab, 1); break;
       case 'zout': brZoomStep(tab, -1); break;
       case 'full': toggleMax('browser'); break;
@@ -2889,6 +3186,14 @@
     if (act) {
       if (act.dataset.act === 'search') brDoSearch(act.parentNode.querySelector('.br-q'));
       else if (act.dataset.act === 'clearhist') brApi('history:clear').then(function () { if (tab) brShow(tab); });
+      return;
+    }
+    var seg = e.target.closest('[data-seg]');
+    if (seg) {
+      var group = seg.parentNode.dataset.seggroup;
+      if (group === 'theme') brSetThemeOverride(seg.dataset.seg === 'match' ? '' : seg.dataset.seg);
+      else if (group === 'textsize') brSetTextSize(seg.dataset.seg);
+      if (tab) brShow(tab);
       return;
     }
     var go = e.target.closest('[data-go]');
@@ -3228,11 +3533,24 @@
     '#0099bc', '#2d7d9a', '#00b7c3', '#038387', '#00b294', '#018574', '#00cc6a', '#10893e',
     '#7a7574', '#5d5a58', '#68768a', '#515c6b', '#567c73', '#486860', '#498205', '#107c10'];
   var DEFAULT_PREFS = { wallpaper: 'bloom', fit: 'fill', mode: 'light', accent: '#0f6cbd', accentBars: false, taskbarAlign: 'center',
-    search: 'box', lockShow: true, brightness: 100, night: false, nightStrength: 40, clock24: true, dateFormat: 'dmy', weekStart: 1 };
+    search: 'box', lockShow: true, brightness: 100, night: false, nightStrength: 40, clock24: true, dateFormat: 'dmy', weekStart: 1,
+    pinnedApps: null,  // null = use the factory PINNED_BASE set; once the player pins/unpins anything it becomes an explicit array
+    iconPos: null,     // null = use the default top-to-bottom, wrap-to-next-column layout; { appId: {c,r} } once dragged
+    avatar: '' };      // '' = the default person icon; otherwise an https picture address (Settings > Accounts)
 
   function P() { return state.prefs || DEFAULT_PREFS; }
   function wpById(id) { for (var i = 0; i < WALLPAPERS.length; i++) if (WALLPAPERS[i].id === id) return WALLPAPERS[i]; return null; }
   function urlOk(u) { return typeof u === 'string' && /^https:\/\/[^\s"'()\\]+$/.test(u); }
+  var avaOk = urlOk;
+  // A profile-picture avatar span, used everywhere a person icon appears (Settings sidebar, the Accounts
+  // pages, the lock screen uses its own copy of this since it isn't rebuilt on every render).
+  function avaSpan(cls, p) {
+    p = p || P();
+    if (avaOk(p.avatar)) {
+      return '<span class="se-ava' + (cls ? ' ' + cls : '') + '" style="background-image:url(&quot;' + esc(p.avatar) + '&quot;);background-size:cover;background-position:center"></span>';
+    }
+    return '<span class="se-ava' + (cls ? ' ' + cls : '') + '"><span class="ic" data-ic="user"></span></span>';
+  }
 
   // CSS for a wallpaper choice: { image, size, repeat, pos, color }
   function wpLook(p, fitOverride) {
@@ -3262,6 +3580,8 @@
     var p = P(), root = document.documentElement;
     root.classList.toggle('dark', p.mode === 'dark');
     root.classList.toggle('accent-bars', !!p.accentBars);
+    BR.osMode = p.mode === 'dark' ? 'dark' : 'light';
+    brApplyTheme();
     root.style.setProperty('--accent', /^#[0-9a-f]{6}$/i.test(p.accent) ? p.accent : '#0f6cbd');
     root.style.setProperty('--accent-ink', inkFor(p.accent));
 
@@ -3284,6 +3604,12 @@
     var lk = $('lock'); lk.style.background = '';
     if (look.id !== 'bloom') paintWallpaper(lk, look); else { lk.style.backgroundColor = ''; lk.style.backgroundImage = ''; lk.style.backgroundSize = ''; lk.style.backgroundRepeat = ''; lk.style.backgroundPosition = ''; }
 
+    var lkAva = $('lock-avatar');
+    if (lkAva) {
+      if (avaOk(p.avatar)) { lkAva.style.backgroundImage = 'url("' + p.avatar + '")'; lkAva.innerHTML = ''; }
+      else { lkAva.style.backgroundImage = ''; lkAva.innerHTML = '<span class="ic" data-ic="user"></span>'; fillIcons(lkAva); }
+    }
+
     var tb = $('taskbar');
     tb.classList.toggle('left', p.taskbarAlign === 'left');
     var ts = $('tb-search');
@@ -3305,7 +3631,9 @@
   }
 
   // ---------------------------------------------------------------- Settings window
-  var SE = { page: 'home', info: null, state: 'idle', notice: null, q: '', pending: {}, timer: null, tok: 0 };
+  var SE = { page: 'home', info: null, state: 'idle', notice: null, q: '', pending: {}, timer: null, tok: 0,
+             wifiOpenId: null, wifiErr: '', wifiBusy: false,
+             pwOpen: false, pwErr: '', pwBusy: false };
   var seWin = $('win-settings');
 
   function seApi(action, body) {
@@ -3450,21 +3778,59 @@
     return spec + '<div class="se-gap"></div>' + win;
   };
 
+  function netStatus(n) {
+    if (!n.wifiOn) return t('se_wifi_off', 'Wi-Fi is off');
+    if (n.online === false) return t('se_no_internet', 'Connected, no internet');
+    return t('se_connected', 'Connected, secured');
+  }
+  // 4-bar signal strength, same look as the network picker mockup.
+  function netBars(signal) {
+    var lv = Math.max(0, Math.min(4, Math.ceil(((signal == null ? 100 : signal) / 100) * 4)));
+    var h = '';
+    for (var i = 1; i <= 4; i++) h += '<span class="se-bar' + (i <= lv ? ' on' : '') + '" style="height:' + (i * 25) + '%"></span>';
+    return '<span class="se-bars">' + h + '</span>';
+  }
+  function netRow(n) {
+    var open = SE.wifiOpenId === n.id;
+    var secured = n.security && n.security !== 'Open';
+    var sub = n.connected ? '<span class="se-net-ok">' + esc(t('se_connected_short', 'Connected')) + (n.security ? ', ' + esc(n.security) : '') + '</span>' : esc(n.security || t('se_net_open', 'Open'));
+    var head = '<div class="se-netrow' + (n.connected ? ' on' : ' click') + '" data-net="' + esc(n.id) + '">' +
+      netBars(n.signal) +
+      '<div class="se-rt"><div class="se-rn">' + esc(n.ssid || '—') + '</div><div class="se-rd">' + sub + '</div></div>' +
+      (secured ? '<span class="ic se-ric" data-ic="se_lock"></span>' : '') +
+      (n.connected ? '<span class="ic se-chev on" data-ic="se_check"></span>' : (!secured ? '<span class="ic se-chev" data-ic="se_chevr"></span>' : '')) +
+      '</div>';
+    if (!open || n.connected) return head;
+    return head + '<div class="se-netform">' +
+      (SE.wifiErr ? '<div class="se-note err">' + esc(SE.wifiErr) + '</div>' : '') +
+      '<input type="password" class="se-inp" id="se-wifi-pass" placeholder="' + esc(t('se_net_password', 'Network security key')) + '" autocomplete="off">' +
+      '<div class="se-netform-btns"><button class="se-btn" data-act="wifi-cancel">' + esc(t('ui_cancel', 'Cancel')) + '</button>' +
+      '<button class="se-btn primary" data-act="wifi-connect" data-net="' + esc(n.id) + '"' + (SE.wifiBusy ? ' disabled' : '') + '>' + esc(t('se_net_connect', 'Connect')) + '</button></div></div>';
+  }
+
   PAGE.network = function () {
     var n = (SE.info || {}).network || {};
-    return '<div class="se-hero"><span class="ic big" data-ic="se_network"></span><div><div class="hn">' + esc(n.ssid || '—') + '</div><div class="hs">' +
-      esc(n.online === false ? t('se_no_internet', 'Connected, no internet') : t('se_connected', 'Connected, secured')) + '</div></div></div>' +
-      card([row({ ic: 'se_wifi', title: t('se_wifi', 'Wi-Fi'), desc: (n.ssid || '') + (n.band ? ' · ' + n.band : ''), go: 'network/wifi' })]);
+    return '<div class="se-hero"><span class="ic big" data-ic="se_network"></span><div><div class="hn">' + esc(n.wifiOn === false ? t('se_wifi', 'Wi-Fi') : (n.ssid || '—')) + '</div><div class="hs">' +
+      esc(netStatus(n)) + '</div></div></div>' +
+      card([row({ ic: 'se_wifi', title: t('se_wifi', 'Wi-Fi'), desc: n.wifiOn === false ? t('se_off', 'Off') : (n.ssid || '') + (n.band ? ' · ' + n.band : ''), go: 'network/wifi' })]);
   };
   PAGE['network/wifi'] = function () {
     var n = (SE.info || {}).network || {};
-    return card([
-      '<div class="se-cardhead"><div class="ch">' + esc(n.ssid || '—') + '</div><span class="se-tag ' + (n.online === false ? 'warn' : 'ok') + '">' +
-        esc(n.online === false ? t('se_no_internet', 'Connected, no internet') : t('se_connected', 'Connected, secured')) + '</span></div>',
+    var list = n.list || [];
+    var toggle = card([row({ ic: 'se_wifi', title: t('se_wifi', 'Wi-Fi'), desc: t('se_wifi_toggle_d', 'Connect to nearby networks'), right: tg('wifiOn', n.wifiOn !== false) })]);
+    if (n.wifiOn === false) {
+      return toggle + '<div class="se-gap"></div><div class="se-empty">' + esc(t('se_wifi_off_msg', 'Turn on Wi-Fi to see nearby networks.')) + '</div>';
+    }
+    var connected = list.filter(function (x) { return x.connected; })[0];
+    var hero = connected ? card([
+      '<div class="se-cardhead"><div class="ch">' + esc(connected.ssid || '—') + '</div><span class="se-tag ' + (n.online === false ? 'warn' : 'ok') + '">' + esc(netStatus(n)) + '</span></div>',
       kv(t('se_net_profile', 'Network profile type'), t('se_net_private', 'Private')), kv(t('se_net_proto', 'Protocol'), n.protocol),
-      kv(t('se_net_sec', 'Security type'), n.security), kv(t('se_net_band', 'Network band'), n.band),
+      kv(t('se_net_sec', 'Security type'), connected.security), kv(t('se_net_band', 'Network band'), connected.band),
       kv(t('se_net_online', 'Internet access'), n.online === false ? t('se_no', 'No') : t('se_yes', 'Yes'))
-    ]);
+    ]) : '';
+    var avail = '<div class="se-sec">' + esc(t('se_wifi_available', 'Available networks')) + '</div>' +
+      '<div class="se-card se-netlist">' + list.map(netRow).join('') + '</div>';
+    return toggle + '<div class="se-gap"></div>' + hero + (hero ? '<div class="se-gap"></div>' : '') + avail;
   };
 
   PAGE.personal = function () {
@@ -3544,21 +3910,46 @@
 
   PAGE.accounts = function () {
     var a = (SE.info || {}).account || {};
-    return '<div class="se-hero"><span class="se-ava"><span class="ic" data-ic="user"></span></span><div><div class="hn">' + esc(a.name || '—') + '</div><div class="hs">' + esc([a.job, a.grade].filter(Boolean).join(' · ')) + '</div></div></div>' +
+    return '<div class="se-hero">' + avaSpan() + '<div><div class="hn">' + esc(a.name || '—') + '</div><div class="hs">' + esc([a.job, a.grade].filter(Boolean).join(' · ')) + '</div></div></div>' +
       card([
-        row({ ic: 'se_person', title: t('se_yourinfo', 'Your info'), desc: t('se_yourinfo_d', 'Your name and job'), go: 'accounts/info' }),
-        row({ ic: 'se_key', title: t('se_signin', 'Sign-in options'), desc: t('se_signin_d', 'The lock screen'), go: 'accounts/signin' })
+        row({ ic: 'se_person', title: t('se_yourinfo', 'Your info'), desc: t('se_yourinfo_d', 'Your name, job and profile picture'), go: 'accounts/info' }),
+        row({ ic: 'se_key', title: t('se_signin', 'Sign-in options'), desc: t('se_signin_d', 'The lock screen, sign-in password'), go: 'accounts/signin' })
       ]);
   };
   PAGE['accounts/info'] = function () {
-    var a = (SE.info || {}).account || {};
-    return '<div class="se-hero"><span class="se-ava big"><span class="ic" data-ic="user"></span></span><div><div class="hn">' + esc(a.name || '—') + '</div><div class="hs">' + esc(t('se_local', 'Local account')) + '</div></div></div>' +
-      card([kv(t('se_acc_name', 'Name'), a.name), kv(t('se_acc_job', 'Job'), a.job), kv(t('se_acc_grade', 'Position'), a.grade),
-        kv(t('se_acc_type', 'Account type'), a.isBoss ? t('se_acc_boss', 'Administrator (boss)') : t('se_acc_std', 'Standard user'))]);
+    var a = (SE.info || {}).account || {}, p = P();
+    var out = card([
+      '<div class="se-avarow">' + avaSpan('xl') + '<div style="flex:1"><div class="an">' + esc(a.name || '—') + '</div><div class="aj">' + esc([a.job, a.grade].filter(Boolean).join(' · ')) + '</div>' +
+      '<div class="abtns"><button class="se-btn primary" data-act="ava-change">' + esc(t('se_ava_change', 'Change picture')) + '</button>' +
+      (avaOk(p.avatar) ? '<button class="se-btn danger" data-act="ava-remove">' + esc(t('se_ava_remove', 'Remove')) + '</button>' : '') + '</div></div></div>'
+    ]);
+    out += '<div class="se-gap"></div>' + card([kv(t('se_acc_name', 'Name'), a.name), kv(t('se_acc_job', 'Job'), a.job), kv(t('se_acc_grade', 'Position'), a.grade),
+      kv(t('se_acc_type', 'Account type'), a.isBoss ? t('se_acc_boss', 'Administrator (boss)') : t('se_acc_std', 'Standard user'))]);
+    return out;
   };
   PAGE['accounts/signin'] = function () {
-    var p = P();
-    return card([row({ ic: 'se_lock', title: t('se_lock_show', 'Show the lock screen'), desc: t('se_lock_show_d', 'Show the lock screen when the computer opens, before the desktop'), right: tg('lockShow', p.lockShow !== false) })]);
+    var p = P(), a = (SE.info || {}).account || {}, hasPw = !!a.hasPassword;
+    var out = card([row({ ic: 'se_lock', title: t('se_lock_show', 'Show the lock screen'), desc: t('se_lock_show_d', 'Show the lock screen when the computer opens, before the desktop'), right: tg('lockShow', p.lockShow !== false) })]);
+    out += '<div class="se-gap"></div>' + '<div class="se-sec">' + esc(t('se_signin_opts', 'SIGN-IN OPTIONS')) + '</div>';
+    var pwRow = row({ ic: 'se_key', title: t('se_password', 'Password'),
+      desc: hasPw ? t('se_pw_set', 'Set - required to sign back in') : t('se_pw_notset', 'Not set - anyone can sign in'),
+      right: '<button class="se-btn" data-act="pw-open">' + esc(hasPw ? t('se_pw_change', 'Change') : t('se_pw_add', 'Add')) + '</button>' });
+    var body = '';
+    if (SE.pwOpen) {
+      body = '<div class="se-pwform">' +
+        (SE.pwErr ? '<div class="se-note err">' + esc(SE.pwErr) + '</div>' : '') +
+        '<div class="se-rd">' + esc(t('se_pw_hint', 'Set a password to lock this computer when you step away — anyone else will need it to sign back in.')) + '</div>' +
+        (hasPw ? '<div class="se-pwform-fields"><div class="field"><label>' + esc(t('se_pw_current', 'Current password')) + '</label><input type="password" class="se-inp" id="se-pw-current" autocomplete="off"></div></div>' : '') +
+        '<div class="se-pwform-fields">' +
+        '<div class="field"><label>' + esc(t('se_pw_new', 'New password')) + '</label><input type="password" class="se-inp" id="se-pw-new" autocomplete="off"></div>' +
+        '<div class="field"><label>' + esc(t('se_pw_confirm', 'Confirm password')) + '</label><input type="password" class="se-inp" id="se-pw-confirm" autocomplete="off"></div>' +
+        '</div>' +
+        '<div class="se-pwform-btns">' + (hasPw ? '<button class="se-btn danger" data-act="pw-remove"' + (SE.pwBusy ? ' disabled' : '') + '>' + esc(t('se_pw_removebtn', 'Remove password')) + '</button>' : '') +
+        '<span style="flex:1"></span><button class="se-btn" data-act="pw-cancel">' + esc(t('ui_cancel', 'Cancel')) + '</button>' +
+        '<button class="se-btn primary" data-act="pw-save"' + (SE.pwBusy ? ' disabled' : '') + '>' + esc(t('ui_save', 'Save')) + '</button></div></div>';
+    }
+    out += '<div class="se-card">' + pwRow + body + '</div>';
+    return out;
   };
 
   PAGE.time = function () {
@@ -3591,7 +3982,7 @@
     if (!SE.info && SE.state === 'loading') { $('se-page').innerHTML = '<div class="se-empty">' + esc(t('ui_fx_loading', 'Loading…')) + '</div>'; return; }
     if (SE.state === 'error') { $('se-page').innerHTML = '<div class="se-empty">' + esc(t('se_error', "Couldn't load settings.")) + '<br><br><button class="se-btn" data-act="retry">' + esc(t('ui_fx_retry', 'Try again')) + '</button></div>'; return; }
     var a = (SE.info || {}).account || {};
-    $('se-user').innerHTML = '<span class="se-ava"><span class="ic" data-ic="user"></span></span><div class="un"><b>' + esc(a.name || state.user || '—') + '</b><span>' + esc(a.job || '') + '</span></div>';
+    $('se-user').innerHTML = avaSpan() + '<div class="un"><b>' + esc(a.name || state.user || '—') + '</b><span>' + esc(a.job || '') + '</span></div>';
     var top = seTop(SE.page);
     $('se-navlist').innerHTML = NAV.map(function (n) {
       return '<button class="se-ni' + (n.id === top ? ' on' : '') + '" data-go="' + n.id + '"><span class="ic" data-ic="' + n.ic + '"></span><span>' + esc(t(n.key, n.def)) + '</span></button>';
@@ -3636,6 +4027,7 @@
         SE.info = r; SE.state = 'ok';
         state.prefs = Object.assign({}, DEFAULT_PREFS, r.prefs || {});
         state.user = (r.account && r.account.name) || state.user;
+        if (r.account && typeof r.account.hasPassword === 'boolean') state.lockPassword = r.account.hasPassword;
         applyPrefs();
       } else { SE.state = 'error'; }
       seRender();
@@ -3659,6 +4051,8 @@
         state.prefs = Object.assign({}, DEFAULT_PREFS, r.prefs);
         if (SE.info) SE.info.prefs = r.prefs;
         applyPrefs();
+        // wifiOn changes online/status text, which nothing else already redraws optimistically - refresh it.
+        if (r.network && SE.info) { SE.info.network = r.network; if (SE.page.indexOf('network') === 0) seRender(); }
         return;   // already shown (applied optimistically); don't redraw under the user's typing
       } else if (SE.info && SE.info.prefs) {
         // refused (or the server was unreachable): go back to what is saved
@@ -3668,6 +4062,108 @@
         else SE.notice = { kind: 'err', text: t('notify_error', 'Something went wrong. Try again.') };
       }
       seRender();
+    });
+  }
+
+  // Joining a network isn't a plain preference (it needs a password check server-side), so it bypasses
+  // seSet/seFlush entirely and calls settingsApi directly.
+  function wifiConnect(id, password) {
+    if (SE.wifiBusy) return;
+    SE.wifiBusy = true; SE.wifiErr = ''; seRender();
+    seApi('settingsApi', { name: 'wifiConnect', data: { id: id, password: password || '' } }).then(function (r) {
+      SE.wifiBusy = false;
+      if (r && r.ok) {
+        if (SE.info) { SE.info.network = r.network; SE.info.prefs = r.prefs; }
+        state.prefs = Object.assign({}, DEFAULT_PREFS, r.prefs || {});
+        applyPrefs();
+        SE.wifiOpenId = null; SE.wifiErr = '';
+      } else {
+        var reason = r && r.reason;
+        SE.wifiErr = reason === 'wrong_password' ? t('se_wifi_wrong', 'Incorrect password. Try again.')
+          : reason === 'busy' ? t('se_wifi_busy', 'Slow down and try again in a moment.')
+          : t('notify_error', 'Something went wrong. Try again.');
+      }
+      seRender();
+    });
+  }
+
+  // ---- profile picture (Settings > Accounts > Your info)
+  function avaChangeDlg() {
+    var p = P();
+    showDlg({
+      title: t('se_ava_change', 'Change picture'),
+      html: '<div class="fl-form"><label for="se-ava-url">' + esc(t('se_ava_link', 'Picture link (https://…)')) + '</label>' +
+        '<input id="se-ava-url" type="text" maxlength="300" autocomplete="off" spellcheck="false" placeholder="https://i.imgur.com/…" value="' + esc(avaOk(p.avatar) ? p.avatar : '') + '">' +
+        '<div class="fl-hint">' + esc(t('se_ava_hint', 'Paste the address of an image (https). JPG, PNG or GIF.')) + '</div></div>',
+      buttons: [
+        { label: t('ui_save', 'Save'), primary: true, run: function () {
+          var u = ($('se-ava-url').value || '').trim();
+          if (!u) { seSet({ avatar: '' }); return; }
+          if (!avaOk(u)) { SE.notice = { kind: 'err', text: t('notify_settings_url', "That image address isn't allowed.") }; seRender(); return; }
+          seSet({ avatar: u }); seRender();
+        } },
+        { label: t('fl_cancel', 'Cancel') }
+      ]
+    });
+    setTimeout(function () { var i = $('se-ava-url'); if (i) i.focus(); }, 30);
+  }
+  function avaRemove() { seSet({ avatar: '' }); seRender(); }
+
+  // ---- sign-in password (Settings > Accounts > Sign-in options)
+  function pwField(id) { var el = $(id); return el ? el.value : ''; }
+  function passwordSubmit() {
+    var hasPw = !!(((SE.info || {}).account || {}).hasPassword);
+    var cur = hasPw ? pwField('se-pw-current') : '', nw = pwField('se-pw-new'), cf = pwField('se-pw-confirm');
+    if (!nw || nw !== cf) { SE.pwErr = t('se_pw_err_mismatch', "Passwords don't match."); seRender(); return; }
+    if (SE.pwBusy) return;
+    SE.pwBusy = true; SE.pwErr = ''; seRender();
+    seApi('settingsApi', { name: 'passwordSet', data: { current: cur, newPassword: nw, confirm: cf } }).then(function (r) {
+      SE.pwBusy = false;
+      if (r && r.ok) {
+        if (SE.info) SE.info.account = Object.assign({}, SE.info.account, r.account);
+        if (r.account && typeof r.account.hasPassword === 'boolean') state.lockPassword = r.account.hasPassword;
+        SE.pwOpen = false; SE.pwErr = '';
+      } else {
+        var reason = r && r.reason;
+        SE.pwErr = reason === 'wrong_password' ? t('se_pw_err_current', 'That current password is wrong.')
+          : reason === 'bad_length' ? t('se_pw_err_length', 'Choose a longer password.')
+          : reason === 'mismatch' ? t('se_pw_err_mismatch', "Passwords don't match.")
+          : t('notify_error', 'Something went wrong. Try again.');
+      }
+      seRender();
+    });
+  }
+  function passwordRemoveNow() {
+    if (SE.pwBusy) return;
+    var cur = pwField('se-pw-current');
+    SE.pwBusy = true; SE.pwErr = ''; seRender();
+    seApi('settingsApi', { name: 'passwordRemove', data: { current: cur } }).then(function (r) {
+      SE.pwBusy = false;
+      if (r && r.ok) {
+        if (SE.info) SE.info.account = Object.assign({}, SE.info.account, r.account);
+        if (r.account && typeof r.account.hasPassword === 'boolean') state.lockPassword = r.account.hasPassword;
+        SE.pwOpen = false; SE.pwErr = '';
+      } else {
+        SE.pwErr = (r && r.reason === 'wrong_password') ? t('se_pw_err_current', 'That current password is wrong.') : t('notify_error', 'Something went wrong. Try again.');
+      }
+      seRender();
+    });
+  }
+
+  // ---- lock screen unlock (asks the server, never checks a password client-side)
+  var LOCK = { busy: false };
+  function showLockErr(msg) { var e = $('lock-pwerr'); if (e) e.textContent = msg || ''; }
+  function attemptUnlock() {
+    if (!state.lockPassword) { signIn(); return; }
+    if (LOCK.busy) return;
+    var pw = $('lock-pw'), val = pw ? pw.value : '';
+    if (!val) { showLockErr(t('ui_lock_pw_req', 'Enter your password.')); if (pw) pw.focus(); return; }
+    LOCK.busy = true; showLockErr('');
+    seApi('settingsApi', { name: 'passwordCheck', data: { password: val } }).then(function (r) {
+      LOCK.busy = false;
+      if (r && r.ok) { signIn(); return; }
+      showLockErr(r && r.reason === 'busy' ? t('se_wifi_busy', 'Slow down and try again in a moment.') : t('ui_lock_pw_wrong', 'Incorrect password. Try again.'));
+      if (pw) { pw.value = ''; pw.focus(); }
     });
   }
 
@@ -3699,11 +4195,36 @@
     if (th) { THEMES.forEach(function (x) { if (x.id === th.dataset.theme) seSet({ wallpaper: x.wallpaper, mode: x.mode, accent: x.accent }); }); seRender(); return; }
     var ac = e.target.closest('[data-accent]');
     if (ac) { seSet({ accent: ac.dataset.accent }); seRender(); return; }
+    var netRow = e.target.closest('.se-netrow[data-net]');
+    if (netRow && !e.target.closest('[data-act]')) {
+      var list = ((SE.info || {}).network || {}).list || [];
+      var entry = list.filter(function (x) { return x.id === netRow.dataset.net; })[0];
+      if (entry && !entry.connected) {
+        SE.wifiErr = '';
+        if (entry.security && entry.security !== 'Open') {
+          SE.wifiOpenId = SE.wifiOpenId === entry.id ? null : entry.id;
+          seRender();
+        } else {
+          wifiConnect(entry.id, '');
+        }
+      }
+      return;
+    }
     var act = e.target.closest('[data-act]');
     if (act) {
       var a = act.dataset.act;
       if (a === 'retry') seLoad();
       else if (a === 'copy') seCopySpec();
+      else if (a === 'wifi-cancel') { SE.wifiOpenId = null; SE.wifiErr = ''; seRender(); }
+      else if (a === 'wifi-connect') {
+        var pw = $('se-wifi-pass'); wifiConnect(act.dataset.net, pw ? pw.value : '');
+      }
+      else if (a === 'ava-change') { avaChangeDlg(); }
+      else if (a === 'ava-remove') { avaRemove(); }
+      else if (a === 'pw-open') { SE.pwOpen = true; SE.pwErr = ''; seRender(); setTimeout(function () { var i = $('se-pw-current') || $('se-pw-new'); if (i) i.focus(); }, 30); }
+      else if (a === 'pw-cancel') { SE.pwOpen = false; SE.pwErr = ''; seRender(); }
+      else if (a === 'pw-save') { passwordSubmit(); }
+      else if (a === 'pw-remove') { passwordRemoveNow(); }
       else if (a === 'useurl') {
         var u = ($('se-url').value || '').trim();
         if (!urlOk(u)) { SE.notice = { kind: 'err', text: t('notify_settings_url', "That image address isn't allowed.") }; seRender(); return; }
@@ -4070,6 +4591,7 @@
       calRefreshIcon();
       state.manageOthers = !!d.manageOthers;
       state.lockEnabled = d.lock !== false;
+      state.lockPassword = !!d.lockPassword;
       root.classList.toggle('debug', !!d.debug);
       fit();
       root.classList.add('open');
@@ -4133,7 +4655,8 @@
       $('windows').appendChild(el);
       defWin(o.id, { el: el, icon: o.id, titleKey: o.titleKey, titleDef: o.titleDef, w: o.w || 1240, h: o.h || 760, onOpen: o.onOpen, onClose: o.onClose });
       EXT[o.id] = { icon: o.id, name: function () { return t(o.titleKey, o.titleDef); }, onReset: o.onReset, onLocale: o.onLocale };
-      PINNED.push({ id: o.id, icon: o.id, key: o.titleKey, def: o.titleDef });
+      // not auto-pinned to the taskbar any more — it'll show while open, and the player can pin it
+      // themselves (right-click the desktop icon or the open taskbar button > Pin to taskbar).
       var d = document.createElement('div');
       d.className = 'dicon hidden';
       d.dataset.app = o.id;

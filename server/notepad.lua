@@ -4,10 +4,103 @@
 --   get     -> { note = { id, title, body, updated } }
 --   save    -> { note = { ... } }   (no id = a new note)
 --   delete  -> {}
+--
+-- A note's `body` is now a small formatted-text HTML fragment (bold/italic/underline/strikethrough and
+-- bulleted/numbered lists), produced by the page's rich-text editor (ui/notepad.js) via the browser's
+-- execCommand. It is NEVER trusted as-is: sanitize() below strips it down to a tiny fixed set of plain tags
+-- with no attributes at all before it is stored or sent back to anyone, so a tampered client cannot smuggle
+-- a <script>, an event-handler attribute, or a javascript: link through this field.
 
 local function cfg() return Config.Notepad or {} end
 local function maxNotes() return math.max(1, math.floor(tonumber(cfg().maxNotes) or 50)) end
-local function maxLength() return math.max(100, math.floor(tonumber(cfg().maxLength) or 20000)) end
+local function maxLength() return math.max(100, math.floor(tonumber(cfg().maxLength) or 30000)) end
+
+-- Tags the rich-text editor can actually produce. Nothing else is ever allowed through, and every tag is
+-- re-emitted with NO attributes at all - EXCEPT `font`, whose `face`/`color` are individually validated
+-- against a fixed font list / a strict #rrggbb pattern below (see FONTS / isColor), never passed through raw.
+local ALLOWED_TAGS = {
+  b = true, strong = true, i = true, em = true, u = true, s = true, strike = true,
+  ul = true, ol = true, li = true, br = true, div = true, p = true,
+  h1 = true, h2 = true, h3 = true, font = true,
+}
+local SELF_CLOSING = { br = true }
+
+-- Fixed set of font faces the toolbar can offer. Anything else on a `font face="..."` is dropped.
+local FONTS = {
+  ['arial'] = 'Arial', ['consolas'] = 'Consolas', ['courier new'] = 'Courier New',
+  ['georgia'] = 'Georgia', ['times new roman'] = 'Times New Roman', ['verdana'] = 'Verdana',
+  ['comic sans ms'] = 'Comic Sans MS',
+}
+local function isColor(v) return type(v) == 'string' and v:match('^#%x%x%x%x%x%x$') ~= nil end
+
+local ENTITY_IN = { ['&amp;'] = '&', ['&lt;'] = '<', ['&gt;'] = '>', ['&quot;'] = '"', ['&#39;'] = "'", ['&apos;'] = "'" }
+local function decodeEntities(s) return (s:gsub('&%a+;', ENTITY_IN)) end
+local function encodeEntities(s) return (s:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;')) end
+
+--- Builds a safe `<font ...>` open tag from the client's raw attribute string, keeping only a validated
+--- face and/or color. Returns nil (tag dropped entirely, contents kept via the outer loop) if neither survives.
+local function fontTag(attrs)
+  local face = attrs:match('face%s*=%s*"([^"]*)"') or attrs:match("face%s*=%s*'([^']*)'")
+  local color = attrs:match('color%s*=%s*"([^"]*)"') or attrs:match("color%s*=%s*'([^']*)'")
+  face = face and FONTS[face:lower()]
+  color = isColor(color) and color:lower() or nil
+  if not face and not color then return '<font>' end
+  local bits = {}
+  if face then bits[#bits + 1] = 'face="' .. face .. '"' end
+  if color then bits[#bits + 1] = 'color="' .. color .. '"' end
+  return '<font ' .. table.concat(bits, ' ') .. '>'
+end
+
+--- Turns arbitrary client-supplied HTML into a safe fragment: only ALLOWED_TAGS survive as tags (with every
+--- attribute stripped, except `font`'s validated face/color), and anything else - a real <script>, an
+--- <img onerror=...>, a stray '<' in typed text - is emitted back as literal, escaped text instead of being
+--- dropped or (worse) executed anywhere.
+local function sanitize(html)
+  local out, i, len = {}, 1, #html
+  while i <= len do
+    local s, e, closeSlash, name, attrs = html:find('^<(/?)(%a[%w]*)([^>]-)/?>', i)
+    if s then
+      name = name:lower()
+      if ALLOWED_TAGS[name] then
+        if SELF_CLOSING[name] then
+          out[#out + 1] = '<' .. name .. '>'
+        elseif closeSlash == '/' then
+          out[#out + 1] = '</' .. name .. '>'
+        elseif name == 'font' then
+          out[#out + 1] = fontTag(attrs)
+        else
+          out[#out + 1] = '<' .. name .. '>'
+        end
+      else
+        out[#out + 1] = encodeEntities(html:sub(s, e))
+      end
+      i = e + 1
+    else
+      local ltPos = html:find('<', i, true)
+      if ltPos == i then
+        -- a '<' that isn't the start of any recognisable tag (e.g. "5 < 10"): emit it as literal text and
+        -- move on one character, rather than re-searching from the same spot (which would never advance).
+        out[#out + 1] = '&lt;'
+        i = i + 1
+      else
+        local chunk = ltPos and html:sub(i, ltPos - 1) or html:sub(i)
+        out[#out + 1] = encodeEntities(decodeEntities(chunk))
+        if not ltPos then break end
+        i = ltPos
+      end
+    end
+  end
+  return table.concat(out)
+end
+
+--- Sanitized HTML -> plain text (tags dropped, entities decoded), for titles/snippets and length checks.
+--- `html` may be a LEFT(body, n)-truncated prefix (the 'list' query below), so also drop a dangling,
+--- never-closed tag at the very end instead of leaking it as literal text.
+local function plainText(html)
+  local text = html:gsub('<br>', '\n'):gsub('</?p>', '\n'):gsub('</div>', '\n'):gsub('</h[123]>', '\n'):gsub('</li>', '\n')
+    :gsub('<[^>]+>', ''):gsub('<[^>]*$', '')
+  return decodeEntities(text)
+end
 
 MySQL.ready(function()
   MySQL.query.await([[
@@ -29,8 +122,9 @@ local function cut(s, n)
   return s:sub(1, (utf8.offset(s, n + 1) or (#s + 1)) - 1)
 end
 
+--- body is the sanitized HTML; title/snippet are always derived from its plain-text reading.
 local function titleOf(body)
-  for line in body:gmatch('[^\r\n]+') do
+  for line in plainText(body):gmatch('[^\r\n]+') do
     local t = line:match('^%s*(.-)%s*$')
     if t ~= '' then return cut(t, 60) end
   end
@@ -38,7 +132,7 @@ local function titleOf(body)
 end
 
 local function snippetOf(body)
-  return cut((body:gsub('%s+', ' ')):match('^%s*(.-)%s*$'), 100)
+  return cut((plainText(body):gsub('%s+', ' ')):match('^%s*(.-)%s*$'), 100)
 end
 
 local function summary(row)
@@ -81,7 +175,10 @@ MotCallback.Register('notesApi', function(src, respond, name, data)
     if not body then return respond({ ok = false, reason = 'invalid' }) end
     body = body:gsub('\0', '')   -- (not %z: that is not a class in Lua 5.4 and would strip the letter z)
     if not utf8.len(body) then return respond({ ok = false, reason = 'invalid' }) end
-    if utf8.len(body) > maxLength() then return respond({ ok = false, reason = 'too_long' }) end
+    body = sanitize(body)
+    local plainLen = utf8.len(plainText(body))
+    if not plainLen then return respond({ ok = false, reason = 'invalid' }) end
+    if plainLen > maxLength() then return respond({ ok = false, reason = 'too_long' }) end
 
     local t = GetGameTimer()
     if last[src] and t - last[src] < 250 then return respond({ ok = false, reason = 'busy' }) end

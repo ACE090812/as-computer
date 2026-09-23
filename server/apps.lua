@@ -231,7 +231,12 @@ local function broadcast(jobName)
 end
 
 MotCallback.Register('appsInfo', function(src, respond)
-  respond({ apps = Apps.stateFor(src), store = storeOn(), prefs = Settings and Bridge.HasComputerJob(src) and Settings.get(src) or nil })
+  local hasJob = Bridge.HasComputerJob(src)
+  respond({
+    apps = Apps.stateFor(src), store = storeOn(),
+    prefs = Settings and hasJob and Settings.get(src) or nil,
+    hasPassword = Settings and hasJob and Settings.hasPassword(src) or false,
+  })
 end)
 
 -- name: 'list' | 'install' | 'uninstall'
