@@ -6,7 +6,7 @@
 Config.Files = {
   enabled        = true,
   maxPerFolder   = 200,      -- files in one folder (per character, or per job for the shared folder)
-  maxLength      = 50000,    -- characters in one file
+  maxLength      = 50000,    -- PLAIN TEXT characters in one file (formatting tags don't count against this)
   maxNameLength  = 80,
   sharedFolders  = 'auto',   -- 'auto' = every job that may use the computer, or a list like { mechanic = true, police = true }
   excludeJobs    = { unemployed = true },

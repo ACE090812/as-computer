@@ -3,7 +3,7 @@
 -- or turn it off with Config.EnabledApps.notepad = false in config/config.lua.
 Config.Notepad = {
   maxNotes  = 50,       -- notes one character may keep
-  maxLength = 20000,    -- characters in one note
+  maxLength = 30000,    -- PLAIN TEXT characters in one note (formatting tags don't count against this)
 }
 
 Config.Apps.notepad = {

@@ -54,6 +54,7 @@ LocaleExtra('en', {
   fl_col_author = 'Author',
   fl_new = 'New text document',
   fl_new_name = 'New Text Document.txt',
+  fl_placeholder = 'Start typing…',
   fl_open = 'Open',
   fl_copy_to = 'Copy to',
   fl_copied = 'Copied to %s',

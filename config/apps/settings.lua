@@ -47,10 +47,21 @@ Config.Settings = {
   },
 
   -- Shown on Network & internet. Whether the computer is "online" follows the as-browser resource (Scout needs it).
+  -- This is the network a character is connected to until they pick one of `available` instead - see below.
   network = {
     ssid     = 'LS-Corp',
     band     = '5 GHz',
     protocol = 'Wi-Fi 6 (802.11ax)',
     security = 'WPA3-Personal',
+
+    -- Other networks nearby that a player can switch to from Settings > Network & internet > Wi-Fi, same as a
+    -- real Wi-Fi picker. `signal` is 0-100 (just cosmetic bars). `password` is checked on the SERVER and never
+    -- sent to the page - leave it out (or set security = 'Open') for a network anyone can join with no password.
+    -- Turning Wi-Fi off (the toggle on that page) disconnects from whichever network is currently joined.
+    available = {
+      { id = 'mrpd',        ssid = 'Mission Row PD',  band = '5 GHz',   security = 'WPA2-Personal',   signal = 70, password = 'mrpd2024' },
+      { id = 'binco-guest', ssid = 'Binco_Guest',      band = '2.4 GHz', security = 'Open',            signal = 40 },
+      { id = 'fib-secure',  ssid = 'FIB_Secure_04',    band = '5 GHz',   security = 'WPA3-Enterprise', signal = 55, password = 'clearance1' },
+    },
   },
 }
