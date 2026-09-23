@@ -27,6 +27,54 @@ function Bridge.VehicleOwnerColumn()
   return 'citizenid' -- qbcore / qbox default
 end
 
+-- qb/qbox's `vehicle` column on player_vehicles is a plain spawn name string (e.g. "ninef").
+-- esx's `vehicle` column on owned_vehicles is a JSON blob of the vehicle's full saved props
+-- (mods, colours, dirt level, ...) - the model is a HASH buried inside it (`.model`), not a
+-- name, and that JSON is not something to show a player directly (this is what was leaking
+-- straight onto the MOT Testing Service page as raw text - nothing to do with any language
+-- file). Resolve it against esx's own `vehicles` table (name/model columns), same joaat-hash
+-- match as-browser already uses for its own vehicle listings.
+local function joaat(str)
+  str = tostring(str):lower()
+  local h = 0
+  for i = 1, #str do
+    h = (h + str:byte(i)) & 0xFFFFFFFF
+    h = (h + (h << 10)) & 0xFFFFFFFF
+    h = (h ~ (h >> 6)) & 0xFFFFFFFF
+  end
+  h = (h + (h << 3)) & 0xFFFFFFFF
+  h = (h ~ (h >> 11)) & 0xFFFFFFFF
+  h = (h + (h << 15)) & 0xFFFFFFFF
+  return h
+end
+
+local esxModelsByHash
+local function buildEsxModels()
+  if esxModelsByHash then return end
+  esxModelsByHash = {}
+  local ok, rows = pcall(function() return MySQL.query.await('SELECT name, model FROM vehicles') end)
+  if ok and type(rows) == 'table' then
+    for _, v in ipairs(rows) do
+      if v.model and v.name then esxModelsByHash[joaat(v.model)] = v.name end
+    end
+  end
+end
+
+--- Turns the raw value stored in the owned-vehicles table's "vehicle" column into a display label.
+--- qb/qbox: already a plain spawn name, returned unchanged. esx: decodes the props JSON and looks
+--- its model hash up against the `vehicles` table; falls back to the hash itself if that table
+--- doesn't know it, and to the raw value if it isn't JSON at all (an already-customised column).
+function Bridge.VehicleModelLabel(raw)
+  if type(raw) ~= 'string' or raw == '' then return raw end
+  if framework ~= 'esx' or raw:sub(1, 1) ~= '{' then return raw end
+  local ok, data = pcall(json.decode, raw)
+  if not ok or type(data) ~= 'table' then return raw end
+  local hash = tonumber(data.model or data.modelName or data.MODEL)
+  if not hash then return raw end
+  buildEsxModels()
+  return esxModelsByHash[hash] or ('model 0x%X'):format(hash)
+end
+
 function Bridge.GetPlayer(src)
   if framework == 'qbox' then
     return exports.qbx_core:GetPlayer(src)

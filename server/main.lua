@@ -164,7 +164,7 @@ MotCallback.Register('lookupVehicle', function(src, respond, plateInput)
   respond({
     found  = true,
     plate  = vehicleRow.plate,
-    model  = vehicleRow.vehicle, -- model name/hash string as stored by your framework; map to a label client-side or here if you keep a vehicles.json
+    model  = Bridge.VehicleModelLabel(vehicleRow.vehicle), -- esx stores a JSON props blob here, not a plain name - see Bridge.VehicleModelLabel
     status = status,
     history = history,
     currentMileage = liveMileage,

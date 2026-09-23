@@ -650,7 +650,7 @@ H['vehicles.lookup'] = function(ctx, d)
   local row = ownedRow(plate)
   local out = { ok = true, plate = plate, found = row ~= nil }
   if row then
-    out.model = row.vehicle
+    out.model = Bridge.VehicleModelLabel(row.vehicle) -- esx stores a JSON props blob in this column, not a plain name
     out.ownerCid = nil
     local c = row.citizenid and MySQL.single.await('SELECT id, name FROM computer_mech_customers WHERE job = ? AND cid = ?', { ctx.job, row.citizenid })
     if c then out.customer = { id = c.id, name = c.name, linked = true }
