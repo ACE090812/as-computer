@@ -72,6 +72,16 @@ Config.Locations = {
 -- WHICH APPS a job gets is decided by the Store: see config/apps/store.lua and each app's Config.Apps entry.
 Config.Jobs = { 'mechanic' }
 
+-- Apps anyone may use on any computer, whatever their job (no Store install needed). Job apps (MOT, Mechanic,
+-- MDT, Mail ...) stay limited to Config.Jobs. Leave the table empty to keep computers job-only.
+-- Scout ('browser') is what gives everyone Presento and the other websites.
+Config.PublicApps = {
+  browser    = true,
+  notepad    = true,
+  calculator = true,
+  settings   = true,
+}
+
 -- App registry. Filled by config/apps/*.lua, one entry per app: Config.Apps.<id> = { store, jobs, price, ... }
 -- (see config/apps/mot.lua for every field).
 Config.Apps = {}
@@ -91,6 +101,65 @@ Config.EnabledApps = {
   calendar = true,
   browser  = true,   -- Scout
   -- store = true, settings = true, explorer = true,
+}
+
+-- ---------------------------------------------------------------------------------------------
+-- PLACEMENT: admins put computers and TVs down in-game with /placeprops (uses object_gizmo), saved in the
+-- database and spawned for everyone. Needs:  add_ace group.admin command.placeprops allow
+-- A placed computer works like a Config.Locations one (target / E prompt). A placed TV can show a Presento
+-- presentation cast from any computer's Scout (as-browser), controlled with the clicker keys below.
+-- ---------------------------------------------------------------------------------------------
+Config.Placement = {
+  enabled   = true,
+  command   = 'placeprops',
+  gizmo     = 'object_gizmo',       -- resource with exports:useGizmo(entity)
+
+  -- Monitors the menu can place. Same fields as Config.Locations (prop, txd, txn, screen, target).
+  computers = {
+    {
+      label  = 'Office monitor',
+      prop   = `lgmods_sinner_monitor`,
+      txd    = { 'lgmods_sinner_monitor', 'lgmods_sinnertextures' },
+      txn    = 'securitymonitor',
+      screen = { offset = vector3(0.0, -0.07, 0.396), size = vector2(0.79, 0.483), bleed = 0.02, front = -1, cam = { dist = 0.85, fov = 35.0 } },
+      target = { size = vector3(1.3, 1.3, 1.0), offset = vector3(0.0, -0.02, 0.33) },
+    },
+  },
+
+  -- TVs / screens the menu can place. txd + txn are the model's screen texture that gets replaced by the
+  -- presentation (check with CodeWalker / OpenIV if a model shows nothing). The texture swap is per MODEL,
+  -- so two TVs of the same model close together both show whichever is nearest to you.
+  tvs = {
+    { label = 'Flat TV (wall)',   prop = `prop_tv_flat_michael`, txd = 'prop_tv_flat_michael', txn = 'script_rt_tvscreen' },
+    { label = 'Flat TV (small)',  prop = `prop_tv_flat_02`,      txd = 'prop_tv_flat_02',      txn = 'script_rt_tvscreen' },
+    { label = 'Cinema screen',    prop = `v_ilev_cin_screen`,    txd = 'v_ilev_cin_screen',    txn = 'script_rt_cinscreen' },
+  },
+
+  tvPage          = 'https://cfx-nui-as-browser/sites/presento/tv.html',  -- page drawn on the TV
+  tvRange         = 20.0,     -- metres: you must be this close to cast to a TV or use the clicker
+  tvDrawDistance  = 30.0,     -- metres: players this close see what the TV shows
+  castIdleMinutes = 30,       -- a TV nobody has moved on for this long switches off
+  clicker = { next = 'PAGEDOWN', prev = 'PAGEUP' },  -- default keys (players can rebind in Settings > Key Bindings > FiveM)
+}
+
+-- Walking away (Esc) leaves your apps open: come back to the same computer and it is exactly as you left it,
+-- unless someone else used it in between or you chose Start > Power > Shut down. Lock keeps the apps but opens
+-- on the lock screen. resumeMinutes: how long a session is kept (0 = until the server restarts).
+Config.Session = { resumeMinutes = 60 }
+
+-- Live monitor view: while someone uses a computer, players nearby see their screen on the monitor (updated
+-- about once a second). The page draws itself to a small JPEG (ui/vendor/html-to-image.js); Scout websites draw
+-- themselves via as-browser's SDK. After they walk away the last picture stays; Shut down clears it.
+-- A location can opt out with `mirror = false`.
+Config.Mirror = {
+  enabled  = false,      -- true = live monitor view is on (default: off for performance)
+  interval = 1000,     -- ms between pictures
+  width    = 960,      -- picture width in pixels (height follows the screen)
+  quality  = 0.6,      -- JPEG quality 0.1 - 1.0
+  range    = 15.0,     -- metres: players this close see it
+  maxViews = 4,        -- most live screens one player draws at once (nearest first)
+  maxBytes = 250000,   -- largest picture accepted
+  bps      = 200000,   -- latent event speed (bytes/second) per player
 }
 
 -- Show the Los Santos OS lock screen (click / Enter to sign in) before the desktop appears.

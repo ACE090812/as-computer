@@ -20,6 +20,8 @@ client_scripts {
   'client/bridge.lua',
   'client/callback.lua',
   'client/dui.lua',
+  'client/placement.lua',   -- /placeprops: placed computers and TVs, Presento on TVs
+  'client/mirror.lua',      -- live monitor view for players nearby
   'client/mechanic.lua',
   'client/mail.lua',
   'client/notepad.lua',
@@ -42,6 +44,9 @@ server_scripts {
   'server/files.lua',
   'server/printing.lua',
   'server/mdt.lua',
+  'server/placement.lua',
+  'server/session.lua',
+  'server/mirror.lua',
   'server/main.lua',
 }
 
@@ -66,6 +71,8 @@ files {
   'ui/files.css',
   'ui/mdt.js',
   'ui/mdt.css',
+  'ui/mirror.html',
+  'ui/vendor/html-to-image.js',
   'stream/mot_monitor.ytyp',
 }
 

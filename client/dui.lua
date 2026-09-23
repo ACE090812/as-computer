@@ -22,6 +22,12 @@
 
 local activeDuis = {}   -- [location index] = { dui, duiHandle, txd, runtimeTxt }
 local currentTerminal = nil -- location table of the terminal currently focused, or nil
+local nuiSessionKey = nil   -- which computer the windows in the (hidden) NUI belong to, so they can be resumed there
+
+--- Is this client sitting at that computer right now? (client/mirror.lua doesn't draw over your own screen)
+function IsUsingComputer(key)
+  return currentTerminal ~= nil and currentTerminal.key == key
+end
 
 -- Sent to both the focused NUI and every ambient DUI.
 local function LocalePayload(lang)
@@ -40,14 +46,20 @@ local function TxdList(loc)
   return { loc.txd }
 end
 
+local duiByTexture = {}  -- 'txd|txn' -> key: the swap is per model texture, so one DUI per monitor model is enough
+
 local function CreateTerminalDui(loc, index)
+  local texKey = TxdList(loc)[1] .. '|' .. tostring(loc.txn)
+  if duiByTexture[texKey] then return end
+  duiByTexture[texKey] = index
+
   -- ?dui=1 tells the page it's the world texture: always visible, no overlay/scaling.
   local url = ('nui://%s/ui/index.html?dui=1'):format(GetCurrentResourceName())
   local dui = CreateDui(url, Config.DuiWidth, Config.DuiHeight)
   local duiHandle = GetDuiHandle(dui)
 
-  local txdName = ('as_computer_txd_%d'):format(index)
-  local txnName = ('as_computer_tex_%d'):format(index)
+  local txdName = ('as_computer_txd_%s'):format(tostring(index))
+  local txnName = ('as_computer_tex_%s'):format(tostring(index))
   local runtimeTxd = CreateRuntimeTxd(txdName)
   local runtimeTxt = CreateRuntimeTextureFromDuiHandle(runtimeTxd, txnName, duiHandle)
 
@@ -56,7 +68,7 @@ local function CreateTerminalDui(loc, index)
     AddReplaceTexture(txd, loc.txn, txdName, txnName)
   end
 
-  activeDuis[index] = { dui = dui, duiHandle = duiHandle, runtimeTxt = runtimeTxt }
+  activeDuis[index] = { dui = dui, duiHandle = duiHandle, runtimeTxt = runtimeTxt, txds = TxdList(loc), txn = loc.txn }
 
   -- Wait for the page to load, then give the DUI its strings + checklist.
   CreateThread(function()
@@ -68,11 +80,16 @@ local function CreateTerminalDui(loc, index)
   end)
 end
 
-CreateThread(function()
-  for i, loc in ipairs(Config.Locations) do
+local AddTarget -- defined further down
+
+--- Spawns one terminal: its DUI (once per monitor model), the prop and its target zone.
+--- `key` is the Config.Locations index, or 'p<id>' for a computer placed with /placeprops (client/placement.lua).
+--- loc.rot (vector3) is used when present (placed props), otherwise loc.heading.
+function SpawnComputer(loc, key)
+    loc.key = type(key) == 'number' and ('c' .. key) or tostring(key)
     -- The texture swap must exist BEFORE the model loads: replacements are
     -- resolved when the drawable's textures are set up, not on every draw.
-    CreateTerminalDui(loc, i)
+    CreateTerminalDui(loc, key)
 
     local timeout = GetGameTimer() + 10000
     repeat
@@ -98,15 +115,37 @@ CreateThread(function()
       if obj == 0 or not DoesEntityExist(obj) then
         print(('^1[as-computer] "%s": CreateObject failed^0'):format(loc.label))
       else
-        SetEntityHeading(obj, loc.heading)
+        if loc.rot then
+          SetEntityCoordsNoOffset(obj, loc.coords.x, loc.coords.y, loc.coords.z, false, false, false)
+          SetEntityRotation(obj, loc.rot.x, loc.rot.y, loc.rot.z, 2, false)
+        else
+          SetEntityHeading(obj, loc.heading)
+        end
         FreezeEntityPosition(obj, true)
         loc.spawnedObject = obj
         SetModelAsNoLongerNeeded(loc.prop)
         if Config.Debug then
           print(('[as-computer] "%s": spawned at %s'):format(loc.label, tostring(loc.coords)))
         end
+        if AddTarget and Config.Interaction ~= 'key' then AddTarget(loc, key) end
       end
     end
+end
+
+--- Removes a spawned terminal (placed computers being moved or deleted). Its model's DUI stays.
+function DespawnComputer(loc)
+  if loc.targetZone then
+    if loc.targetZone.ox then pcall(function() exports.ox_target:removeZone(loc.targetZone.ox) end) end
+    if loc.targetZone.qb then pcall(function() exports['qb-target']:RemoveZone(loc.targetZone.qb) end) end
+    loc.targetZone = nil
+  end
+  if loc.spawnedObject and DoesEntityExist(loc.spawnedObject) then DeleteEntity(loc.spawnedObject) end
+  loc.spawnedObject = nil
+end
+
+CreateThread(function()
+  for i, loc in ipairs(Config.Locations) do
+    SpawnComputer(loc, i)
   end
 end)
 
@@ -215,9 +254,14 @@ function BrowserAvailable()
   return b ~= nil and b.enabled == true and GetResourceState(b.resource or 'as-browser') == 'started'
 end
 
-local function OpenMessage(loc, rect, user, info)
+local function OpenMessage(loc, rect, user, info, session)
   return json.encode({
     action = 'open',
+    resume = session and session.resume or false,  -- same player, same computer, nobody else since: keep the open apps
+    mirror = (Config.Mirror and Config.Mirror.enabled ~= false and loc.screen and loc.mirror ~= false) and {
+      interval = Config.Mirror.interval or 1000, width = Config.Mirror.width or 960, quality = Config.Mirror.quality or 0.6,
+    } or false,                                     -- live view: the page sends a picture of itself about once a second
+    locked = session and session.locked or false,
     rect   = rect,
     debug  = Config.DebugScreen and true or false,
     user   = user,                                  -- name shown on the lock screen / start menu
@@ -251,6 +295,8 @@ function OpenTerminal(loc)
     MotCallback.Trigger('whoami', function(r) userName = (r and r.name) or false end)
     local appsInfo = nil
     MotCallback.Trigger('appsInfo', function(r) appsInfo = r or false end)
+    local session = nil
+    MotCallback.Trigger('session:open', function(r) session = r or false end, loc.key)
 
     local rect = nil
     if ScreenCfg(loc) then
@@ -266,13 +312,16 @@ function OpenTerminal(loc)
 
     -- the name normally arrives long before the camera finishes; cap the wait anyway
     local nameTimeout = GetGameTimer() + 1500
-    while (userName == nil or appsInfo == nil) and GetGameTimer() < nameTimeout do Wait(50) end
+    while (userName == nil or appsInfo == nil or session == nil) and GetGameTimer() < nameTimeout do Wait(50) end
     if currentTerminal ~= loc then return end
+    -- Resume only if the apps still in this client's page are from this very computer.
+    if session and not (session.resume and nuiSessionKey == loc.key) then session = { resume = false } end
+    nuiSessionKey = loc.key
 
     SetNuiFocus(true, true)
     SendNuiMessage(LocalePayload(appsInfo and appsInfo.prefs and appsInfo.prefs.lang or nil))
     SendNuiMessage(ChecklistPayload())
-    SendNuiMessage(OpenMessage(loc, rect, userName or '', appsInfo or nil))
+    SendNuiMessage(OpenMessage(loc, rect, userName or '', appsInfo or nil, session or nil))
 
     -- Keep the player out of the shot and close if they die.
     while currentTerminal == loc do
@@ -283,12 +332,19 @@ function OpenTerminal(loc)
   end)
 end
 
-function CloseTerminal()
+--- off = true when the player chose Shut down: the session ends and the next open starts fresh.
+--- Otherwise (Esc, walking away, dying) the apps stay open for when they come back to this computer.
+function CloseTerminal(off)
   if not currentTerminal then return end
+  local loc = currentTerminal
   SetNuiFocus(false, false)
-  SendNuiMessage(json.encode({ action = 'close' })) -- hides the overlay
+  SendNuiMessage(json.encode({ action = 'close', keep = not off })) -- hides the overlay
   StopScreenCam()
   currentTerminal = nil
+  if off then
+    nuiSessionKey = nil
+    if loc.key then TriggerServerEvent('as-computer:server:session', loc.key, 'off') end
+  end
 end
 
 -- Live framing (Config.Debug): /computer_screen [dx] [dz] [width] [height] [dist] [fov] [front]
@@ -334,9 +390,28 @@ local function NotifyFailure(result)
   Bridge.Notify(L(key), 'error')
 end
 
-RegisterNUICallback('close', function(_, cb)
-  CloseTerminal()
+RegisterNUICallback('close', function(data, cb)
+  CloseTerminal(type(data) == 'table' and data.off == true)
   cb('ok')
+end)
+
+-- Live view: a picture of the screen from ui/app.js, passed to the server for players nearby (server/mirror.lua).
+RegisterNUICallback('mirrorFrame', function(data, cb)
+  cb('ok')
+  local m = Config.Mirror or {}
+  local frame = type(data) == 'table' and data.data
+  if m.enabled == false or not currentTerminal or not currentTerminal.key or type(frame) ~= 'string' then return end
+  if #frame > (m.maxBytes or 250000) then return end
+  TriggerLatentServerEvent('as-computer:server:mirrorFrame', m.bps or 200000, currentTerminal.key, frame)
+end)
+
+-- Lock screen shown / signed in: remembered on the server so a resumed session opens locked or not.
+RegisterNUICallback('sessionState', function(data, cb)
+  cb('ok')
+  local st = type(data) == 'table' and data.state
+  if currentTerminal and currentTerminal.key and (st == 'locked' or st == 'active') then
+    TriggerServerEvent('as-computer:server:session', currentTerminal.key, st)
+  end
 end)
 
 -- Spawn name (or a bare numeric model hash - see server/bridge.lua's Bridge.VehicleModelLabel on
@@ -473,12 +548,7 @@ end)
 -- that it still catches the crosshair if the ray passes through the prop and
 -- lands on the wall behind it. Size/offset are per-location in the config.
 -- Config.Debug draws the zone (ox_target) so you can see it.
-CreateThread(function()
-  if Config.Interaction == 'key' then return end
-  for i, loc in ipairs(Config.Locations) do
-    -- the spawn thread creates the object; wait for it
-    local timeout = GetGameTimer() + 30000
-    while not loc.spawnedObject and GetGameTimer() < timeout do Wait(200) end
+AddTarget = function(loc, i)
     local obj = loc.spawnedObject
 
     if obj and DoesEntityExist(obj) then
@@ -488,14 +558,14 @@ CreateThread(function()
       local heading = GetEntityHeading(obj)
 
       if GetResourceState('ox_target') == 'started' then
-        exports.ox_target:addBoxZone({
+        loc.targetZone = { ox = exports.ox_target:addBoxZone({
           coords = center,
           size = size,
           rotation = heading,
           debug = Config.DebugZone and true or false,
           options = {
             {
-              name = ('as_computer_%d'):format(i),
+              name = ('as_computer_%s'):format(tostring(i)),
               label = L('terminal_target'),
               icon = 'fa-solid fa-computer',
               distance = 2.0,
@@ -505,10 +575,11 @@ CreateThread(function()
               end,
             },
           },
-        })
+        }) }
       elseif GetResourceState('qb-target') == 'started' then
-        exports['qb-target']:AddBoxZone(('as_computer_%d'):format(i), center, size.x, size.y, {
-          name = ('as_computer_%d'):format(i),
+        loc.targetZone = { qb = ('as_computer_%s'):format(tostring(i)) }
+        exports['qb-target']:AddBoxZone(('as_computer_%s'):format(tostring(i)), center, size.x, size.y, {
+          name = ('as_computer_%s'):format(tostring(i)),
           heading = heading,
           minZ = center.z - size.z / 2,
           maxZ = center.z + size.z / 2,
@@ -526,8 +597,7 @@ CreateThread(function()
         print('^1[as-computer] neither ox_target nor qb-target is started - terminal cannot be targeted^0')
       end
     end
-  end
-end)
+end
 
 -- ---- Key interaction ---------------------------------------------------------
 -- Walk up to the screen, press Config.InteractKey. Independent of any target
@@ -569,14 +639,11 @@ AddEventHandler('onResourceStop', function(resource)
   if resource ~= GetCurrentResourceName() then return end
   SetNuiFocus(false, false)
   StopScreenCam()
-  for i, loc in ipairs(Config.Locations) do
-    local d = activeDuis[i]
-    if d then
-      for _, txd in ipairs(TxdList(loc)) do
-        RemoveReplaceTexture(txd, loc.txn)
-      end
-      DestroyDui(d.dui)
-    end
+  for _, d in pairs(activeDuis) do
+    for _, txd in ipairs(d.txds or {}) do RemoveReplaceTexture(txd, d.txn) end
+    DestroyDui(d.dui)
+  end
+  for _, loc in ipairs(Config.Locations) do
     if loc.spawnedObject then DeleteEntity(loc.spawnedObject) end
   end
 end)

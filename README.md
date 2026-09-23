@@ -299,6 +299,31 @@ jg-mechanic exposes that.
   in `lgmods_sinner_monitor.ydr` (no separate .ytd), so txd = model name is right.
   Still worth an in-game test.
 
+## Public apps (anyone can use a computer)
+
+`Config.PublicApps` in `config/config.lua` lists apps that everyone may use on any computer, whatever their job, with no Store install: by default Scout (`browser`), Notepad, Calculator and Settings. That is what lets every player use Presento and the other websites. Job apps (MOT, Mechanic, MDT, Mail, File Explorer, Calendar...) stay limited to `Config.Jobs` and the Store works as before. Players without a computer job only see the public apps and no Store. Empty the table to make computers job-only again.
+
+## Placed computers and TVs (`/placeprops`)
+
+Admins place computers and TVs in-game instead of editing `Config.Locations`. Needs the [object_gizmo](https://github.com/DemiAutomatic/object_gizmo) resource and ox_lib, plus:
+
+```
+add_ace group.admin command.placeprops allow
+```
+
+`/placeprops` opens a menu: **Place a computer**, **Place a TV / screen** (pick a model), **Placed near me** and **Everything placed** (move with the gizmo, rename, set a TV's jobs, teleport, switch a TV off, delete). Placing spawns the model in front of you with the gizmo. W is move, R is rotate, Left Alt snaps to the ground, and Enter saves. Everything is saved in `computer_placed` (created automatically) and spawned for every player; changes show up for everyone straight away.
+
+- **Placed computers** work exactly like `Config.Locations` ones: target or the E prompt, same camera and apps. Their models are `Config.Placement.computers` (same fields as a location: `prop`, `txd`, `txn`, `screen`, `target`).
+- **Placed TVs** show Presento presentations. When placing one you can name it and list the jobs that may cast to it (empty = anyone). Models are `Config.Placement.tvs`; `txd` / `txn` must be the model's screen texture (the defaults use the usual `script_rt_tvscreen` texture; check any model that stays blank with CodeWalker or OpenIV, see "Finding txd/txn for a prop").
+- **Casting:** in Presento, Present ▾ > "Show on a TV…" lists TVs within `tvRange` that your job may use. Players within `tvDrawDistance` see the slides; transitions and click animations play on the TV too. The presenter changes slides from the computer or, standing near the TV, with the clicker keys (`Config.Placement.clicker`, default Page Down / Page Up, rebindable in FiveM key bindings). `/tvstop` switches your TV off. A TV switches off when the presenter disconnects or after `castIdleMinutes` without a change. An admin can take over or switch off any TV.
+- **Limits:** the texture swap is per model, so two TVs of the same model near each other both show whichever is nearest to you. Use different models for TVs in the same room. TV videos are muted, because DUI sound is not positional.
+
+## Sessions and the live monitor view
+
+**Coming back to a computer.** Walking away (Esc, the close button, or leaving) keeps everything open: come back to the same computer and every window, app and Scout tab is where you left it, still signed in. Start › Power › **Lock** keeps the apps but opens on the lock screen. **Shut down** ends the session and the next open starts fresh. If someone else uses that computer in between, your session there is gone. Sessions last `Config.Session.resumeMinutes` (default 60) and are cleared by a server restart. Open apps keep running while you are away: a playing YouTube video keeps its sound, and an open Presento editor keeps its edit lock.
+
+**Live view.** While someone uses a computer, players within `Config.Mirror.range` see their screen on the monitor, updated about once a second (`Config.Mirror`). The desktop draws itself to a small JPEG with `ui/vendor/html-to-image.js` (MIT), skipping everything not on screen. Scout websites are iframes the snapshot can't see into, so each visible site draws itself through as-browser's SDK (`sdk/html-to-image.js`) and is painted into place. The server passes the picture only to players nearby and only from whoever is signed in and sitting at that computer. Onlookers draw it straight onto that one monitor's screen (two textured triangles over `screen.offset/size`), so each computer shows its own user whatever the model. After the user walks away the last picture stays; Shut down clears it. A location can opt out with `mirror = false`. Videos show their poster, and pictures from other sites that don't allow it (some Imgur/Discord links) show as grey boxes in the live view only. Tested in a headless browser (about 1 s per picture, 20-30 KB each); not yet tried in game.
+
 ## Scout (as-browser websites on the desktop)
 
 The desktop has a **Scout** browser app (Chrome-style: tabs, address bar, bookmarks bar, history, and a start page with search). It opens the same in-game websites as the phone browser through the `as-browser` resource, so nothing is duplicated. Bookmarks and history are shared with the phone (per character). The app only appears while `as-browser` is running.

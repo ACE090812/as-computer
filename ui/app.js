@@ -606,6 +606,7 @@
 
   function showLock() {
     setMenu(false);
+    if (!isDui) postToClient('sessionState', { state: 'locked' });
     $('lock-name').textContent = state.user || '—';
     var pwbox = $('lock-pwbox'), pw = $('lock-pw');
     if (pwbox) pwbox.classList.toggle('hidden', !state.lockPassword);
@@ -618,6 +619,7 @@
   }
   function signIn() {
     $('lock').classList.add('hidden');
+    if (!isDui) postToClient('sessionState', { state: 'active' });
     if (state.certsState === 'idle') refreshCerts();
     if (FS.bin.state === 'idle') fsBinLoad(true);
   }
@@ -2429,7 +2431,7 @@
     var p = e.target.closest('[data-power]');
     if (!p) return;
     if (p.dataset.power === 'lock') showLock();
-    else postToClient('close');
+    else postToClient('close', { off: true });   // Shut down: ends the session, next time starts fresh
   });
 
   // outside clicks close the start menu / power menu
@@ -2958,6 +2960,7 @@
         brToFrame(tab, { type: 'init', theme: brTheme(), textScale: BR_TEXT_SCALES[BR.textSize] || 1, domain: domain, currency: BR.cur, path: brParse(brCur(tab)).path, title: tab.title });
         break;
       case 'locale': brReply(tab, d.id, true, BR.dict); break;
+      case 'snapshot': { var sw = MIR.waiting[d.id]; if (sw) { delete MIR.waiting[d.id]; sw(d.data || null); } break; }
       case 'call':
         brApi('siteCall', domain, d.name, d.data || {}).then(function (res) {
           if (res && res.ok) brReply(tab, d.id, true, res.data);
@@ -4568,6 +4571,69 @@
     tick();
   }
 
+  // ================================================================ live monitor view
+  // While someone uses the computer, the desktop draws itself to a small JPEG about once a second (html-to-image,
+  // ui/vendor). Scout websites live in iframes the snapshot can't see into, so each visible site page is asked for
+  // its own picture (as-browser's SDK answers 'snapshot') and it is painted over the iframe's spot. The client sends
+  // the frame to the server, which passes it to players near this computer; they see it on the monitor.
+  var MIR = { on: false, busy: false, t: null, cfg: {}, waiting: {}, seq: 0 };
+  var MIR_PH = 'data:image/gif;base64,R0lGODlhAQABAIAAAMzMzAAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
+  function mirrorStart(cfg) {
+    MIR.cfg = cfg || {};
+    if (MIR.on) return;
+    MIR.on = true;
+    MIR.t = setTimeout(mirrorTick, 600);
+  }
+  function mirrorStop() { MIR.on = false; clearTimeout(MIR.t); MIR.waiting = {}; }
+  function mirrorTick() {
+    if (!MIR.on) return;
+    MIR.t = setTimeout(mirrorTick, Math.max(400, MIR.cfg.interval || 1000));
+    if (MIR.busy || !window.htmlToImage || !root.classList.contains('open')) return;
+    MIR.busy = true;
+    mirrorSnap().then(function (data) {
+      if (data && MIR.on) postToClient('mirrorFrame', { data: data });
+    }).catch(function () { /* skip this frame */ }).then(function () { MIR.busy = false; });
+  }
+  function mirrorSites(k) {
+    var base = app.getBoundingClientRect(), sc = scaleFactor(), jobs = [];
+    document.querySelectorAll('iframe.br-frame').forEach(function (f) {
+      var r = f.getBoundingClientRect();
+      if (!f.contentWindow || r.width < 4 || r.height < 4 || f.offsetParent === null) return;
+      var box = { x: (r.left - base.left) / sc * k, y: (r.top - base.top) / sc * k, w: r.width / sc * k, h: r.height / sc * k };
+      jobs.push(new Promise(function (resolve) {
+        var id = 'm' + (++MIR.seq);
+        var timer = setTimeout(function () { delete MIR.waiting[id]; resolve(null); }, 900);
+        MIR.waiting[id] = function (data) {
+          clearTimeout(timer);
+          if (!data) return resolve(null);
+          var img = new Image();
+          img.onload = function () { resolve({ img: img, box: box }); };
+          img.onerror = function () { resolve(null); };
+          img.src = data;
+        };
+        try { f.contentWindow.postMessage({ __asb: 1, type: 'snapshot', id: id, w: Math.round(box.w) }, '*'); } catch (e) { resolve(null); }
+      }));
+    });
+    return Promise.all(jobs);
+  }
+  function mirrorSnap() {
+    var aw = app.offsetWidth || 1920, ah = app.offsetHeight || 1080;
+    var W = Math.max(320, Math.min(1920, MIR.cfg.width || 960)), H = Math.round(W * ah / aw), k = W / aw;
+    var desk = window.htmlToImage.toCanvas(app, {
+      width: aw, height: ah, canvasWidth: W, canvasHeight: H, pixelRatio: 1,
+      skipFonts: true, cacheBust: false, imagePlaceholder: MIR_PH,
+      style: { transform: 'none', position: 'static', margin: '0', boxShadow: 'none' },
+      // Only what is actually on screen: closed windows, hidden apps and menus are skipped (the page has
+      // ~1000 elements, usually <100 visible, and that is what keeps a snapshot cheap).
+      filter: function (n) { return n.nodeType !== 1 || (n.tagName !== 'IFRAME' && n.getClientRects().length > 0); },
+    });
+    return Promise.all([desk, mirrorSites(k)]).then(function (r) {
+      var cv = r[0], ctx = cv.getContext('2d');
+      r[1].forEach(function (s) { if (s) ctx.drawImage(s.img, s.box.x, s.box.y, s.box.w, s.box.h); });
+      return cv.toDataURL('image/jpeg', MIR.cfg.quality || 0.6);
+    });
+  }
+
   window.addEventListener('message', function (e) {
     var d = e.data || {};
 
@@ -4595,16 +4661,26 @@
       root.classList.toggle('debug', !!d.debug);
       fit();
       root.classList.add('open');
-      resetSession();
-      applyPrefs();
-      applyApps();
-      if (state.lockEnabled) showLock(); else { $('lock').classList.add('hidden'); signIn(); }
+      // d.resume: this player left this computer without shutting it down and nobody else has used it since,
+      // so everything they had open is still here. d.locked: they locked it before leaving.
+      if (d.mirror && !isDui) mirrorStart(d.mirror); else mirrorStop();
+      if (d.resume) {
+        applyPrefs();
+        applyApps();
+        if (d.locked) showLock(); else { $('lock').classList.add('hidden'); postToClient('sessionState', { state: 'active' }); }
+      } else {
+        resetSession();
+        applyPrefs();
+        applyApps();
+        if (state.lockEnabled) showLock(); else { $('lock').classList.add('hidden'); signIn(); }
+      }
     }
 
     if (d.action === 'close') {
+      mirrorStop();
       root.classList.remove('open');
       state.rect = null;
-      resetSession();
+      if (!d.keep) resetSession();   // keep = walked away without shutting down: leave the apps as they are
     }
 
     if (d.action === 'lookupResult') {

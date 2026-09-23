@@ -38,7 +38,14 @@ function Bridge.JobsFor(loc)
   return (loc and loc.jobs) or Config.Jobs or (Config.MechanicJob and { Config.MechanicJob }) or {}
 end
 
+--- Anything in Config.PublicApps switched on? Then anyone may sit at any computer (they get those apps only).
+function Bridge.HasPublicApps()
+  for _, on in pairs(Config.PublicApps or {}) do if on then return true end end
+  return false
+end
+
 function Bridge.HasComputerJob(loc)
+  if Bridge.HasPublicApps() then return true end
   local job = Bridge.CurrentJob()
   if not job then return false end
   for _, j in ipairs(Bridge.JobsFor(loc)) do

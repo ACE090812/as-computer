@@ -86,7 +86,16 @@ function Apps.has(job, id)
 end
 
 --- Server-side gate used by every app's callbacks: computer job + the app is available to that job.
+--- A public app (Config.PublicApps) is usable by everyone, on every computer, with no Store install.
+function Apps.isPublic(id)
+  if not (Config.PublicApps and Config.PublicApps[id]) then return false end
+  if not Apps.def(id) then return false end
+  if Apps.available[id] and not Apps.available[id]() then return false end
+  return true
+end
+
 function Apps.allowed(src, id)
+  if Apps.isPublic(id) then return true end
   local j = Bridge.GetJob(src)
   return j ~= nil and Bridge.AllowedJobs()[j.name] == true and Apps.has(j.name, id)
 end
@@ -97,7 +106,7 @@ function Apps.stateFor(src)
   local j = Bridge.GetJob(src)
   local usable = j ~= nil and Bridge.AllowedJobs()[j.name] == true
   for id in pairs(Config.Apps or {}) do
-    out[id] = usable and Apps.has(j.name, id) or false
+    out[id] = Apps.isPublic(id) or (usable and Apps.has(j.name, id)) or false
   end
   return out
 end
@@ -233,7 +242,7 @@ end
 MotCallback.Register('appsInfo', function(src, respond)
   local hasJob = Bridge.HasComputerJob(src)
   respond({
-    apps = Apps.stateFor(src), store = storeOn(),
+    apps = Apps.stateFor(src), store = storeOn() and Bridge.HasJobComputer(src),
     prefs = Settings and hasJob and Settings.get(src) or nil,
     hasPassword = Settings and hasJob and Settings.hasPassword(src) or false,
   })

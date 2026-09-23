@@ -165,9 +165,15 @@ function Bridge.JobLabel(name)
 end
 
 --- Is the player on a job that may use the computer? (Which apps they have is server/apps.lua.)
-function Bridge.HasComputerJob(src)
+function Bridge.HasJobComputer(src)
   local j = Bridge.GetJob(src)
   return j ~= nil and Bridge.AllowedJobs()[j.name] == true
+end
+
+--- May the player sit at a computer at all? A computer job, or anyone when Config.PublicApps has apps on.
+function Bridge.HasComputerJob(src)
+  for _, on in pairs(Config.PublicApps or {}) do if on then return true end end
+  return Bridge.HasJobComputer(src)
 end
 
 -- ---- helpers used by the Mechanic app ---------------------------------------------------------------
