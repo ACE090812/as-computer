@@ -3,14 +3,14 @@ game 'gta5'
 
 name 'as-computer'
 author 'ACE Studios'
-description 'Los Santos OS: a desktop computer on a prop monitor (Store, MOT Testing Service, File Explorer, Scout browser, Calendar, Mechanic, Mail, Calculator, Notepad)'
+description 'Los Santos OS: a desktop computer on a prop monitor (Store, MOT Testing Service, File Explorer, Scout browser, Calendar, Mechanic, Mail, Calculator, Notepad, MDT)'
 version '0.9.0'
 
 provide 'mot-dui'
 
 shared_scripts {
-  'config/config.lua',   
-  'config/apps/*.lua',   
+  'config/config.lua',
+  'config/apps/*.lua',
   'shared/locale.lua',
   'locales/*.lua',
 }
@@ -25,6 +25,7 @@ client_scripts {
   'client/notepad.lua',
   'client/files.lua',
   'client/printing.lua',
+  'client/mdt.lua',
 }
 
 server_scripts {
@@ -40,6 +41,7 @@ server_scripts {
   'server/notepad.lua',
   'server/files.lua',
   'server/printing.lua',
+  'server/mdt.lua',
   'server/main.lua',
 }
 
@@ -62,6 +64,8 @@ files {
   'ui/notepad.js',
   'ui/notepad.css',
   'ui/files.css',
+  'ui/mdt.js',
+  'ui/mdt.css',
   'stream/mot_monitor.ytyp',
 }
 
