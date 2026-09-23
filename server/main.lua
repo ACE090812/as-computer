@@ -520,7 +520,7 @@ MotCallback.Register('listCertificates', function(src, respond)
       )
     end)
     if ok and vehicles then
-      for _, v in ipairs(vehicles) do models[(v.plate or ''):upper():gsub('%s+', '')] = v.vehicle end
+      for _, v in ipairs(vehicles) do models[(v.plate or ''):upper():gsub('%s+', '')] = Bridge.VehicleModelLabel(v.vehicle) end
     end
   end
 

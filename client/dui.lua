@@ -223,7 +223,6 @@ local function OpenMessage(loc, rect, user, info)
     user   = user,                                  -- name shown on the lock screen / start menu
     lock   = Config.LockScreen ~= false,            -- show the lock screen before the desktop
     print  = Config.PrintEvent ~= nil,              -- enables the Print button on certificates
-    printer = GetResourceState('as-printer') == 'started' and (Config.Printing == nil or Config.Printing.enabled ~= false),  -- print dialog (needs as-printer)
     manageOthers = Config.ManageOthers == true,     -- may rename/delete other testers' certificates
     calendar = Config.Calendar and Config.Calendar.enabled ~= false and { weekStart = Config.Calendar.weekStart or 1 } or false,
     browser = BrowserAvailable(),                   -- Scout app (needs the as-browser resource)
@@ -339,10 +338,12 @@ RegisterNUICallback('close', function(_, cb)
   cb('ok')
 end)
 
--- Spawn name -> in-game display name (falls back to the raw model string)
+-- Spawn name (or a bare numeric model hash - see server/bridge.lua's Bridge.VehicleModelLabel on
+-- esx) -> in-game display name (falls back to the raw model string)
 local function ModelLabel(model)
   if not model or model == '' then return model end
-  local display = GetDisplayNameFromVehicleModel(joaat(model))
+  local hash = tostring(model):match('^%d+$') and tonumber(model) or joaat(model)
+  local display = GetDisplayNameFromVehicleModel(hash)
   local label = display and display ~= 'CARNOTFOUND' and GetLabelText(display)
   if label and label ~= 'NULL' then return label end
   return model

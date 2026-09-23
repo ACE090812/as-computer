@@ -1,10 +1,12 @@
 -- Mechanic app (client side): the page's server calls, plus the two things that need the player's own screen:
 -- notifications from the app and the "accept this card payment?" prompt.
 
---- Spawn name -> in-game display name (falls back to the raw model string).
+--- Spawn name (or a bare numeric model hash - see server/bridge.lua's Bridge.VehicleModelLabel on
+--- esx) -> in-game display name. Falls back to the raw model string when the game doesn't know it.
 local function ModelLabel(model)
   if not model or model == '' then return model end
-  local display = GetDisplayNameFromVehicleModel(joaat(model))
+  local hash = tostring(model):match('^%d+$') and tonumber(model) or joaat(model)
+  local display = GetDisplayNameFromVehicleModel(hash)
   local label = display and display ~= 'CARNOTFOUND' and GetLabelText(display)
   if label and label ~= 'NULL' then return label end
   return model
