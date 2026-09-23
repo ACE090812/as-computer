@@ -430,6 +430,26 @@ html.dui #startmenu,html.dui #lock,html.dui #windows{display:none!important}
 #win-browser.br-dark .br-seg{color:#9ca3af}
 #win-browser.br-dark .br-seg.on{background:#2b2f37;color:#f3f4f6}
 #win-browser.br-dark .br-settings h2{color:#9ca3af}
+#win-browser.br-dark .br-tabview{color:#f3f4f6}
+#win-browser.br-dark .br-logo{color:#f3f4f6}
+#win-browser.br-dark .br-tile{color:#f3f4f6}
+#win-browser.br-dark .br-tile:hover{background:rgba(255,255,255,.08)}
+#win-browser.br-dark .br-sbox{background:#111318;border-color:#2b2f37}
+#win-browser.br-dark .br-sbox:hover,#win-browser.br-dark .br-sbox:focus-within{box-shadow:0 1px 8px rgba(0,0,0,.5);border-color:#3a3f49}
+#win-browser.br-dark .br-sbox .ic{color:#9ca3af}
+#win-browser.br-dark .br-sbox input{color:#f3f4f6}
+#win-browser.br-dark .br-count{color:#9ca3af}
+#win-browser.br-dark .br-res:hover,#win-browser.br-dark .br-row:hover{background:rgba(255,255,255,.06)}
+#win-browser.br-dark .br-res .ru{color:#c7cad1}
+#win-browser.br-dark .br-res .rt{color:#8ab4f8}
+#win-browser.br-dark .br-res .rd{color:#bdc1c6}
+#win-browser.br-dark .br-row .u{color:#6fcf8e}
+#win-browser.br-dark .br-row .d{color:#9ca3af}
+#win-browser.br-dark .br-line .rm{color:#9ca3af}
+#win-browser.br-dark .br-line .rm:hover{background:rgba(255,255,255,.08)}
+#win-browser.br-dark .br-empty{color:#9ca3af}
+#win-browser.br-dark .br-empty .h,#win-browser.br-dark .br-err h1{color:#f3f4f6}
+#win-browser.br-dark .br-err p{color:#9ca3af}
 
 /* ---- Scout: text size (3-dot menu > Settings > Text size) ---- */
 #win-browser{--br-ts:1}
