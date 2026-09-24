@@ -3,9 +3,14 @@
 local ALLOWED = {
   boot = true, dashboard = true,
   peopleSearch = true, personGet = true, personNoteAdd = true, personNoteDelete = true, personPhotoAdd = true, personPhotoDelete = true,
+  personLinkBiometric = true,
   vehicleSearch = true, vehicleGet = true, vehicleSetStatus = true, vehicleToggleImpound = true,
   vehicleNoteAdd = true, vehicleNoteDelete = true, vehiclePhotoAdd = true, vehiclePhotoDelete = true,
   reportsList = true, reportGet = true, reportSave = true, reportDelete = true,
+  evidenceUnlinked = true, evidenceLink = true, evidenceUnlink = true,
+  reportAttachmentAdd = true, reportAttachmentDelete = true,
+  reportPhoneList = true, reportPhoneImport = true,
+  reportJailSuspect = true, reportSendToCourt = true,
   bolosList = true, boloSave = true, boloToggle = true, boloDelete = true, boloVehicleLookup = true,
   chargesList = true,
 }

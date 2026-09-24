@@ -8,7 +8,7 @@ Config.MDT = {
   -- (Config.Jobs in config/config.lua currently only allows 'mechanic' to use any as-computer device
   -- at all) — remove 'mechanic' here and add your real police job name(s) to both this list AND
   -- Config.Jobs in config/config.lua once you're ready to test with an actual police character/computer.
-  jobs = { 'police', 'sheriff', 'lspd', 'bcso', 'sast', 'mechanic' },
+  jobs = { 'police', 'sheriff', 'lspd', 'bcso', 'sast' },
 
   -- Uses your framework's own job grade numbers directly (qb/qbox job.grade.level, esx job.grade),
   -- same as as-mdt's Config.Permissions.adminMinGrade. Anyone with grade >= adminMinGrade can:

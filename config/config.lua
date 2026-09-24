@@ -4,7 +4,9 @@
 Config = {}
 
 -- Enables /computer_coords, /computer_goto and spawn logging. Turn off for production.
-Config.Debug = false
+-- TEMPORARY: turned on for /computer_screen tuning of the new Evidence Laptop (see Config.Locations[1]
+-- above). Set back to false once that's done.
+Config.Debug = true
 
 -- Draw the interaction box in-world (ox_target debug). Only useful when tuning target.size/offset.
 Config.DebugZone = false
@@ -21,7 +23,7 @@ Config.InteractDistance = 1.8  -- metres from the screen
 -- false = terminal opens fullscreen
 Config.UseCamera = true
 
-Config.DebugScreen = false
+Config.DebugScreen = true -- TEMPORARY: outlines the screen rect while tuning the Evidence Laptop. Set back to false after.
 
 -- Fixed to match ui/index.html's html/body width & height (1920x1080).
 -- If you resize the page, update these to match or the texture will stretch.
@@ -33,6 +35,25 @@ Config.DuiHeight = 1080
 -- you want to replace with the live DUI output (use a texture viewer /
 -- OpenIV-style tool on the prop model to find these).
 Config.Locations = {
+  -- TEMPORARY: Evidence Laptop, added at the same spot as the Vinewood bay just so it's easy to reach for
+  -- /computer_screen tuning (Config.Debug/Config.DebugScreen below). Remove this whole block once the laptop's
+  -- screen rect is dialled in and moved over to Config.Placement.computers.
+  {
+    label   = "TEST — Evidence Laptop",
+    coords  = vector3(-347.2, -136.8, 39.0),
+    heading = 70.0,
+    prop    = `p_laptop_02_s`,
+    txd     = { "p_laptop_02_s" },
+    txn     = "prop_laptop_02b",
+    screen  = {
+      offset = vector3(0.0, 0.02, 0.14),   -- starting guess, tune live with /computer_screen
+      size   = vector2(0.30, 0.16),
+      bleed  = 0.02,
+      front  = -1,   -- was 1: camera was framing the back of the lid, flipped to face the actual screen side
+      cam    = { dist = 0.55, fov = 40.0 },
+    },
+    target  = { size = vector3(1.0, 1.0, 0.8), offset = vector3(0.0, 0.0, 0.14) },
+  },
   {
     label   = "Vinewood Auto Centre — MOT Bay",
     coords  = vector3(-347.2, -136.8, 39.0),
@@ -70,7 +91,9 @@ Config.Locations = {
 -- Jobs that may use the computer at all (bridged across QBCore / Qbox / ESX in bridge.lua).
 -- A location can override this with its own `jobs = { ... }`.
 -- WHICH APPS a job gets is decided by the Store: see config/apps/store.lua and each app's Config.Apps entry.
-Config.Jobs = { 'mechanic' }
+-- 'judge', 'lawyer', 'solicitor', 'barrister' are placeholders for the Court MDT (config/apps/courtmdt.lua)
+-- - EDIT these to your server's real job names, same as Config.MDT.jobs/Config.CourtMDT.jobs.
+Config.Jobs = { 'mechanic', 'judge', 'lawyer', 'solicitor', 'barrister' }
 
 -- Apps anyone may use on any computer, whatever their job (no Store install needed). Job apps (MOT, Mechanic,
 -- MDT, Mail ...) stay limited to Config.Jobs. Leave the table empty to keep computers job-only.
@@ -80,6 +103,7 @@ Config.PublicApps = {
   notepad    = true,
   calculator = true,
   settings   = true,
+  mining     = true,   -- Crypto Mining Rig, Phase 3: open to all players, no licence/job gate
 }
 
 -- App registry. Filled by config/apps/*.lua, one entry per app: Config.Apps.<id> = { store, jobs, price, ... }
@@ -124,6 +148,16 @@ Config.Placement = {
       screen = { offset = vector3(0.0, -0.07, 0.396), size = vector2(0.79, 0.483), bleed = 0.02, front = -1, cam = { dist = 0.85, fov = 35.0 } },
       target = { size = vector3(1.3, 1.3, 1.0), offset = vector3(0.0, -0.02, 0.33) },
     },
+    {
+      -- TEMPORARY screen values — copy the tuned line /computer_screen prints (see Config.Locations[1]
+      -- above) in here once it's dialled in, then delete this comment.
+      label  = 'Evidence Laptop',
+      prop   = `p_laptop_02_s`,
+      txd    = { 'p_laptop_02_s' },
+      txn    = 'prop_laptop_02b',
+      screen = { offset = vector3(0.0, 0.02, 0.14), size = vector2(0.30, 0.16), bleed = 0.02, front = -1, cam = { dist = 0.55, fov = 40.0 } },
+      target = { size = vector3(1.0, 1.0, 0.8), offset = vector3(0.0, 0.0, 0.14) },
+    },
   },
 
   -- TVs / screens the menu can place. txd + txn are the model's screen texture that gets replaced by the
@@ -133,6 +167,17 @@ Config.Placement = {
     { label = 'Flat TV (wall)',   prop = `prop_tv_flat_michael`, txd = 'prop_tv_flat_michael', txn = 'script_rt_tvscreen' },
     { label = 'Flat TV (small)',  prop = `prop_tv_flat_02`,      txd = 'prop_tv_flat_02',      txn = 'script_rt_tvscreen' },
     { label = 'Cinema screen',    prop = `v_ilev_cin_screen`,    txd = 'v_ilev_cin_screen',    txn = 'script_rt_cinscreen' },
+  },
+
+  -- Printers the menu can place: plain decorative props with no screen/target of their own - as-printer
+  -- (a separate resource) scans the world every few seconds for any object using one of the models in
+  -- ITS OWN Config.Models and gives it the printer target/menu automatically. So placing one of these
+  -- just needs its model to match a name in as-printer/config.lua's Config.Models list; nothing else here
+  -- talks to as-printer directly. If you rename/add models there, mirror them here too.
+  printers = {
+    { label = 'Printer',           prop = `prop_printer_01` },
+    { label = 'Printer (compact)', prop = `prop_printer_02` },
+    { label = 'Photocopier',       prop = `prop_copier_01` },
   },
 
   tvPage          = 'https://cfx-nui-as-browser/sites/presento/tv.html',  -- page drawn on the TV

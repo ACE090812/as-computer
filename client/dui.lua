@@ -258,6 +258,9 @@ local function OpenMessage(loc, rect, user, info, session)
   return json.encode({
     action = 'open',
     resume = session and session.resume or false,  -- same player, same computer, nobody else since: keep the open apps
+    needsSetup = session and session.needsSetup or false, -- first boot: nobody's ever set this machine up (client/dui.lua's boot flow)
+    needsLogin = session and session.needsLogin or false, -- past setup, but no resumable session: show the login screen
+    accountName = session and session.accountName or nil, -- who resumed / just signed in (Phase 0.5 machine account, not the character)
     mirror = (Config.Mirror and Config.Mirror.enabled ~= false and loc.screen and loc.mirror ~= false) and {
       interval = Config.Mirror.interval or 1000, width = Config.Mirror.width or 960, quality = Config.Mirror.quality or 0.6,
     } or false,                                     -- live view: the page sends a picture of itself about once a second
@@ -267,7 +270,12 @@ local function OpenMessage(loc, rect, user, info, session)
     user   = user,                                  -- name shown on the lock screen / start menu
     lock   = Config.LockScreen ~= false,            -- show the lock screen before the desktop
     lockPassword = info and info.hasPassword or false, -- character has a sign-in password set (Settings > Accounts)
-    print  = Config.PrintEvent ~= nil,              -- enables the Print button on certificates
+    -- Real printer availability now comes from the server (server/apps.lua's appsInfo -> PrintBridge.up()),
+    -- fetched alongside appsInfo/prefs just above and passed in as `info.printer`. Config.PrintEvent was
+    -- the old pre-as-printer stub (see the printCertificate NUI callback below) - kept only so an old
+    -- Config.PrintEvent setup still lights the button up too, but as-printer being up is what actually matters.
+    printer = (info and info.printer) or (Config.PrintEvent ~= nil),
+    print  = (info and info.printer) or (Config.PrintEvent ~= nil),  -- enables the Print button on certificates
     manageOthers = Config.ManageOthers == true,     -- may rename/delete other testers' certificates
     calendar = Config.Calendar and Config.Calendar.enabled ~= false and { weekStart = Config.Calendar.weekStart or 1 } or false,
     browser = BrowserAvailable(),                   -- Scout app (needs the as-browser resource)
@@ -314,8 +322,11 @@ function OpenTerminal(loc)
     local nameTimeout = GetGameTimer() + 1500
     while (userName == nil or appsInfo == nil or session == nil) and GetGameTimer() < nameTimeout do Wait(50) end
     if currentTerminal ~= loc then return end
-    -- Resume only if the apps still in this client's page are from this very computer.
-    if session and not (session.resume and nuiSessionKey == loc.key) then session = { resume = false } end
+    -- Resume only if the apps still in this client's page are from this very computer. Losing resume this
+    -- way must NOT lose a needsSetup/needsLogin flag - the login/setup screen still has to show.
+    if session and not (session.resume and nuiSessionKey == loc.key) then
+      session = { resume = false, needsSetup = session.needsSetup, needsLogin = session.needsLogin }
+    end
     nuiSessionKey = loc.key
 
     SetNuiFocus(true, true)
@@ -346,6 +357,14 @@ function CloseTerminal(off)
     if loc.key then TriggerServerEvent('as-computer:server:session', loc.key, 'off') end
   end
 end
+
+--- Phase 5.5: a placed mining monitor was picked up (server/mining_place.lua) - if this player
+--- currently has that exact machine open, close it the same way "Shut down" does (ends the session
+--- cleanly server-side too) rather than leaving them staring at a screen that no longer physically
+--- exists.
+RegisterNetEvent('as-computer:client:forceCloseComputer', function(key)
+  if currentTerminal and currentTerminal.key == key then CloseTerminal(true) end
+end)
 
 -- Live framing (Config.Debug): /computer_screen [dx] [dz] [width] [height] [dist] [fov] [front]
 -- Adjusts the first location's screen rect / camera and reopens the terminal so you can see it.
@@ -403,6 +422,35 @@ RegisterNUICallback('mirrorFrame', function(data, cb)
   if m.enabled == false or not currentTerminal or not currentTerminal.key or type(frame) ~= 'string' then return end
   if #frame > (m.maxBytes or 250000) then return end
   TriggerLatentServerEvent('as-computer:server:mirrorFrame', m.bps or 200000, currentTerminal.key, frame)
+end)
+
+-- Phase 0.5 first-boot setup / login screens. { name = 'setup' | 'login', data = { username, password } }.
+-- currentTerminal must still be this same computer - the screen only ever posts about the machine on
+-- the player's own monitor, never an arbitrary key from the page.
+RegisterNUICallback('accountApi', function(data, cb)
+  data = data or {}
+  if not currentTerminal or not currentTerminal.key then return cb({ success = false }) end
+  local body = data.data or {}
+  if data.name == 'setup' then
+    MotCallback.Trigger('session:setup', function(r) cb(r or { success = false }) end,
+      currentTerminal.key, body.username, body.password)
+  elseif data.name == 'login' then
+    MotCallback.Trigger('session:login', function(r) cb(r or { success = false }) end,
+      currentTerminal.key, body.username, body.password)
+  else
+    cb({ success = false })
+  end
+end)
+
+-- Phase 3 Mining Rig app. { name = ..., data = {...} } -> server's 'miningApi' MotCallback -> NUI
+-- reply. computerKey is always injected here from currentTerminal, never taken from the page, so the
+-- app can only ever act on the computer the player is physically sat at.
+RegisterNUICallback('miningApi', function(data, cb)
+  data = data or {}
+  if not currentTerminal or not currentTerminal.key then return cb({ success = false }) end
+  local body = type(data.data) == 'table' and data.data or {}
+  body.computerKey = currentTerminal.key
+  MotCallback.Trigger('miningApi', function(r) cb(r or { success = false }) end, data.name, body)
 end)
 
 -- Lock screen shown / signed in: remembered on the server so a resumed session opens locked or not.

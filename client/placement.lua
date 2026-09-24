@@ -69,6 +69,35 @@ local function removeComputer(id)
 end
 
 -- ---------------------------------------------------------------------------------------------
+-- Printers
+-- ---------------------------------------------------------------------------------------------
+-- Just a persistent decorative prop, same as a placed TV with no screen: as-printer's own client
+-- (a separate resource) notices any world object using one of ITS configured printer models and
+-- gives it the printer target/menu on its own, so there is nothing to wire up here beyond spawning
+-- the object at the saved spot and keeping it in sync with the admin menu below.
+-- ---------------------------------------------------------------------------------------------
+
+local printers = {}    -- id -> { entry, v = model config, obj }
+
+local function addPrinter(e)
+  local v = PC.printers and PC.printers[e.variant]
+  if not v then return end
+  local t = { entry = e, v = v }
+  printers[e.id] = t
+  CreateThread(function()
+    local obj = spawnProp(v.prop, e.pos, e.rot)
+    if printers[e.id] == t then t.obj = obj elseif obj then DeleteEntity(obj) end
+  end)
+end
+
+local function removePrinter(id)
+  local t = printers[id]
+  if not t then return end
+  if t.obj and DoesEntityExist(t.obj) then DeleteEntity(t.obj) end
+  printers[id] = nil
+end
+
+-- ---------------------------------------------------------------------------------------------
 -- TVs
 -- ---------------------------------------------------------------------------------------------
 
@@ -103,14 +132,16 @@ local function applyList(list)
   local seen = {}
   for _, e in ipairs(type(list) == 'table' and list or {}) do
     seen[e.id] = true
-    local cur = (tvs[e.id] and tvs[e.id].entry) or (placedLocs[e.id] and placedLocs[e.id].entry)
+    local cur = (tvs[e.id] and tvs[e.id].entry) or (printers[e.id] and printers[e.id].entry) or (placedLocs[e.id] and placedLocs[e.id].entry)
     if not same(cur, e) then
       removeTv(e.id)
+      removePrinter(e.id)
       removeComputer(e.id)
-      if e.kind == 'tv' then addTv(e) else addComputer(e) end
+      if e.kind == 'tv' then addTv(e) elseif e.kind == 'printer' then addPrinter(e) else addComputer(e) end
     end
   end
   for id in pairs(tvs) do if not seen[id] then removeTv(id) end end
+  for id in pairs(printers) do if not seen[id] then removePrinter(id) end end
   for id in pairs(placedLocs) do if not seen[id] then removeComputer(id) end end
 end
 
@@ -270,8 +301,10 @@ local function tvSetup(title, label, jobs)
   return input[1], splitJobs(input[2])
 end
 
+local KIND_VARIANTS = { tv = PC.tvs, printer = PC.printers, computer = PC.computers }
+
 local function place(kind, variant)
-  local v = (kind == 'tv' and PC.tvs or PC.computers)[variant]
+  local v = (KIND_VARIANTS[kind] or PC.computers)[variant]
   if not v or not loadModel(v.prop) then return notify(L('place_bad_model'), 'error') end
   local ped = PlayerPedId()
   local c = GetOffsetFromEntityInWorldCoords(ped, 0.0, 1.6, 0.0)
@@ -293,12 +326,14 @@ end
 
 local function entryObject(e)
   if e.kind == 'tv' then return tvs[e.id] and tvs[e.id].obj end
+  if e.kind == 'printer' then return printers[e.id] and printers[e.id].obj end
   return placedLocs[e.id] and placedLocs[e.id].spawnedObject
 end
 
 local function allEntries()
   local out = {}
   for _, t in pairs(tvs) do out[#out + 1] = t.entry end
+  for _, t in pairs(printers) do out[#out + 1] = t.entry end
   for _, l in pairs(placedLocs) do out[#out + 1] = l.entry end
   return out
 end
@@ -313,6 +348,7 @@ local function entryMenu(e, back)
       if pos then MotCallback.Trigger('placement:move', function(r) result(r, 'place_saved') end, { id = e.id, pos = pos, rot = rot }) end
     end },
     { title = e.kind == 'tv' and L('place_edit_tv') or L('place_rename'), icon = 'pen', onSelect = function()
+      -- (printers use the plain rename path below, same as computers - they have no jobs list to edit)
       if e.kind == 'tv' then
         local label, jobs = tvSetup(L('place_edit_tv'), e.label, e.jobs)
         if label == nil then return end
@@ -352,9 +388,10 @@ local function listMenu(nearbyOnly)
     local e = r.e
     options[#options + 1] = {
       title = ('%s #%d'):format(e.label, e.id),
-      description = ('%s · %.0f m%s'):format(e.kind == 'tv' and L('place_kind_tv') or L('place_kind_pc'), r.d,
+      description = ('%s · %.0f m%s'):format(
+        e.kind == 'tv' and L('place_kind_tv') or e.kind == 'printer' and L('place_kind_printer') or L('place_kind_pc'), r.d,
         e.jobs and (' · ' .. table.concat(e.jobs, ', ')) or ''),
-      icon = e.kind == 'tv' and 'tv' or 'computer',
+      icon = e.kind == 'tv' and 'tv' or e.kind == 'printer' and 'print' or 'computer',
       arrow = true,
       onSelect = function() entryMenu(e, nearbyOnly and 'asc_place_near' or 'asc_place_all') end,
     }
@@ -366,20 +403,23 @@ local function listMenu(nearbyOnly)
 end
 
 openMenu = function()
+  local KIND_ICON = { tv = 'tv', printer = 'print', computer = 'computer' }
   local function models(kind)
     local opts = {}
-    for i, v in ipairs((kind == 'tv' and PC.tvs or PC.computers) or {}) do
-      opts[#opts + 1] = { title = v.label, icon = kind == 'tv' and 'tv' or 'computer', onSelect = function() place(kind, i) end }
+    for i, v in ipairs(KIND_VARIANTS[kind] or {}) do
+      opts[#opts + 1] = { title = v.label, icon = KIND_ICON[kind] or 'computer', onSelect = function() place(kind, i) end }
     end
     return opts
   end
   lib.registerContext({ id = 'asc_place_pc', title = L('place_computer'), menu = 'asc_place', options = models('computer') })
   lib.registerContext({ id = 'asc_place_tv', title = L('place_tv'), menu = 'asc_place', options = models('tv') })
+  lib.registerContext({ id = 'asc_place_printer', title = L('place_printer'), menu = 'asc_place', options = models('printer') })
   lib.registerContext({
     id = 'asc_place', title = L('place_title'),
     options = {
       { title = L('place_computer'), description = L('place_computer_desc'), icon = 'computer', menu = 'asc_place_pc' },
       { title = L('place_tv'), description = L('place_tv_desc'), icon = 'tv', menu = 'asc_place_tv' },
+      { title = L('place_printer'), description = L('place_printer_desc'), icon = 'print', menu = 'asc_place_printer' },
       { title = L('place_nearby'), icon = 'location-crosshairs', onSelect = function() listMenu(true) end },
       { title = L('place_all'), icon = 'list', onSelect = function() listMenu(false) end },
     },
@@ -399,4 +439,5 @@ AddEventHandler('onResourceStop', function(res)
   if res ~= GetCurrentResourceName() then return end
   screenOff()
   for _, t in pairs(tvs) do if t.obj and DoesEntityExist(t.obj) then DeleteEntity(t.obj) end end
+  for _, t in pairs(printers) do if t.obj and DoesEntityExist(t.obj) then DeleteEntity(t.obj) end end
 end)
