@@ -217,9 +217,15 @@ end
 -- file's top level, so config/apps/*.lua load order never matters.
 -- ---------------------------------------------------------------------------------------------
 local GROUP_OWNER_LEGAL = 'legal'
+local GROUP_OWNER_COURT = 'court'
 
 local function legalCfg()
   local c = Config.LegalFolder
+  if type(c) == 'table' and c.enabled == true then return c end
+  return nil
+end
+local function courtCfg()
+  local c = Config.CourtFolder
   if type(c) == 'table' and c.enabled == true then return c end
   return nil
 end
@@ -238,6 +244,16 @@ local function legalCanRead(jobName)
   local c = legalCfg()
   return c ~= nil and (inList(c.writeJobs, jobName) or inList(c.readJobs, jobName))
 end
+--- Can this job write in the court-only group folder? (judges/prosecution/defence jobs)
+local function courtCanWrite(jobName)
+  local c = courtCfg()
+  return c ~= nil and inList(c.writeJobs, jobName)
+end
+--- Can this job at least read the court-only group folder?
+local function courtCanRead(jobName)
+  local c = courtCfg()
+  return c ~= nil and (inList(c.writeJobs, jobName) or inList(c.readJobs, jobName))
+end
 
 --- Where a place id points for this player, or nil.
 local function place(src, cid, folder)
@@ -251,6 +267,13 @@ local function place(src, cid, folder)
     local jobName = j and j.name
     if legalCanRead(jobName) then
       return { scope = 'group', owner = GROUP_OWNER_LEGAL, folder = '', isBoss = false, canWrite = legalCanWrite(jobName), key = 'legal' }
+    end
+  end
+  if folder == 'court' then
+    local j = Bridge.GetJob(src)
+    local jobName = j and j.name
+    if courtCanRead(jobName) then
+      return { scope = 'group', owner = GROUP_OWNER_COURT, folder = '', isBoss = false, canWrite = courtCanWrite(jobName), key = 'court' }
     end
   end
   return nil
@@ -267,6 +290,9 @@ local function placeOfRow(src, cid, row)
   end
   if row.scope == 'group' and row.owner == GROUP_OWNER_LEGAL then
     return place(src, cid, 'legal')
+  end
+  if row.scope == 'group' and row.owner == GROUP_OWNER_COURT then
+    return place(src, cid, 'court')
   end
   local j = Bridge.GetJob(src)
   if jobFolder(j) and j.name == row.owner then return { scope = 'job', owner = j.name, folder = '', isBoss = j.isBoss == true, key = 'job' } end
@@ -468,7 +494,7 @@ function Files.UpsertLegalReportFile(reportId, name, body, authorCid, authorName
   if utf8.len(bd) > maxLen() then bd = cut(bd, maxLen()) end
   local existing = MySQL.single.await(
     "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = 0 AND kind = 'text' AND name LIKE ? LIMIT 1",
-    { p.scope, p.owner, p.folder, '%' .. tag })
+    { p.scope, p.owner, p.folder, '%' .. tag .. '%' })
   if existing then
     MySQL.update.await('UPDATE computer_files SET body = ?, updated_at = ? WHERE id = ?', { bd, os.time(), existing.id })
     return existing.id
@@ -487,7 +513,7 @@ function Files.DeleteLegalReportFile(reportId)
   local tag = ('(#%s)'):format(tostring(reportId))
   local row = MySQL.single.await(
     "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = 0 AND kind = 'text' AND name LIKE ? LIMIT 1",
-    { p.scope, p.owner, p.folder, '%' .. tag })
+    { p.scope, p.owner, p.folder, '%' .. tag .. '%' })
   if not row then return false end
   local bin = binOn()
   local rows, cutShort = subtree(row.id, TREE_CAP, bin and 'live' or 'all')
@@ -546,6 +572,269 @@ local function buildCaseFolderName(caseNumber, names)
   local budget = mx - utf8.len(head) - 1   -- 1 char left over for the ellipsis
   if budget < 1 then return cut(prefix, mx) end
   return head .. cut(suffix, budget) .. '…'
+end
+
+--- Public lookup for other resources/files (server/evidence_reports.lua's "Link Evidence" action) that
+--- need to find the SAME case folder MDT reports already live in, rather than creating a second,
+--- differently-named one for the same case.
+function Files.FindLegalCaseFolder(caseNumber) return findLegalCaseFolder(caseNumber) end
+
+--- Text files a player can currently pick from - their Documents, their job folder, and the
+--- court folder if their job can read it - for pickers like the Court MDT's "attach a file"
+--- button on Case Notes, so a solicitor can pull in something they already wrote in File
+--- Explorer instead of retyping it. Folders and image/video/link rows are excluded. Newest first.
+function Files.ListTextFilesFor(src, cid)
+  local places = {}
+  for _, folder in ipairs({ 'docs', 'job', 'court' }) do
+    local p = place(src, cid, folder)
+    if p then places[#places + 1] = p end
+  end
+  local out = {}
+  for _, p in ipairs(places) do
+    local rows = MySQL.query.await(
+      "SELECT id, name, updated_at FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND kind = 'text' ORDER BY updated_at DESC LIMIT 100",
+      { p.scope, p.owner, p.folder }) or {}
+    for _, r in ipairs(rows) do
+      out[#out + 1] = { id = r.id, name = r.name, place = p.key, updated = r.updated_at }
+    end
+  end
+  table.sort(out, function(a, b) return (a.updated or 0) > (b.updated or 0) end)
+  return out
+end
+
+--- The plain (tag-stripped) text of one of those files, re-checking the player can still reach it
+--- (job/place can change between listing and picking). Returns nil if it's gone, not a text file,
+--- or no longer in a place this player can read.
+function Files.GetTextFileBodyFor(src, cid, id)
+  local row = getLive(math.floor(tonumber(id) or 0))
+  if not row or row.kind ~= 'text' then return nil end
+  local p = placeOfRow(src, cid, row)
+  if not p then return nil end
+  return plainText(row.body or '')
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- Court-only bucket: a case's own top-level folder inside the COURT group folder (Config.CourtFolder),
+-- a completely separate owner group from the legal folder above, so briefs/witness lists/motions
+-- never show up to anyone without a court job (judge/lawyer/solicitor/barrister) - not even to
+-- officers who can already read the legal Case Files. Mirrors the legal case-folder pattern.
+-- ---------------------------------------------------------------------------------------------
+local function courtPlaceFixed() return { scope = 'group', owner = GROUP_OWNER_COURT, folder = '' } end
+
+local function findCourtCaseFolder(caseNumber)
+  if not courtCfg() or not caseNumber or caseNumber == '' then return nil end
+  local p = courtPlaceFixed()
+  return MySQL.single.await(
+    "SELECT id, name FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = 0 AND kind = 'folder' AND name LIKE ? LIMIT 1",
+    { p.scope, p.owner, p.folder, caseNumber .. '%' })
+end
+
+--- Creates the case's folder in the court bucket if one doesn't already exist. Returns its id, or
+--- nil if the court folder is disabled/full.
+local function ensureCourtCaseFolder(caseNumber, names)
+  if not courtCfg() or not caseNumber or caseNumber == '' then return nil end
+  local existing = findCourtCaseFolder(caseNumber)
+  if existing then return existing.id end
+  local p = courtPlaceFixed()
+  if countIn(p, 0) >= maxPer() or countAll(p) >= maxTotal() then return nil end
+  local nm = uniqueName(p, 0, buildCaseFolderName(caseNumber, names or {}))
+  if not nm then return nil end
+  return insertRow(p, 0, 'folder', nm, '', '', 'system', 'System')
+end
+
+--- Creates (or updates in place, matched on an EXACT file name rather than a "(#id)" tag) a text
+--- file inside a case's folder in the chosen bucket: 'legal' (visible to officers - Filing.txt,
+--- Verdict.txt) or 'court' (judges/solicitors only - the bundle, briefs, motions log). Used for
+--- fixed, singular per-case documents rather than one-per-report files. Returns the file's id, or
+--- nil if that bucket/case folder isn't available (e.g. the case's report hasn't been saved into
+--- the legal folder yet, so there is nowhere in it to file Filing.txt/Verdict.txt).
+function Files.UpsertCaseNamedFile(bucket, caseNumber, names, fileName, body)
+  local p, folderId
+  if bucket == 'court' then
+    if not courtCfg() then return nil end
+    p = courtPlaceFixed()
+    folderId = ensureCourtCaseFolder(caseNumber, names)
+    if not folderId then return nil end
+  else
+    if not legalCfg() then return nil end
+    p = legalPlaceFixed()
+    local folder = findLegalCaseFolder(caseNumber)
+    if not folder then return nil end
+    folderId = folder.id
+  end
+  local bd = cleanBody(body) or ''
+  if utf8.len(bd) > maxLen() then bd = cut(bd, maxLen()) end
+  local existing = MySQL.single.await(
+    "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = ? AND kind = 'text' AND name = ? LIMIT 1",
+    { p.scope, p.owner, p.folder, folderId, fileName })
+  if existing then
+    MySQL.update.await('UPDATE computer_files SET body = ?, updated_at = ? WHERE id = ?', { bd, os.time(), existing.id })
+    return existing.id
+  end
+  if countIn(p, folderId) >= maxPer() or countAll(p) >= maxTotal() then return nil end
+  return insertRow(p, folderId, 'text', fileName, bd, '', 'system', 'Court System')
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- MDT report attachments (images/videos pasted into a report - see server/mdt.lua's
+-- reportAttachmentAdd/-Delete): same "link" file (URL only, never the bytes) File Explorer's own
+-- Link button creates, just placed straight into the case's own "Evidence" subfolder instead of
+-- wherever the player happened to be browsing. Same host allowlist, same kind-by-extension guess.
+-- ---------------------------------------------------------------------------------------------
+local ATTACHMENTS_SUBFOLDER_NAME = 'Evidence'
+local ATTACHMENTS_KIND_SUBFOLDERS = { image = 'Images', video = 'Videos' }
+
+--- The case's "Evidence" subfolder inside its real case folder, creating it if the case folder
+--- exists but the subfolder doesn't yet. Returns nil only if the case has no folder at all yet
+--- (report must be saved with this case number first).
+local function ensureCaseAttachmentsFolder(caseNumber)
+  local caseFolder = findLegalCaseFolder(caseNumber)
+  if not caseFolder then return nil end
+  local p = legalPlaceFixed()
+  local existing = MySQL.scalar.await(
+    "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = ? AND kind = 'folder' AND name = ? LIMIT 1",
+    { p.scope, p.owner, p.folder, caseFolder.id, ATTACHMENTS_SUBFOLDER_NAME })
+  if existing then return existing end
+  return insertRow(p, caseFolder.id, 'folder', ATTACHMENTS_SUBFOLDER_NAME, '', '', 'system', 'System')
+end
+
+--- Find-or-create the "Images"/"Videos" subfolder inside the Evidence subfolder, one per kind.
+--- A kind with no dedicated subfolder (audio/other files) stays directly in Evidence, unchanged.
+local function ensureAttachmentKindFolder(evId, kind)
+  local sub = ATTACHMENTS_KIND_SUBFOLDERS[kind]
+  if not sub then return evId end
+  local p = legalPlaceFixed()
+  local existing = MySQL.scalar.await(
+    "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = ? AND kind = 'folder' AND name = ? LIMIT 1",
+    { p.scope, p.owner, p.folder, evId, sub })
+  if existing then return existing end
+  return insertRow(p, evId, 'folder', sub, '', '', 'system', 'System') or evId
+end
+
+--- Every place an attachment might live under a case's Evidence folder: the Evidence folder itself
+--- (audio/other files), plus its Images and Videos subfolders if they already exist. Used by list/
+--- delete so both old attachments (saved before the Images/Videos split) and new ones are found.
+local function attachmentParentIds(evId)
+  local p = legalPlaceFixed()
+  local ids = { evId }
+  for _, sub in pairs(ATTACHMENTS_KIND_SUBFOLDERS) do
+    local id = MySQL.scalar.await(
+      "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = ? AND kind = 'folder' AND name = ? LIMIT 1",
+      { p.scope, p.owner, p.folder, evId, sub })
+    if id then ids[#ids + 1] = id end
+  end
+  return ids
+end
+
+--- Adds an image/video/audio/other-file link to the case's Evidence folder - images land in an
+--- "Images" subfolder, videos in a "Videos" subfolder, anything else stays in Evidence itself.
+--- Returns the new file's id, or nil (case not saved yet, folder full, bad/disallowed URL).
+function Files.AddLegalCaseAttachment(caseNumber, rawUrl, authorCid, authorName)
+  if not legalCfg() or not caseNumber or caseNumber == '' then return nil end
+  local evId = ensureCaseAttachmentsFolder(caseNumber)
+  if not evId then return nil end
+  local p = legalPlaceFixed()
+  local url, host = parseUrl(rawUrl)
+  if not url then return nil end
+  if not hostAllowed(host) then return nil end
+  local kind = kindOfExt(extOf(url))
+  local pid = ensureAttachmentKindFolder(evId, kind)
+  local seg = (url:match('^[^?#]*') or ''):match('([^/]+)$')
+  local nm = (seg and cleanName(seg:gsub('%%(%x%x)', function(h) return string.char(tonumber(h, 16)) end), kind)) or cleanName(host, kind) or 'Attachment'
+  if countIn(p, pid) >= maxPer() or countAll(p) >= maxTotal() then return nil end
+  nm = uniqueName(p, pid, nm)
+  if not nm then return nil end
+  return insertRow(p, pid, kind, nm, '', url, authorCid or 'system', cut(tostring(authorName or 'System'), 90))
+end
+
+--- Same phone gallery File Explorer's own "Import from phone" button reads from
+--- (exports[Config.Files.phoneResource]:getPhotos) - lets server/mdt.lua offer the same picker
+--- inside a report's Attachments section. nil means the phone resource isn't available right now.
+function Files.ListPhonePhotos(src, limit) return phonePhotos(src, limit) end
+
+--- Imports the chosen phone photos/videos (by their sd-phone photo id, from Files.ListPhonePhotos)
+--- into the case's Evidence/Images or Evidence/Videos subfolder (by kind) - same trusted path File
+--- Explorer's own phoneImport action uses (no host-allowlist check: these already came from the
+--- player's own phone gallery, not an arbitrary pasted link). Returns { imported = n, skipped = n },
+--- or nil if the case has no folder yet.
+function Files.ImportPhonePhotosToCase(src, caseNumber, ids, authorCid, authorName)
+  if not legalCfg() or not caseNumber or caseNumber == '' then return nil end
+  local evId = ensureCaseAttachmentsFolder(caseNumber)
+  if not evId then return nil end
+  local list = phonePhotos(src, 200)
+  if not list then return nil end
+  local want = {}
+  for _, v in ipairs(type(ids) == 'table' and ids or {}) do
+    if type(v) == 'string' and #want < 20 then want[v] = true end
+  end
+  local p = legalPlaceFixed()
+  local imported, skipped = 0, 0
+  for _, ph in ipairs(list) do
+    if want[ph.id] then
+      local kind = ph.isVideo and 'video' or 'image'
+      local pid = ensureAttachmentKindFolder(evId, kind)
+      if countIn(p, pid) >= maxPer() or countAll(p) >= maxTotal() then
+        skipped = skipped + 1
+      else
+        local e = extOf(ph.url) or (ph.isVideo and 'mp4' or 'jpg')
+        local nm = uniqueName(p, pid, ('Photo %s.%s'):format(os.date('%Y-%m-%d %H.%M.%S', ph.timestamp > 0 and ph.timestamp or os.time()), e))
+        local newId = nm and insertRow(p, pid, kind, nm, '', ph.url, authorCid or 'system', cut(tostring(authorName or 'System'), 90))
+        if newId then imported = imported + 1 else skipped = skipped + 1 end
+      end
+    end
+  end
+  return { imported = imported, skipped = skipped }
+end
+
+--- Attachments (images/videos/etc, NOT the linked-evidence sub-folders) currently sitting under the
+--- case's Evidence folder - its Images/Videos subfolders plus the Evidence folder itself (for
+--- audio/other files, and any attachment saved before the Images/Videos split existed).
+function Files.ListLegalCaseAttachments(caseNumber)
+  if not legalCfg() or not caseNumber or caseNumber == '' then return {} end
+  local caseFolder = findLegalCaseFolder(caseNumber)
+  if not caseFolder then return {} end
+  local p = legalPlaceFixed()
+  local evId = MySQL.scalar.await(
+    "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = ? AND kind = 'folder' AND name = ? LIMIT 1",
+    { p.scope, p.owner, p.folder, caseFolder.id, ATTACHMENTS_SUBFOLDER_NAME })
+  if not evId then return {} end
+  local parents = attachmentParentIds(evId)
+  local ph = {}
+  for i = 1, #parents do ph[#ph + 1] = '?' end
+  local params = { p.scope, p.owner, p.folder }
+  for _, id in ipairs(parents) do params[#params + 1] = id end
+  return MySQL.query.await(
+    "SELECT id, name, kind, url, created_at FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id IN (" .. table.concat(ph, ',') .. ") AND kind IN ('image','video','audio','file') ORDER BY id DESC",
+    params) or {}
+end
+
+--- Removes one attachment (recycle-bins it like a normal Explorer delete, unless the bin is off).
+--- Looks in the Evidence folder and its Images/Videos subfolders, wherever the attachment landed.
+function Files.DeleteLegalCaseAttachment(caseNumber, fileId)
+  if not caseNumber or not fileId then return false end
+  local caseFolder = findLegalCaseFolder(caseNumber)
+  if not caseFolder then return false end
+  local p = legalPlaceFixed()
+  local evId = MySQL.scalar.await(
+    "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = ? AND kind = 'folder' AND name = ? LIMIT 1",
+    { p.scope, p.owner, p.folder, caseFolder.id, ATTACHMENTS_SUBFOLDER_NAME })
+  if not evId then return false end
+  local parents = attachmentParentIds(evId)
+  local ph = {}
+  for i = 1, #parents do ph[#ph + 1] = '?' end
+  local params = { p.scope, p.owner, p.folder }
+  for _, id in ipairs(parents) do params[#params + 1] = id end
+  params[#params + 1] = fileId
+  local row = MySQL.single.await(
+    'SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id IN (' .. table.concat(ph, ',') .. ') AND id = ?',
+    params)
+  if not row then return false end
+  if binOn() then
+    MySQL.update.await('UPDATE computer_files SET deleted_at = ?, deleted_by = ?, del_root = 1 WHERE id = ?', { os.time(), 'MDT', fileId })
+  else
+    MySQL.update.await('DELETE FROM computer_files WHERE id = ?', { fileId })
+  end
+  return true
 end
 
 --- Ensures the case's folder exists and is named for exactly these suspects (creates it if it does
@@ -613,7 +902,7 @@ function Files.UpsertLegalReportFileInCase(caseNumber, reportId, name, body, aut
   if utf8.len(bd) > maxLen() then bd = cut(bd, maxLen()) end
   local existing = MySQL.single.await(
     "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = ? AND kind = 'text' AND name LIKE ? LIMIT 1",
-    { p.scope, p.owner, p.folder, folder.id, '%' .. tag })
+    { p.scope, p.owner, p.folder, folder.id, '%' .. tag .. '%' })
   if existing then
     MySQL.update.await('UPDATE computer_files SET body = ?, updated_at = ? WHERE id = ?', { bd, os.time(), existing.id })
     return existing.id
@@ -636,7 +925,7 @@ function Files.DeleteLegalReportFileInCase(caseNumber, reportId)
   local tag = ('(#%s)'):format(tostring(reportId))
   local row = MySQL.single.await(
     "SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = ? AND kind = 'text' AND name LIKE ? LIMIT 1",
-    { p.scope, p.owner, p.folder, folder.id, '%' .. tag })
+    { p.scope, p.owner, p.folder, folder.id, '%' .. tag .. '%' })
   if not row then return false end
   local bin = binOn()
   local rows, cutShort = subtree(row.id, TREE_CAP, bin and 'live' or 'all')
@@ -702,6 +991,12 @@ local function binRoots(src, cid, limit)
       "SELECT id, name, kind, scope, owner, folder, parent_id, created_by, created_by_name, deleted_at, deleted_by FROM computer_files " ..
       "WHERE deleted_at > 0 AND del_root = 1 AND scope = 'group' AND owner = ? ORDER BY deleted_at DESC LIMIT ?", { pl.owner, limit }))
   end
+  local pc = place(src, cid, 'court')
+  if pc then
+    add(MySQL.query.await(
+      "SELECT id, name, kind, scope, owner, folder, parent_id, created_by, created_by_name, deleted_at, deleted_by FROM computer_files " ..
+      "WHERE deleted_at > 0 AND del_root = 1 AND scope = 'group' AND owner = ? ORDER BY deleted_at DESC LIMIT ?", { pc.owner, limit }))
+  end
   table.sort(out, function(a, b) return a.deleted_at > b.deleted_at end)
   return out
 end
@@ -719,12 +1014,15 @@ MotCallback.Register('filesApi', function(src, respond, name, data)
   if name == 'folders' then
     local j = Bridge.GetJob(src)
     local lc, legalWrite = legalCfg(), legalCanWrite(j and j.name)
+    local cc, courtWrite = courtCfg(), courtCanWrite(j and j.name)
     return respond({ ok = true, data = {
       enabled = true,
       job = jobFolder(j) and (j.label or j.name) or nil,
       isBoss = j and j.isBoss == true or false,
       legal = (lc and legalCanRead(j and j.name)) and lc.label or nil,
       legalWrite = legalWrite,
+      court = (cc and courtCanRead(j and j.name)) and cc.label or nil,
+      courtWrite = courtWrite,
       phone = phoneRes() ~= nil,
       recycleBin = binOn(),
       limits = { maxPerFolder = maxPer(), maxLength = maxLen(), maxDepth = maxDepth(), maxNameLength = maxName() },
@@ -733,7 +1031,7 @@ MotCallback.Register('filesApi', function(src, respond, name, data)
 
   if name == 'tree' then
     local out = {}
-    for _, key in ipairs({ 'docs', 'dl', 'job', 'legal' }) do
+    for _, key in ipairs({ 'docs', 'dl', 'job', 'legal', 'court' }) do
       local p = place(src, cid, key)
       if p then
         local rows = MySQL.query.await(

@@ -136,6 +136,25 @@ input{user-select:text;-webkit-user-select:text}
 #lock .l-pwinput::placeholder{color:rgba(255,255,255,.65)}
 #lock .l-pwerr{min-height:18px;font-size:13.5px;color:#ffb4a8;text-shadow:0 1px 4px rgba(0,0,0,.4)}
 
+/* ---- Phase 0.5: first-boot setup / login gates ---- */
+#gate-setup,#gate-login{position:absolute;inset:0;z-index:101;color:#fff;display:flex;align-items:center;justify-content:center;
+  background:
+    radial-gradient(900px 620px at 18% 12%,rgba(58,141,255,.85),transparent 62%),
+    radial-gradient(1000px 760px at 88% 92%,rgba(126,74,235,.75),transparent 60%),
+    linear-gradient(135deg,#051a4a,#0a3a8c 55%,#0b2a70)}
+.g-card{width:320px;display:flex;flex-direction:column;align-items:stretch;gap:4px;background:rgba(10,20,50,.35);
+  border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.g-icon{align-self:center;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.5);display:grid;place-items:center;margin-bottom:14px}
+.g-icon .ic{width:34px;height:34px}
+.g-title{align-self:center;font-size:22px;font-weight:600;margin-bottom:4px;text-align:center}
+.g-sub{align-self:center;font-size:13.5px;opacity:.78;text-align:center;margin-bottom:18px;line-height:1.4}
+.g-label{font-size:12.5px;opacity:.75;margin:10px 0 4px;letter-spacing:.02em}
+.g-input{height:38px;border-radius:6px;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.14);color:#fff;font-size:15px;padding:0 12px}
+.g-input::placeholder{color:rgba(255,255,255,.6)}
+.g-err{min-height:32px;font-size:13px;color:#ffb4a8;text-shadow:0 1px 4px rgba(0,0,0,.4);margin-top:8px;line-height:1.3}
+.g-btn{margin-top:6px;padding:10px 0;border-radius:6px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);font-size:15.5px;text-align:center;cursor:pointer}
+.g-btn:hover{background:rgba(255,255,255,.3)}
+
 /* ---- File Explorer ---- */
 .ex{display:flex;flex-direction:column;height:100%;background:#fff;font-size:16.1px;color:#1b1b1b}
 .ex-toolbar{display:flex;align-items:center;gap:4px;padding:8px 10px;border-bottom:1px solid #e5e5e5;background:#f8f9fc}
@@ -234,7 +253,7 @@ html.overlay.open .app{display:block}
 html.overlay.onmonitor .app{transform-origin:0 0;box-shadow:none}
 html.debug .app{outline:6px solid magenta;outline-offset:-6px}
 /* DUI = ambient world texture: idle desktop, no input, no windows */
-html.dui #startmenu,html.dui #lock,html.dui #windows{display:none!important}
+html.dui #startmenu,html.dui #lock,html.dui #windows,html.dui #gate-setup,html.dui #gate-login{display:none!important}
 
 /* ---- MOT window: original GOV.UK rules, prefixed ---- */
 #win-mot .gov-header{background:var(--black);color:var(--white);border-bottom:10px solid var(--blue)}
@@ -430,26 +449,6 @@ html.dui #startmenu,html.dui #lock,html.dui #windows{display:none!important}
 #win-browser.br-dark .br-seg{color:#9ca3af}
 #win-browser.br-dark .br-seg.on{background:#2b2f37;color:#f3f4f6}
 #win-browser.br-dark .br-settings h2{color:#9ca3af}
-#win-browser.br-dark .br-tabview{color:#f3f4f6}
-#win-browser.br-dark .br-logo{color:#f3f4f6}
-#win-browser.br-dark .br-tile{color:#f3f4f6}
-#win-browser.br-dark .br-tile:hover{background:rgba(255,255,255,.08)}
-#win-browser.br-dark .br-sbox{background:#111318;border-color:#2b2f37}
-#win-browser.br-dark .br-sbox:hover,#win-browser.br-dark .br-sbox:focus-within{box-shadow:0 1px 8px rgba(0,0,0,.5);border-color:#3a3f49}
-#win-browser.br-dark .br-sbox .ic{color:#9ca3af}
-#win-browser.br-dark .br-sbox input{color:#f3f4f6}
-#win-browser.br-dark .br-count{color:#9ca3af}
-#win-browser.br-dark .br-res:hover,#win-browser.br-dark .br-row:hover{background:rgba(255,255,255,.06)}
-#win-browser.br-dark .br-res .ru{color:#c7cad1}
-#win-browser.br-dark .br-res .rt{color:#8ab4f8}
-#win-browser.br-dark .br-res .rd{color:#bdc1c6}
-#win-browser.br-dark .br-row .u{color:#6fcf8e}
-#win-browser.br-dark .br-row .d{color:#9ca3af}
-#win-browser.br-dark .br-line .rm{color:#9ca3af}
-#win-browser.br-dark .br-line .rm:hover{background:rgba(255,255,255,.08)}
-#win-browser.br-dark .br-empty{color:#9ca3af}
-#win-browser.br-dark .br-empty .h,#win-browser.br-dark .br-err h1{color:#f3f4f6}
-#win-browser.br-dark .br-err p{color:#9ca3af}
 
 /* ---- Scout: text size (3-dot menu > Settings > Text size) ---- */
 #win-browser{--br-ts:1}

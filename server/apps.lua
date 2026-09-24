@@ -245,6 +245,11 @@ MotCallback.Register('appsInfo', function(src, respond)
     apps = Apps.stateFor(src), store = storeOn() and Bridge.HasJobComputer(src),
     prefs = Settings and hasJob and Settings.get(src) or nil,
     hasPassword = Settings and hasJob and Settings.hasPassword(src) or false,
+    -- Whether the Print button should show up anywhere on this computer (File Explorer, MOT
+    -- certificates, the file editor/image viewer): true once the as-printer resource is up and
+    -- enabled (server/printing.lua). Sent here, on every open, since it's the one round-trip the
+    -- client already makes before drawing the desktop - see client/dui.lua's OpenMessage.
+    printer = PrintBridge and PrintBridge.up() or false,
   })
 end)
 

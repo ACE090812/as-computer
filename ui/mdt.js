@@ -48,7 +48,17 @@
     not_found: ['md_err_not_found', 'Not found.'],
     network: ['md_err_network', 'Could not reach the server.'],
     error: ['md_err_error', 'Something went wrong.'],
-    case_not_found: ['md_err_case_not_found', 'No existing case with that number — leave blank to start a new one, or check the number and try again.']
+    case_not_found: ['md_err_case_not_found', 'No existing case with that number — leave blank to start a new one, or check the number and try again.'],
+    no_suspect: ['md_err_no_suspect', 'This report has no suspect to jail.'],
+    invalid_time: ['md_err_invalid_time', 'Enter a jail time above zero.'],
+    offline: ['md_err_offline', 'The suspect must be online to jail them.'],
+    jail_unavailable: ['md_err_jail_unavailable', 'The jail system is not running on this server.'],
+    jail_failed: ['md_err_jail_failed', 'Could not jail the suspect — check the server console.'],
+    sent_to_court: ['md_err_sent_to_court', 'This case has been sent to court — it cannot be jailed directly.'],
+    already_jailed: ['md_err_already_jailed', 'This suspect has already been jailed for this report.'],
+    already_sent_to_court: ['md_err_already_sent_to_court', 'This report has already been sent to court.'],
+    no_evidences: ['md_err_no_evidences', 'The evidences resource is not running.'],
+    unknown_code: ['md_err_unknown_code', "That sample is no longer in your inventory — reopen the picker and try again."]
   };
   function errText(res) { var e = ERR[res && res.reason] || ERR.error; return T(e[0], e[1]); }
 
@@ -73,7 +83,7 @@
       vehQ: '', vehicles: [], vehiclesLoaded: false, vehicleCur: null,
       reports: [], reportsLoaded: false, reportCur: null, reportEdit: null, reportCaseErr: '',
       bolos: [], bolosLoaded: false, boloNew: null, boloCtx: null,
-      confirmDel: false
+      confirmDel: false, evidencePicker: null, phonePicker: null, bioPicker: null
     };
   }
   fresh();
@@ -109,7 +119,122 @@
     api('personGet', { cid: cid }).then(function (res) {
       M.loading = false;
       if (!res.ok) { M.error = errText(res); return render(); }
-      M.personCur = res.data.person; M.error = ''; M.confirmDel = false;
+      M.personCur = res.data.person; M.error = ''; M.confirmDel = false; M.bioPicker = null;
+      render();
+    });
+  }
+  function toggleBioPicker(type) {
+    if (M.bioPicker && M.bioPicker.type === type) { M.bioPicker = null; return render(); }
+    M.bioPicker = { type: type, samples: null }; render();
+    api('personLinkBiometric', { mode: 'list', type: type }).then(function (res) {
+      if (!M.bioPicker || M.bioPicker.type !== type) return; // closed / switched before this returned
+      if (!res.ok) { M.error = errText(res); M.bioPicker = null; return render(); }
+      M.bioPicker.samples = res.data.samples || [];
+      render();
+    });
+  }
+  function pickBio(code) {
+    if (!M.personCur || !M.bioPicker) return;
+    var type = M.bioPicker.type;
+    M.loading = true; render();
+    api('personLinkBiometric', { mode: 'link', type: type, cid: M.personCur.cid, code: code }).then(function (res) {
+      M.loading = false;
+      if (!res.ok) { M.error = errText(res); return render(); }
+      M.personCur = res.data.person;
+      M.bioPicker = null;
+      render();
+    });
+  }
+  function toggleEvidencePicker() {
+    if (M.evidencePicker) { M.evidencePicker = null; return render(); }
+    M.evidencePicker = []; render();
+    api('evidenceUnlinked').then(function (res) {
+      if (!res.ok) { M.error = errText(res); M.evidencePicker = null; return render(); }
+      M.evidencePicker = res.data.folders || [];
+      render();
+    });
+  }
+  function pickEvidence(folderId) {
+    if (!M.reportCur || !M.reportCur.case_number) return;
+    M.loading = true; render();
+    api('evidenceLink', { folderId: folderId, case_number: M.reportCur.case_number }).then(function (res) {
+      M.loading = false;
+      if (!res.ok) { M.error = errText(res); return render(); }
+      M.reportCur.evidence = res.data.evidence || [];
+      M.evidencePicker = null;
+      render();
+    });
+  }
+  function unlinkEvidence(folderId) {
+    if (!M.reportCur) return;
+    M.loading = true; render();
+    api('evidenceUnlink', { folderId: folderId, case_number: M.reportCur.case_number }).then(function (res) {
+      M.loading = false;
+      if (!res.ok) { M.error = errText(res); return render(); }
+      M.reportCur.evidence = res.data.evidence || [];
+      render();
+    });
+  }
+  function addReportAttachment() {
+    var el = $('mdt-r-attachurl'), val = el && el.value.trim();
+    if (!val || !M.reportCur || !M.reportCur.case_number) return;
+    M.loading = true; render();
+    api('reportAttachmentAdd', { case_number: M.reportCur.case_number, url: val }).then(function (res) {
+      M.loading = false;
+      if (!res.ok) { M.error = errText(res); return render(); }
+      M.reportCur.attachments = res.data.attachments || [];
+      render();
+    });
+  }
+  function deleteReportAttachment(id) {
+    if (!M.reportCur || !M.reportCur.case_number) return;
+    M.loading = true; render();
+    api('reportAttachmentDelete', { id: id, case_number: M.reportCur.case_number }).then(function (res) {
+      M.loading = false;
+      if (!res.ok) { M.error = errText(res); return render(); }
+      M.reportCur.attachments = res.data.attachments || [];
+      render();
+    });
+  }
+  function togglePhonePicker() {
+    if (M.phonePicker) { M.phonePicker = null; return render(); }
+    M.phonePicker = []; render();
+    api('reportPhoneList').then(function (res) {
+      if (!res.ok) { M.error = errText(res); M.phonePicker = null; return render(); }
+      M.phonePicker = res.data.photos || [];
+      render();
+    });
+  }
+  function importPhonePhoto(id) {
+    if (!M.reportCur || !M.reportCur.case_number) return;
+    M.loading = true; render();
+    api('reportPhoneImport', { case_number: M.reportCur.case_number, ids: [id] }).then(function (res) {
+      M.loading = false;
+      if (!res.ok) { M.error = errText(res); return render(); }
+      M.reportCur.attachments = res.data.attachments || [];
+      if (M.phonePicker) M.phonePicker = M.phonePicker.filter(function (p) { return p.id !== id; });
+      render();
+    });
+  }
+  function jailSuspect() {
+    if (!M.reportCur) return;
+    var el = $('mdt-r-jailmins'), mins = el && parseInt(el.value, 10);
+    if (!mins || mins <= 0) { M.error = errText({ reason: 'invalid_time' }); return render(); }
+    M.loading = true; render();
+    api('reportJailSuspect', { id: M.reportCur.id, minutes: mins }).then(function (res) {
+      M.loading = false;
+      if (!res.ok) { M.error = errText(res); return render(); }
+      M.reportCur.jailed_at = res.data.jailedAt;
+      render();
+    });
+  }
+  function sendToCourt() {
+    if (!M.reportCur) return;
+    M.loading = true; render();
+    api('reportSendToCourt', { id: M.reportCur.id }).then(function (res) {
+      M.loading = false;
+      if (!res.ok) { M.error = errText(res); return render(); }
+      M.reportCur.courtCase = res.data.courtCase;
       render();
     });
   }
@@ -145,7 +270,7 @@
     api('reportGet', { id: id }).then(function (res) {
       M.loading = false;
       if (!res.ok) { M.error = errText(res); return render(); }
-      M.reportCur = res.data.report; M.reportEdit = null; M.error = ''; M.confirmDel = false; M.reportCaseErr = '';
+      M.reportCur = res.data.report; M.reportEdit = null; M.error = ''; M.confirmDel = false; M.reportCaseErr = ''; M.evidencePicker = null; M.phonePicker = null;
       ensureCharges(render);
       render();
     });
@@ -277,7 +402,39 @@
       '</div></div>';
     html += '<div class="mdt-dbody">';
 
-    html += '<h4>' + esc(T('md_suspect_reports', 'Suspect in reports')) + '</h4>';
+    if (p.biometrics || p.firearms) {
+      html += '<h4>' + esc(T('md_biometric_data', 'Biometric data')) + '</h4>';
+      html += '<div class="mdt-dmeta">' +
+        '<div>' + esc(T('md_fingerprint', 'Fingerprint')) + '<b>' + esc((p.biometrics && p.biometrics.fingerprint) || T('md_unknown', 'Unknown')) + '</b></div>' +
+        '<div>' + esc(T('md_dna', 'DNA')) + '<b>' + esc((p.biometrics && p.biometrics.dna) || T('md_unknown', 'Unknown')) + '</b></div>' +
+        '</div>';
+
+      html += '<div class="mdt-actions" style="margin-top:.5rem">' +
+        '<button type="button" class="mdt-btn" data-a="bio-picker" data-type="fingerprint">' + esc((M.bioPicker && M.bioPicker.type === 'fingerprint') ? T('md_hide_bio_picker', 'Close') : T('md_link_fingerprint', '+ Link fingerprint')) + '</button>' +
+        '<button type="button" class="mdt-btn" data-a="bio-picker" data-type="dna">' + esc((M.bioPicker && M.bioPicker.type === 'dna') ? T('md_hide_bio_picker', 'Close') : T('md_link_dna', '+ Link DNA')) + '</button></div>';
+
+      if (M.bioPicker) {
+        var bioLabel = M.bioPicker.type === 'dna' ? T('md_dna', 'DNA') : T('md_fingerprint', 'Fingerprint');
+        html += '<div class="mdt-evidence-picker" style="margin-top:.4rem">';
+        if (M.bioPicker.samples === null) {
+          html += '<div class="mdt-empty">' + esc(T('md_loading', 'Loading…')) + '</div>';
+        } else if (!M.bioPicker.samples.length) {
+          html += '<div class="mdt-empty">' + esc(T('md_no_bio_samples', 'No analysed ' + bioLabel + ' samples in your inventory.')) + '</div>';
+        } else {
+          html += M.bioPicker.samples.map(function (s) {
+            return '<div class="mdt-row clk" data-a="pick-bio" data-code="' + esc(s.code) + '"><div class="ic">🧬</div><div><div class="tn">' + esc(s.label) + '</div><div class="ts">' + esc(s.crimeScene || '') + '</div></div></div>';
+          }).join('');
+        }
+        html += '</div>';
+      }
+
+      html += '<h4 style="margin-top:1.2rem">' + esc(T('md_registered_firearms', 'Registered firearms')) + '</h4>';
+      html += (p.firearms && p.firearms.length) ? p.firearms.map(function (f) {
+        return '<div class="mdt-row clk" data-open-firearm="' + esc(f.serial) + '"><div class="ic">🔫</div><div><div class="tn">' + esc(f.label) + '</div><div class="ts">' + esc(f.serial) + (f.status ? ' · ' + esc(f.status) : '') + '</div></div></div>';
+      }).join('') : '<div class="mdt-empty">' + esc(T('md_none_on_file', 'None on file.')) + '</div>';
+    }
+
+    html += '<h4 style="margin-top:1.2rem">' + esc(T('md_suspect_reports', 'Suspect in reports')) + '</h4>';
     var hist = [];
     (p.reports || []).forEach(function (r) { hist.push({ t: r.title, s: stamp(r.created_at) + ' · ' + r.author_name, id: r.id }); });
     (p.bookings || []).forEach(function (b) {
@@ -460,8 +617,73 @@
       }
     }
 
+    // Sentencing: either Jail Suspect (guilty plea/no contest - immediate, via xt-prison + one DBS
+    // record per charge, server/mdt.lua's reportJailSuspect) or Send to Court (not guilty plea -
+    // files an mdt_court_cases row for the future Court MDT to assign a judge/solicitors and a
+    // court date; reportSendToCourt). Once either has happened, both controls disappear - a case
+    // can only go one way, and never twice.
+    if (r.suspect_cid) {
+      html += '<h4 style="margin-top:1.2rem">' + esc(T('md_sentencing', 'Sentencing')) + '</h4>';
+      if (r.courtCase) {
+        html += '<div class="mdt-empty" style="padding:0.3rem 0">' + esc(T('md_awaiting_court', '⚖️ Sent to court')) + ' — ' + esc(r.courtCase.submitted_at) + ' — ' + esc(T('md_awaiting_court2', 'awaiting judge & solicitor assignment.')) + '</div>';
+      } else if (r.jailed_at) {
+        html += '<div class="mdt-empty" style="padding:0.3rem 0">' + esc(T('md_already_jailed', 'These charges are already on this suspect’s DBS record.')) + '</div>';
+      } else {
+        var suspectOffline = r.suspectOnline === false;
+        html += '<div class="mdt-photoform"><input class="mdt-inp" id="mdt-r-jailmins" type="number" min="1" step="1"' +
+          (suspectOffline ? ' disabled' : '') + ' value="' + (haveTotals && totalMonths > 0 ? totalMonths : '') + '" placeholder="' + esc(T('md_jail_minutes_ph', 'Minutes (months)')) + '">' +
+          '<button type="button" class="mdt-btn pri" data-a="jail-suspect"' + (suspectOffline ? ' disabled' : '') + '>' + esc(T('md_jail_suspect_btn', '🔒 Jail Suspect')) + '</button>' +
+          '<button type="button" class="mdt-btn" data-a="send-to-court">' + esc(T('md_send_to_court_btn', '⚖️ Send to Court')) + '</button></div>';
+        if (suspectOffline) html += '<div class="mdt-empty" style="padding:0.3rem 0">' + esc(T('md_suspect_offline', 'Suspect must be online to jail them. Sending to court doesn’t need them online.')) + '</div>';
+      }
+    }
+
     html += '<h4 style="margin-top:1.2rem">' + esc(T('md_narrative', 'Narrative')) + '</h4>';
     html += '<div class="mdt-narrative">' + (looksHtml(r.narrative) ? (r.narrative || '') : esc(r.narrative || '').replace(/\n/g, '<br>')) + '</div>';
+
+    if (r.case_number) {
+      // Evidence Laptop reports (DNA/Fingerprint/Ballistics matches), filed into this case's own
+      // folder in File Explorer's Case Files area — see server/evidence_reports.lua.
+      html += '<h4 style="margin-top:1.2rem">' + esc(T('md_linked_evidence', 'Linked evidence')) + '</h4>';
+      html += (r.evidence && r.evidence.length) ? r.evidence.map(function (f) {
+        return '<div class="mdt-row"><div class="ic">🧪</div><div><div class="tn">' + esc(f.name) + '</div><div class="ts">' + esc(stamp(f.created_at)) + '</div></div>' +
+          '<button type="button" class="mdt-btn" data-a="unlink-evidence" data-id="' + f.id + '">' + esc(T('md_unlink', 'Unlink')) + '</button></div>';
+      }).join('') : '<div class="mdt-empty">' + esc(T('md_no_evidence', 'No evidence linked to this case yet.')) + '</div>';
+      html += '<div class="mdt-actions" style="margin-top:.5rem">' +
+        '<button type="button" class="mdt-btn" data-a="link-evidence">' + esc(M.evidencePicker ? T('md_hide_evidence_picker', 'Close') : T('md_link_evidence', '+ Link evidence')) + '</button></div>';
+      if (M.evidencePicker) {
+        html += '<div class="mdt-evidence-picker" style="margin-top:.4rem">' + (M.evidencePicker.length
+          ? M.evidencePicker.map(function (f) {
+            return '<div class="mdt-row clk" data-a="pick-evidence" data-id="' + f.id + '"><div class="ic">📁</div><div><div class="tn">' + esc(f.name) + '</div><div class="ts">' + esc(stamp(f.created_at)) + '</div></div></div>';
+          }).join('')
+          : '<div class="mdt-empty">' + esc(T('md_no_unlinked_evidence', 'No unlinked evidence waiting in the Evidence folder.')) + '</div>') + '</div>';
+      }
+
+      // Images/videos pasted onto this report - saved into the SAME case's Evidence subfolder in
+      // File Explorer as the linked evidence above (server/files.lua's Files.AddLegalCaseAttachment).
+      html += '<h4 style="margin-top:1.2rem">' + esc(T('md_attachments', 'Attachments')) + '</h4>';
+      var atts = r.attachments || [];
+      html += atts.length ? '<div class="mdt-photos">' + atts.map(function (f) {
+        var media = f.kind === 'video'
+          ? '<video src="' + esc(f.url) + '" controls preload="metadata"></video>'
+          : '<img src="' + esc(f.url) + '" alt="">';
+        return '<div class="mdt-photo">' + media +
+          '<button type="button" class="del" data-a="del-attachment" data-id="' + f.id + '" title="' + esc(T('md_delete', 'Delete')) + '">×</button></div>';
+      }).join('') + '</div>' : '<div class="mdt-empty" style="padding:0.4rem 0">' + esc(T('md_no_attachments', 'No images or videos attached yet.')) + '</div>';
+      html += '<div class="mdt-photoform"><input class="mdt-inp" id="mdt-r-attachurl" type="text" placeholder="' + esc(T('md_attach_url_ph', 'Paste an image or video link (Discord / imgur / Fivemanage)…')) + '">' +
+        '<button type="button" class="mdt-btn pri" data-a="add-attachment">' + esc(T('md_add_attachment', 'Add attachment')) + '</button></div>';
+      html += '<div class="mdt-actions" style="margin-top:.5rem">' +
+        '<button type="button" class="mdt-btn" data-a="phone-attachment">' + esc(M.phonePicker ? T('md_hide_phone_picker', 'Close') : T('md_import_from_phone', '📱 Import from phone')) + '</button></div>';
+      if (M.phonePicker) {
+        html += '<div class="mdt-photos" style="margin-top:.4rem">' + (M.phonePicker.length
+          ? M.phonePicker.map(function (ph) {
+            var media = ph.isVideo ? '<video src="' + esc(ph.url) + '" preload="metadata"></video>' : '<img src="' + esc(ph.url) + '" alt="">';
+            return '<div class="mdt-photo clk" data-a="pick-phone" data-id="' + esc(ph.id) + '">' + media + '</div>';
+          }).join('')
+          : '<div class="mdt-empty">' + esc(T('md_no_phone_photos', 'No photos or videos on this phone.')) + '</div>') + '</div>';
+      }
+    }
+
     html += '<div class="mdt-actions">' +
       '<button type="button" class="mdt-btn" data-a="edit-report">' + esc(T('md_edit_report', 'Edit report')) + '</button>' +
       (M.boot && M.boot.isAdmin ? '<button type="button" class="mdt-btn ' + (M.confirmDel ? 'danger' : '') + '" data-a="del-report">' +
@@ -520,8 +742,8 @@
   }
   function editReport(r) {
     M.reportCaseErr = '';
-    M.reportEdit = r ? { id: r.id, title: r.title, type: r.type, involved: r.involved, charges: r.charges, narrative: r.narrative, case_number: r.case_number || '', suspect_name: r.suspect_name || '' } :
-      { id: null, title: '', type: (M.boot && M.boot.reportTypes && M.boot.reportTypes[0]) || 'Incident', involved: '', charges: '', narrative: '', case_number: '', suspect_name: '' };
+    M.reportEdit = r ? { id: r.id, title: r.title, type: r.type, involved: r.involved, charges: r.charges, narrative: r.narrative, case_number: r.case_number || '', suspect_name: r.suspect_name || '', suspect_cid: r.suspect_cid || null } :
+      { id: null, title: '', type: (M.boot && M.boot.reportTypes && M.boot.reportTypes[0]) || 'Incident', involved: '', charges: '', narrative: '', case_number: '', suspect_name: '', suspect_cid: null };
     ensureCharges(function () {});
     render();
   }
@@ -643,10 +865,32 @@
       var gv = e.target.closest('[data-open-vehicle]'); if (gv) { M.view = 'vehicles'; return openVehicle(gv.dataset.openVehicle); }
       var grr = e.target.closest('[data-goto-report]'); if (grr) { M.view = 'reports'; return openReport(+grr.dataset.gotoReport); }
       var gp = e.target.closest('[data-goto-person]'); if (gp) { M.view = 'people'; return openPerson(gp.dataset.gotoPerson); }
+      var gf = e.target.closest('[data-open-firearm]');
+      if (gf) {
+        // Firearms Registry stays its own separate app/icon (evidences' own tool) — this just
+        // brings it to front and hands it the full firearm record, same as clicking it inside
+        // evidences' old Citizens app used to. See ui/evidences.js's exposed hook for the other half.
+        var fArr = (M.personCur && M.personCur.firearms) || [];
+        var fObj = null;
+        for (var fi = 0; fi < fArr.length; fi++) { if (fArr[fi].serial === gf.dataset.openFirearm) { fObj = fArr[fi]; break; } }
+        if (fObj && window.__openEvidencesApp) window.__openEvidencesApp('firearms_registry', { firearm: fObj });
+        return;
+      }
 
       var a = e.target.closest('[data-a]');
       if (a) {
         var act = a.dataset.a;
+        if (act === 'link-evidence') return toggleEvidencePicker();
+        if (act === 'pick-evidence') return pickEvidence(+a.dataset.id);
+        if (act === 'unlink-evidence') return unlinkEvidence(+a.dataset.id);
+        if (act === 'bio-picker') return toggleBioPicker(a.dataset.type);
+        if (act === 'pick-bio') return pickBio(a.dataset.code);
+        if (act === 'add-attachment') return addReportAttachment();
+        if (act === 'del-attachment') return deleteReportAttachment(+a.dataset.id);
+        if (act === 'phone-attachment') return togglePhonePicker();
+        if (act === 'pick-phone') return importPhonePhoto(a.dataset.id);
+        if (act === 'jail-suspect') return jailSuspect();
+        if (act === 'send-to-court') return sendToCourt();
         if (act === 'new-report') return editReport(null);
         if (act === 'edit-report') return editReport(M.reportCur);
         if (act === 'cancel-report') { M.reportEdit = null; M.reportCaseErr = ''; return render(); }
@@ -767,6 +1011,10 @@
       if (e.target.id === 'mdt-pq') { M.peopleQ = e.target.value; return debounceSearch(loadPeople); }
       if (e.target.id === 'mdt-vq') { M.vehQ = e.target.value; return debounceSearch(loadVehicles); }
       if (e.target.id === 'mdt-r-suspect' || e.target.id === 'mdt-r-involved') {
+        // Manual typing invalidates any previously-picked citizen id for the suspect field, so a
+        // report never ends up crediting jail/court actions to the wrong person after the officer
+        // edits the name post-pick. A fresh pick from the dropdown re-attaches it (see mousedown).
+        if (e.target.id === 'mdt-r-suspect' && M.reportEdit) M.reportEdit.suspect_cid = null;
         var q = e.target.value, listId = e.target.id + '-list';
         return debounceSearch(function () { fillNameSuggestions(listId, q); });
       }
@@ -798,7 +1046,15 @@
         e.preventDefault();
         var list = opt.closest('.mdt-ac-list');
         var input = list && list.previousElementSibling;
-        if (input) { input.value = opt.dataset.namePick; input.dispatchEvent(new Event('change')); }
+        if (input) {
+          input.value = opt.dataset.namePick;
+          // Only the suspect field's pick maps to a stored citizen id - there's no visible cid
+          // input, so stash it straight on the in-memory edit buffer for saveReport() to send.
+          // Picking a name re-links suspect_cid; typing over it afterwards clears it again (see
+          // the 'input' listener below), so a stale cid can never outlive the name it came from.
+          if (input.id === 'mdt-r-suspect' && M.reportEdit) M.reportEdit.suspect_cid = opt.dataset.namePickCid || null;
+          input.dispatchEvent(new Event('change'));
+        }
         list.hidden = true; list.innerHTML = '';
         return;
       }
@@ -854,7 +1110,7 @@
       var people = res.data.people || [];
       if (!people.length) { list.hidden = true; list.innerHTML = ''; return; }
       list.innerHTML = people.map(function (p) {
-        return '<div class="mdt-ac-opt" data-name-pick="' + esc(p.name) + '">' + esc(p.name) +
+        return '<div class="mdt-ac-opt" data-name-pick="' + esc(p.name) + '" data-name-pick-cid="' + esc(p.cid || '') + '">' + esc(p.name) +
           '<span>' + esc(T('md_dob', 'DOB')) + ' ' + esc(p.dob || '—') + '</span></div>';
       }).join('');
       list.hidden = false;

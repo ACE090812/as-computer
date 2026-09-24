@@ -50,6 +50,17 @@ CreateThread(function()
   if not hasCaseNumber or hasCaseNumber == 0 then
     pcall(function() MySQL.query.await('ALTER TABLE mdt_reports ADD COLUMN case_number VARCHAR(20) NULL') end)
   end
+  -- Set the moment a report's charges were sent down (xt-prison jail time + one DBS criminal
+  -- record per charge, via the "Jail Suspect" button) - not null means it's already been done for
+  -- THIS report's charges, so re-clicking the button (e.g. to add more time) never double-files
+  -- the same convictions onto the suspect's DBS record.
+  local hasJailedAt = MySQL.scalar.await([[
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'mdt_reports' AND column_name = 'jailed_at'
+  ]])
+  if not hasJailedAt or hasJailedAt == 0 then
+    pcall(function() MySQL.query.await('ALTER TABLE mdt_reports ADD COLUMN jailed_at INT NULL') end)
+  end
   MySQL.query.await([[
     CREATE TABLE IF NOT EXISTS `mdt_bolos` (
       `id` INT NOT NULL AUTO_INCREMENT,
@@ -74,6 +85,96 @@ CreateThread(function()
       `report_id` INT NULL,
       `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  ]])
+  -- A report's suspect either goes straight to jail (Jail Suspect - guilty plea/no contest) or, if
+  -- they plead not guilty, gets sent to court instead. This table is shaped for the Court MDT that
+  -- will be built later: judge/defence-solicitor/prosecution-solicitor sign-on and a court date are
+  -- all nullable here because nothing populates them yet - reportSendToCourt below only ever fills
+  -- report_id/case_number/suspect/charges/status/submitted_*. verdict/sentence_minutes/resolved_at
+  -- are for the Court MDT to fill in once a trial concludes (a Guilty verdict would reuse the same
+  -- xt-prison + DBS pipeline reportJailSuspect already uses).
+  MySQL.query.await([[
+    CREATE TABLE IF NOT EXISTS `mdt_court_cases` (
+      `id` INT NOT NULL AUTO_INCREMENT,
+      `report_id` INT NOT NULL,
+      `case_number` VARCHAR(20) NULL,
+      `suspect_cid` VARCHAR(64) NOT NULL,
+      `suspect_name` VARCHAR(120) NULL,
+      `charges` TEXT NULL,
+      `status` VARCHAR(20) NOT NULL DEFAULT 'awaiting_assignment',
+      `judge_cid` VARCHAR(64) NULL,
+      `judge_name` VARCHAR(120) NULL,
+      `defense_cid` VARCHAR(64) NULL,
+      `defense_name` VARCHAR(120) NULL,
+      `prosecution_cid` VARCHAR(64) NULL,
+      `prosecution_name` VARCHAR(120) NULL,
+      `court_date` INT NULL,
+      `verdict` VARCHAR(20) NULL,
+      `sentence_minutes` INT NULL,
+      `resolved_at` INT NULL,
+      `submitted_by` VARCHAR(64) NOT NULL,
+      `submitted_by_name` VARCHAR(120) NOT NULL DEFAULT 'Officer',
+      `submitted_at` INT NOT NULL,
+      PRIMARY KEY (`id`),
+      KEY `idx_report` (`report_id`),
+      KEY `idx_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  ]])
+  -- Same guarded-ALTER pattern as mdt_reports above, for columns added to mdt_court_cases after it
+  -- first shipped: which courtroom a hearing is in, each side's private case notes, and whether each
+  -- side has disclosed (locking their own notes/witness list as read-only to the other side and to
+  -- themselves - un-disclosing re-locks BOTH sides, since blind disclosure only means anything if
+  -- it's not one-sided).
+  local function addColumnIfMissing(table_, column, ddl)
+    local has = MySQL.scalar.await([[
+      SELECT COUNT(*) FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+    ]], { table_, column })
+    if not has or has == 0 then
+      pcall(function() MySQL.query.await('ALTER TABLE `' .. table_ .. '` ADD COLUMN ' .. ddl) end)
+    end
+  end
+  addColumnIfMissing('mdt_court_cases', 'courtroom', '`courtroom` VARCHAR(60) NULL')
+  addColumnIfMissing('mdt_court_cases', 'prosecution_notes', '`prosecution_notes` TEXT NULL')
+  addColumnIfMissing('mdt_court_cases', 'defense_notes', '`defense_notes` TEXT NULL')
+  addColumnIfMissing('mdt_court_cases', 'prosecution_disclosed', '`prosecution_disclosed` TINYINT NOT NULL DEFAULT 0')
+  addColumnIfMissing('mdt_court_cases', 'defense_disclosed', '`defense_disclosed` TINYINT NOT NULL DEFAULT 0')
+  addColumnIfMissing('mdt_court_cases', 'summary', '`summary` TEXT NULL')
+  addColumnIfMissing('mdt_court_cases', 'fine', '`fine` INT NULL')
+  -- One row per witness a side has added ahead of the hearing - pre-trial/bundle purposes only, no
+  -- "call to testify" live-hearing mechanic (out of scope for now).
+  MySQL.query.await([[
+    CREATE TABLE IF NOT EXISTS `mdt_court_witnesses` (
+      `id` INT NOT NULL AUTO_INCREMENT,
+      `court_case_id` INT NOT NULL,
+      `side` VARCHAR(12) NOT NULL,
+      `name` VARCHAR(120) NOT NULL,
+      `note` VARCHAR(255) NULL,
+      `added_by` VARCHAR(64) NOT NULL,
+      `added_by_name` VARCHAR(120) NOT NULL DEFAULT 'Solicitor',
+      `added_at` INT NOT NULL,
+      PRIMARY KEY (`id`),
+      KEY `idx_case` (`court_case_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  ]])
+  -- A motion either side files to the judge (e.g. "drop charge X", "admit this evidence"). Can be
+  -- filed/ruled on any time before the verdict - there's no separate "live hearing" state gating it.
+  MySQL.query.await([[
+    CREATE TABLE IF NOT EXISTS `mdt_court_motions` (
+      `id` INT NOT NULL AUTO_INCREMENT,
+      `court_case_id` INT NOT NULL,
+      `side` VARCHAR(12) NOT NULL,
+      `filed_by` VARCHAR(64) NOT NULL,
+      `filed_by_name` VARCHAR(120) NOT NULL DEFAULT 'Solicitor',
+      `text` TEXT NOT NULL,
+      `status` VARCHAR(10) NOT NULL DEFAULT 'pending',
+      `ruling_text` VARCHAR(255) NULL,
+      `ruled_by_name` VARCHAR(120) NULL,
+      `filed_at` INT NOT NULL,
+      `ruled_at` INT NULL,
+      PRIMARY KEY (`id`),
+      KEY `idx_case` (`court_case_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   ]])
   MySQL.query.await([[
@@ -242,6 +343,27 @@ local function chargeItems(charges)
     if t ~= '' then items[#items + 1] = t end
   end
   return items
+end
+
+-- Same "CODE - Title" parsing ui/mdt.js's parseChargeString does client-side, resolved against the
+-- server's own Config.MDT.charges (the source 'chargesList' itself reads from) so the Jail Suspect
+-- button's default sentence and its DBS entries always match what the officer sees on the report.
+local function resolvedCharges(charges)
+  local out = {}
+  for _, entry in ipairs(chargeItems(charges)) do
+    local code, title = entry:match('^(%S+)%s*%-%s*(.+)$')
+    local def = nil
+    if code then
+      for _, ch in ipairs(Config.MDT and Config.MDT.charges or {}) do
+        if ch.code == code then def = ch; break end
+      end
+    end
+    out[#out + 1] = {
+      code = code, title = def and def.title or (title or entry),
+      type = def and def.type or nil, months = def and def.months or nil, fine = def and def.fine or nil,
+    }
+  end
+  return out
 end
 
 local function kvLine(label, value)
@@ -422,6 +544,27 @@ local function getCitizen(cid)
   person.bookings = bookings
   person.notes = notes
   person.photos = photos
+
+  -- Forensics (from the `evidences` resource, folded into this profile instead of its own
+  -- separate Citizens app): evidences' own citizen sync is on the same `citizenid`, so `cid` here
+  -- IS its `identifier` column directly — no cross-resource call needed, just read its tables.
+  if GetResourceState('evidences') == 'started' then
+    local ok = pcall(function()
+      local bio = MySQL.single.await([[
+        SELECT lf.fingerprint, ld.dna
+        FROM (SELECT ? AS identifier) AS dummy
+        LEFT JOIN linked_fingerprint lf ON dummy.identifier = lf.identifier
+        LEFT JOIN linked_dna ld ON dummy.identifier = ld.identifier
+      ]], { cid })
+      person.biometrics = { fingerprint = bio and bio.fingerprint or nil, dna = bio and bio.dna or nil }
+
+      person.firearms = MySQL.query.await(
+        'SELECT serial, label, imagePath, status, identifier, reason, registeredBy, registeredAt FROM firearms_registry WHERE identifier = ? ORDER BY registeredAt DESC LIMIT 20',
+        { cid }) or {}
+    end)
+    if not ok then person.biometrics = nil; person.firearms = nil end
+  end
+
   return person
 end
 
@@ -552,6 +695,66 @@ MotCallback.Register('mdtApi', function(src, respond, name, data)
     return respond({ ok = true, data = { person = getCitizen(data.cid) } })
   end
 
+  -- Biometric linking: DNA/fingerprint samples are physical evidence items (`evidences`' own
+  -- "Collected Blood"/"Collected Fingerprint" items) sitting in the requesting officer's OWN
+  -- inventory once analysed - there is no human-typed code anywhere. `mode = 'list'` reads the
+  -- officer's own inventory (exactly like evidences' own DNA/fingerprint app does for `source`)
+  -- and returns analysed samples with the internal code already attached, so the UI only ever
+  -- shows a pick-list; `mode = 'link'` takes one of those codes straight back and writes it into
+  -- evidences' own linked_dna/linked_fingerprint tables (same DELETE-then-INSERT evidences' own
+  -- callback performs), so evidences' laptop apps immediately see the match too.
+  if name == 'personLinkBiometric' then
+    if GetResourceState('evidences') ~= 'started' then return respond({ ok = false, reason = 'no_evidences' }) end
+    local btype = data.type
+    if btype ~= 'dna' and btype ~= 'fingerprint' then return respond({ ok = false, reason = 'invalid' }) end
+
+    if data.mode == 'list' then
+      local items = exports.ox_inventory:GetInventoryItems(src)
+      local out = {}
+      for _, item in pairs(items or {}) do
+        local metadata = item.metadata or {}
+        local bio = metadata[btype]
+        if bio and bio.owner and bio.analysed then
+          local info = metadata.information or {}
+          out[#out + 1] = {
+            slot = item.slot,
+            code = bio.owner,
+            label = metadata.label or item.label,
+            crimeScene = info.crimeScene or '',
+            collectedAt = metadata.createdAt or '',
+          }
+        end
+      end
+      return respond({ ok = true, data = { samples = out } })
+    end
+
+    if data.mode == 'link' then
+      local cid = (data.cid or ''):sub(1, 64)
+      local code = data.code
+      if cid == '' or not code or code == '' then return respond({ ok = false, reason = 'invalid' }) end
+
+      -- confirm `code` really is a sample the officer is currently holding, rather than trusting
+      -- whatever the client sends - never write a code we haven't just seen in this officer's own
+      -- inventory ourselves.
+      local items = exports.ox_inventory:GetInventoryItems(src)
+      local found = false
+      for _, item in pairs(items or {}) do
+        local bio = (item.metadata or {})[btype]
+        if bio and bio.owner == code and bio.analysed then found = true; break end
+      end
+      if not found then return respond({ ok = false, reason = 'unknown_code' }) end
+
+      MySQL.update.await(('DELETE FROM linked_%s WHERE identifier = ?'):format(btype), { cid })
+      MySQL.insert.await(
+        ('INSERT INTO linked_%s (%s, identifier) VALUES (?, ?) ON DUPLICATE KEY UPDATE identifier = ?'):format(btype, btype),
+        { code, cid, cid })
+
+      return respond({ ok = true, data = { person = getCitizen(cid) } })
+    end
+
+    return respond({ ok = false, reason = 'invalid' })
+  end
+
   if name == 'vehicleSearch' then
     return respond({ ok = true, data = { vehicles = searchVehicles(data.query) } })
   end
@@ -616,10 +819,165 @@ MotCallback.Register('mdtApi', function(src, respond, name, data)
   if name == 'reportGet' then
     if not data.id then return respond({ ok = false, reason = 'invalid' }) end
     local r = MySQL.single.await(
-      'SELECT id, title, type, involved, charges, narrative, suspect_cid, suspect_name, author_name, case_number, created_at FROM mdt_reports WHERE id = ?', { data.id })
+      'SELECT id, title, type, involved, charges, narrative, suspect_cid, suspect_name, author_name, case_number, jailed_at, created_at FROM mdt_reports WHERE id = ?', { data.id })
     if not r then return respond({ ok = false, reason = 'not_found' }) end
     r.created_at = fmtWhen(r.created_at)
+    -- So the UI can grey out "Jail Suspect" up front rather than let the officer fill in a time
+    -- and only find out on click that xt-prison needs the suspect online (it works off their
+    -- server id, not their citizen id - see reportJailSuspect below).
+    if r.suspect_cid and r.suspect_cid ~= '' then
+      r.suspectOnline = Bridge.FindSource(r.suspect_cid) ~= nil
+    end
+    -- An unresolved court case (see reportSendToCourt) hides Jail Suspect/Send to Court on the
+    -- report until the future Court MDT resolves it - only ever set here, never here resolved.
+    local court = MySQL.single.await(
+      "SELECT id, status, submitted_at FROM mdt_court_cases WHERE report_id = ? AND status != 'resolved' ORDER BY id DESC LIMIT 1", { data.id })
+    if court then
+      court.submitted_at = fmtWhen(court.submitted_at)
+      r.courtCase = court
+    end
+    -- Evidence Laptop reports (DNA/Fingerprint/Ballistics matches) linked to this case, filed away
+    -- in File Explorer's shared Case Files area — see server/evidence_reports.lua.
+    if r.case_number and r.case_number ~= '' and EvidenceReports then
+      r.evidence = EvidenceReports.listForCase(r.case_number)
+    end
+    -- Images/videos pasted onto this report (server/files.lua's Files.AddLegalCaseAttachment),
+    -- filed the same place the linked evidence lives: the case's own Evidence subfolder.
+    if r.case_number and r.case_number ~= '' then
+      r.attachments = Files.ListLegalCaseAttachments(r.case_number)
+    end
     return respond({ ok = true, data = { report = r } })
+  end
+
+  if name == 'evidenceUnlinked' then
+    if not EvidenceReports then return respond({ ok = true, data = { folders = {} } }) end
+    return respond({ ok = true, data = { folders = EvidenceReports.listUnlinked() } })
+  end
+
+  if name == 'evidenceLink' then
+    if not (EvidenceReports and data.folderId and data.case_number and data.case_number ~= '') then
+      return respond({ ok = false, reason = 'invalid' })
+    end
+    local done = EvidenceReports.linkToCase(data.folderId, data.case_number)
+    if not done then return respond({ ok = false, reason = 'error' }) end
+    return respond({ ok = true, data = { evidence = EvidenceReports.listForCase(data.case_number) } })
+  end
+
+  if name == 'evidenceUnlink' then
+    if not (EvidenceReports and data.folderId and data.case_number) then
+      return respond({ ok = false, reason = 'invalid' })
+    end
+    EvidenceReports.unlink(data.folderId, data.case_number)
+    return respond({ ok = true, data = { evidence = EvidenceReports.listForCase(data.case_number) } })
+  end
+
+  if name == 'reportAttachmentAdd' then
+    local caseNumber = tostring(data.case_number or '')
+    local url = (data.url or ''):gsub('^%s+', ''):gsub('%s+$', '')
+    if caseNumber == '' or url == '' then return respond({ ok = false, reason = 'invalid' }) end
+    if not url:match('^https?://') then return respond({ ok = false, reason = 'invalid_url' }) end
+    local newId = Files.AddLegalCaseAttachment(caseNumber, url, Bridge.GetIdentifier(src), Bridge.GetName(src))
+    if not newId then return respond({ ok = false, reason = 'error' }) end
+    return respond({ ok = true, data = { attachments = Files.ListLegalCaseAttachments(caseNumber) } })
+  end
+
+  if name == 'reportAttachmentDelete' then
+    if not (data.id and data.case_number) then return respond({ ok = false, reason = 'invalid' }) end
+    Files.DeleteLegalCaseAttachment(data.case_number, data.id)
+    return respond({ ok = true, data = { attachments = Files.ListLegalCaseAttachments(data.case_number) } })
+  end
+
+  if name == 'reportPhoneList' then
+    local photos = Files.ListPhonePhotos(src, 200)
+    if not photos then return respond({ ok = false, reason = 'unavailable' }) end
+    return respond({ ok = true, data = { photos = photos } })
+  end
+
+  if name == 'reportPhoneImport' then
+    local caseNumber = tostring(data.case_number or '')
+    if caseNumber == '' or type(data.ids) ~= 'table' or #data.ids == 0 then return respond({ ok = false, reason = 'invalid' }) end
+    local result = Files.ImportPhonePhotosToCase(src, caseNumber, data.ids, Bridge.GetIdentifier(src), Bridge.GetName(src))
+    if not result then return respond({ ok = false, reason = 'error' }) end
+    return respond({ ok = true, data = { attachments = Files.ListLegalCaseAttachments(caseNumber), imported = result.imported, skipped = result.skipped } })
+  end
+
+  if name == 'reportJailSuspect' then
+    if not data.id then return respond({ ok = false, reason = 'invalid' }) end
+    local r = MySQL.single.await('SELECT suspect_cid, case_number, charges, jailed_at FROM mdt_reports WHERE id = ?', { data.id })
+    if not r or not r.suspect_cid or r.suspect_cid == '' then return respond({ ok = false, reason = 'no_suspect' }) end
+    if MySQL.scalar.await("SELECT 1 FROM mdt_court_cases WHERE report_id = ? AND status != 'resolved' LIMIT 1", { data.id }) then
+      return respond({ ok = false, reason = 'sent_to_court' })
+    end
+
+    local minutes = math.floor(tonumber(data.minutes) or 0)
+    if minutes <= 0 then return respond({ ok = false, reason = 'invalid_time' }) end
+
+    -- xt-prison's SetJailTime works off the player's server id, not their citizen id, so the
+    -- suspect must be online right now - same constraint its own /jail command has.
+    local targetSrc = Bridge.FindSource(r.suspect_cid)
+    if not targetSrc then return respond({ ok = false, reason = 'offline' }) end
+
+    if GetResourceState('xt-prison') ~= 'started' then return respond({ ok = false, reason = 'jail_unavailable' }) end
+    local okJail, errJail = pcall(function() exports['xt-prison']:SetJailTime(targetSrc, minutes) end)
+    if not okJail then
+      print(('^1[as-computer:mdt] xt-prison SetJailTime failed for report #%s: %s^0'):format(tostring(data.id), tostring(errJail)))
+      return respond({ ok = false, reason = 'jail_failed' })
+    end
+
+    -- Only the FIRST time this report's charges are sent down do they go on the DBS record - a
+    -- second click (e.g. to add more time) must never re-file the same convictions.
+    if not r.jailed_at and GetResourceState('as-browser') == 'started' then
+      local officerName = Bridge.GetName(src)
+      for _, c in ipairs(resolvedCharges(r.charges)) do
+        local offence = c.code and (c.code .. ' - ' .. c.title) or (c.title or 'Unknown offence')
+        local sentence = (type(c.months) == 'number' and c.months > 0) and (c.months .. ' months') or ''
+        pcall(function()
+          exports['as-browser']:addCriminalRecord(r.suspect_cid, {
+            offence = offence, sentence = sentence, issuedBy = officerName,
+            notes = (r.case_number and r.case_number ~= '') and ('Case ' .. r.case_number) or '',
+          })
+        end)
+      end
+    end
+
+    local jailedAt = os.time()
+    MySQL.update.await('UPDATE mdt_reports SET jailed_at = COALESCE(jailed_at, ?) WHERE id = ?', { jailedAt, data.id })
+    return respond({ ok = true, data = { jailedAt = jailedAt } })
+  end
+
+  if name == 'reportSendToCourt' then
+    if not data.id then return respond({ ok = false, reason = 'invalid' }) end
+    local r = MySQL.single.await('SELECT suspect_cid, suspect_name, case_number, charges, jailed_at FROM mdt_reports WHERE id = ?', { data.id })
+    if not r or not r.suspect_cid or r.suspect_cid == '' then return respond({ ok = false, reason = 'no_suspect' }) end
+    if r.jailed_at then return respond({ ok = false, reason = 'already_jailed' }) end
+    if MySQL.scalar.await("SELECT 1 FROM mdt_court_cases WHERE report_id = ? AND status != 'resolved' LIMIT 1", { data.id }) then
+      return respond({ ok = false, reason = 'already_sent_to_court' })
+    end
+
+    local now = os.time()
+    MySQL.insert.await(
+      'INSERT INTO mdt_court_cases (report_id, case_number, suspect_cid, suspect_name, charges, submitted_by, submitted_by_name, submitted_at) VALUES (?,?,?,?,?,?,?,?)',
+      { data.id, r.case_number, r.suspect_cid, r.suspect_name, r.charges, Bridge.GetIdentifier(src), Bridge.GetName(src), now })
+
+    -- Filing.txt goes in the normal (legal-bucket) case folder alongside the report - visible to
+    -- officers as case history - the moment it's sent to court, not only once resolved.
+    if r.case_number and r.case_number ~= '' then
+      local lines = {}
+      local function add(s) lines[#lines + 1] = s end
+      add('<h1>Court Filing</h1>')
+      add(('<p><b>Case Number:</b> %s</p>'):format(escHtml(r.case_number)))
+      add(('<p><b>Defendant:</b> %s</p>'):format(escHtml(r.suspect_name or 'Unknown')))
+      add(('<p><b>Filed By:</b> %s</p>'):format(escHtml(Bridge.GetName(src) or 'Officer')))
+      add(('<p><b>Filed:</b> %s</p>'):format(escHtml(fmtWhen(now))))
+      add('<h2>Charges</h2>')
+      for _, c in ipairs(resolvedCharges(r.charges)) do
+        add(('<p>%s</p>'):format(escHtml((c.code and (c.code .. ' - ') or '') .. (c.title or ''))))
+      end
+      add('<p><i>Awaiting judge, prosecution and defence sign-on. This case is not yet scheduled.</i></p>')
+      Files.UpsertCaseNamedFile('legal', r.case_number, { r.suspect_name }, 'Filing.txt', table.concat(lines, ''))
+    end
+
+    return respond({ ok = true, data = { courtCase = { status = 'awaiting_assignment', submitted_at = fmtWhen(now) } } })
   end
 
   if name == 'reportSave' then

@@ -624,6 +624,84 @@
     if (FS.bin.state === 'idle') fsBinLoad(true);
   }
 
+  // ---------------------------------------------------------------- Phase 0.5: setup / login gates
+  function gateApi(name, data) {
+    return fetch('https://' + (window.GetParentResourceName ? window.GetParentResourceName() : 'as-computer') + '/accountApi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({ name: name, data: data || {} })
+    }).then(function (r) { return r.json(); }).catch(function () { return undefined; });
+  }
+
+  var GATE = { busy: false };
+
+  function afterSignedIn() {
+    $('gate-setup').classList.add('hidden');
+    $('gate-login').classList.add('hidden');
+    applyPrefs();
+    applyApps();
+    signIn();
+  }
+
+  function showGateSetup() {
+    $('gate-login').classList.add('hidden');
+    $('gs-user').value = '';
+    $('gs-pass').value = '';
+    $('gs-pass2').value = '';
+    gateErr('gs-err', '');
+    $('gate-setup').classList.remove('hidden');
+    setTimeout(function () { $('gs-user').focus(); }, 30);
+  }
+
+  function showGateLogin() {
+    $('gate-setup').classList.add('hidden');
+    $('gl-user').value = '';
+    $('gl-pass').value = '';
+    gateErr('gl-err', '');
+    $('gate-login').classList.remove('hidden');
+    setTimeout(function () { $('gl-user').focus(); }, 30);
+  }
+
+  function gateErr(id, msg) { var e = $(id); if (e) e.textContent = msg || ''; }
+
+  function submitGateSetup() {
+    if (GATE.busy) return;
+    var u = ($('gs-user').value || '').trim();
+    var p1 = $('gs-pass').value || '';
+    var p2 = $('gs-pass2').value || '';
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(u)) { gateErr('gs-err', t('ui_setup_err_user', 'Username must be 3-20 letters, numbers or _')); return; }
+    if (p1.length < 4) { gateErr('gs-err', t('ui_setup_err_short', 'Password must be at least 4 characters.')); return; }
+    if (p1 !== p2) { gateErr('gs-err', t('ui_setup_err_match', "Passwords don't match.")); return; }
+    GATE.busy = true; gateErr('gs-err', '');
+    gateApi('setup', { username: u, password: p1 }).then(function (r) {
+      GATE.busy = false;
+      if (r && r.success) { afterSignedIn(); return; }
+      var msg = (r && r.error === 'taken') ? t('ui_setup_err_taken', 'That username is already taken.')
+        : (r && r.error === 'already_setup') ? t('ui_setup_err_already', 'This computer has already been set up.')
+        : t('notify_error', 'Something went wrong. Try again.');
+      gateErr('gs-err', msg);
+      if (r && r.error === 'already_setup') setTimeout(showGateLogin, 1200);
+    });
+  }
+
+  function submitGateLogin() {
+    if (GATE.busy) return;
+    var u = ($('gl-user').value || '').trim();
+    var p = $('gl-pass').value || '';
+    if (!u || !p) { gateErr('gl-err', t('ui_login_err_req', 'Enter a username and password.')); return; }
+    GATE.busy = true; gateErr('gl-err', '');
+    gateApi('login', { username: u, password: p }).then(function (r) {
+      GATE.busy = false;
+      if (r && r.success) { afterSignedIn(); return; }
+      var msg = (r && r.error === 'not_granted') ? t('ui_login_err_notgranted', "That account doesn't have access to this computer.")
+        : t('ui_login_err_bad', 'Incorrect username or password.');
+      gateErr('gl-err', msg);
+      $('gl-pass').value = '';
+      $('gl-pass').focus();
+    });
+  }
+
+
   // ================================================================ MOT window (GOV.UK look)
   var motWin = $('win-mot');
 
@@ -975,6 +1053,7 @@
     add('dl', 'root', 'folder', 'ui_fx_dl', 'Downloads');
     add('jobf', 'root', 'folder', 'fl_jobf', 'Shared');
     add('legalf', 'root', 'folder', 'fl_legalf', 'Case Files');
+    add('courtf', 'root', 'folder', 'fl_courtf', 'Court Files');
     add('mot', 'root', 'folder', 'ui_fx_mot', 'MOT Certificates');
     add('mot/all', 'mot', 'folder', 'ui_fx_all', 'All certificates');
     add('mot/mine', 'mot', 'folder', 'ui_fx_mine', 'My tests');
@@ -988,6 +1067,7 @@
       if (c === 'mot') return appVisible('mot');
       if (c === 'jobf') return !!FS.job;
       if (c === 'legalf') return !!FS.legal;
+      if (c === 'courtf') return !!FS.court;
       if (c === 'docs' || c === 'dl') return FS.enabled !== false;
       return true;
     });
@@ -995,6 +1075,7 @@
   function nodeName(k) {
     if (k === 'jobf' && FS.job) return fmt(t('fl_shared', '%s (shared)'), FS.job);
     if (k === 'legalf' && FS.legal) return FS.legal;
+    if (k === 'courtf' && FS.court) return FS.court;
     return t(NODES[k].key, NODES[k].def);
   }
   function nodeIcon(k) { return k === 'bin' ? (binCount() ? 'binfull' : 'bin') : NODES[k].ic; }
@@ -1006,8 +1087,8 @@
   // (server/files.lua). Every call goes through the 'filesApi' NUI callback (client/files.lua); the server decides who may see
   // or change what, this page only shows it. An Explorer location is 'docs' | 'dl' | 'jobf', or 'docs:12' for the folder with
   // id 12 inside it.
-  var FILE_KEY = { docs: 'docs', dl: 'dl', jobf: 'job', legalf: 'legal' };
-  var FS = { tried: false, enabled: true, job: null, isBoss: false, legal: null, legalWrite: false, phone: false, recycle: true, limits: {}, state: {}, data: {}, seq: {}, edit: {}, bin: { state: 'idle', data: [], days: 0, seq: 0 } };
+  var FILE_KEY = { docs: 'docs', dl: 'dl', jobf: 'job', legalf: 'legal', courtf: 'court' };
+  var FS = { tried: false, enabled: true, job: null, isBoss: false, legal: null, legalWrite: false, court: null, courtWrite: false, phone: false, recycle: true, limits: {}, state: {}, data: {}, seq: {}, edit: {}, bin: { state: 'idle', data: [], days: 0, seq: 0 } };
   var KIND_ICON = { folder: 'folder', text: 'filetxt', image: 'fileimg', video: 'filevid', audio: 'fileaud', file: 'filegen' };
 
   function fsBase(k) { return String(k).split(':')[0]; }
@@ -1089,6 +1170,8 @@
       FS.isBoss = !!res.data.isBoss;
       FS.legal = res.data.legal || null;
       FS.legalWrite = !!res.data.legalWrite;
+      FS.court = res.data.court || null;
+      FS.courtWrite = !!res.data.courtWrite;
       FS.phone = !!res.data.phone;
       FS.recycle = res.data.recycleBin !== false;
       fsBinLoad(true);
@@ -1162,7 +1245,7 @@
     if (certs.length) restoreCerts(certs);
     if (files.length) fsRestoreFiles(files);
   }
-  function binPlaceName(pl) { return nodeName(pl === 'job' ? 'jobf' : pl === 'legal' ? 'legalf' : pl); }
+  function binPlaceName(pl) { return nodeName(pl === 'job' ? 'jobf' : pl === 'legal' ? 'legalf' : pl === 'court' ? 'courtf' : pl); }
   function binFileRow(f, key, selCls) {
     return '<div class="ex-row' + selCls + '" data-key="' + esc(key) + '"><div class="nm">' + icSpan(KIND_ICON[f.kind] || 'filetxt') + '<span>' + esc(f.name) + '</span></div>' +
       '<div class="dim">' + esc(fmtDate(f.deletedAt)) + '</div><div class="dim">' + esc(kindLabel(f.kind)) + '</div><div class="dim">' + esc(f.deletedBy || '—') + '</div></div>';
@@ -2470,6 +2553,19 @@
     }
     signIn();
   });
+
+  // Phase 0.5 setup / login gate screens - registered here alongside the lock screen's own listeners.
+  (function () {
+    var gsBtn = $('gs-btn'), glBtn = $('gl-btn');
+    if (gsBtn) gsBtn.addEventListener('click', submitGateSetup);
+    if (glBtn) glBtn.addEventListener('click', submitGateLogin);
+    ['gs-user', 'gs-pass', 'gs-pass2'].forEach(function (id) {
+      var el = $(id); if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitGateSetup(); });
+    });
+    ['gl-user', 'gl-pass'].forEach(function (id) {
+      var el = $(id); if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitGateLogin(); });
+    });
+  })();
 
   document.addEventListener('keydown', function (e) {
     if (isDui) return;
@@ -4664,7 +4760,15 @@
       // d.resume: this player left this computer without shutting it down and nobody else has used it since,
       // so everything they had open is still here. d.locked: they locked it before leaving.
       if (d.mirror && !isDui) mirrorStart(d.mirror); else mirrorStop();
-      if (d.resume) {
+      // Phase 0.5: a machine nobody has ever set up, or one with no resumable session for this player,
+      // shows the setup wizard / login screen instead of the desktop - checked before any resume/lock logic.
+      if (d.needsSetup) {
+        resetSession();
+        showGateSetup();
+      } else if (d.needsLogin) {
+        resetSession();
+        showGateLogin();
+      } else if (d.resume) {
         applyPrefs();
         applyApps();
         if (d.locked) showLock(); else { $('lock').classList.add('hidden'); postToClient('sessionState', { state: 'active' }); }

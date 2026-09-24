@@ -5,7 +5,7 @@
    pulse animation — built from as-computer's own tokens (ui/style.css :root), scoped to
    #win-mdt / .mdt so it cannot touch other windows.
 */
-#win-mdt .win-body{background:#12151a;font-family:var(--ui-font);color:#e4e6ea}
+#win-mdt .win-body,#win-courtmdt .win-body{background:#12151a;font-family:var(--ui-font);color:#e4e6ea}
 .mdt{position:absolute;inset:0;display:flex;flex-direction:column;font-size:15px;line-height:1.4;color:#e4e6ea}
 .mdt *{box-sizing:border-box}
 .mdt button,.mdt input,.mdt textarea,.mdt select{font:inherit;color:inherit}

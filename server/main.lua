@@ -301,6 +301,13 @@ end
 
 Apps.available.browser = function() return BrowserResource() ~= nil end
 
+local function EvidencesRunning() return GetResourceState('evidences') == 'started' end
+Apps.available.fingerprint       = EvidencesRunning
+Apps.available.dna               = EvidencesRunning
+Apps.available.firearms_registry = EvidencesRunning
+Apps.available.ballistics        = EvidencesRunning
+Apps.available.wiretap           = EvidencesRunning
+
 local function SafeArg(v)
   local ty = type(v)
   if ty == 'string' then return v:sub(1, 400) end

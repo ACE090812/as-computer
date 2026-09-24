@@ -20,7 +20,11 @@ local function canPlace(src)
   return IsPlayerAceAllowed(src, 'command.' .. (PC.command or 'placeprops'))
 end
 
-local function variants(kind) return kind == 'tv' and (PC.tvs or {}) or (PC.computers or {}) end
+local function variants(kind)
+  if kind == 'tv' then return PC.tvs or {} end
+  if kind == 'printer' then return PC.printers or {} end
+  return PC.computers or {}
+end
 
 -- ---------------------------------------------------------------------------------------------
 -- Database
@@ -125,7 +129,7 @@ end)
 MotCallback.Register('placement:add', function(src, respond, data)
   if not canPlace(src) then return respond({ ok = false, reason = 'not_authorised' }) end
   data = type(data) == 'table' and data or {}
-  local kind = data.kind == 'tv' and 'tv' or (data.kind == 'computer' and 'computer' or nil)
+  local kind = (data.kind == 'tv' and 'tv') or (data.kind == 'printer' and 'printer') or (data.kind == 'computer' and 'computer') or nil
   local variant = math.floor(tonumber(data.variant) or 0)
   if not kind or not variants(kind)[variant] then return respond({ ok = false, reason = 'invalid' }) end
   local x, y, z = cleanPos(data.pos)
