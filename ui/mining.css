@@ -1,88 +1,126 @@
 /* Mining Rig app (Los Santos OS). Everything is scoped under .mn so it cannot touch other windows.
-   Phase 7: restyled to match the original mockup - dark theme, coin tabs, stat tiles with a price
-   delta, two-column linked-rigs/tower-health layout with health badges. Functionality (single
-   computer, single coin at a time, no price chart) is unchanged from Phase 1-6 - see the app's own
-   header comment in ui/mining.js for what's still a documented gap vs. the mockup (multi-computer
-   switching, real multi-coin tabs that mine in parallel, a live price chart). */
-#win-mining .win-body{background:#0b1220;font-family:var(--ui-font);color:#e6eaf2}
-html.dark #win-mining .win-body{background:#0b1220} /* already dark - don't also apply the OS's light->dark invert filter */
-.mn{position:absolute;inset:0;overflow:auto;padding:16px 18px;font-size:14px;line-height:1.35}
+   Phase 8: rebuilt to look like a real Windows 11 desktop utility - a command bar with a Start/Stop
+   button, a nav rail, grouped panels with label/value rows, a column-headed table for part health,
+   and a status bar - instead of a rounded-card dashboard. Segoe UI Variable/Segoe UI is the actual
+   system font on a Windows game client, so it's used directly rather than a web font. Functionality
+   (single computer, single coin at a time, no price chart) is unchanged - see ui/mining.js's own
+   header comment for what's still a documented gap vs. the original mockup. */
+#win-mining .win-body{background:#202020;font-family:"Segoe UI Variable Text","Segoe UI",var(--ui-font),system-ui,sans-serif;color:#e4e4e4}
+html.dark #win-mining .win-body{background:#202020} /* already dark - don't also apply the OS's light->dark invert filter */
+.mn{position:absolute;inset:0;overflow:hidden;display:flex;flex-direction:column;font-size:13px;line-height:1.35}
 .mn *{box-sizing:border-box}
-.mn button,.mn select{font:inherit;color:inherit;cursor:pointer}
-.mn-empty{color:#6b7690;text-align:center;padding:90px 24px;font-size:15px}
-.mn-empty-small{color:#6b7690;text-align:center;padding:14px;font-size:12.5px}
+.mn button{font:inherit;color:inherit;cursor:pointer}
+.mn{--mn-accent:#60cdff}
+.mn-empty{color:#8c8c8c;text-align:center;padding:90px 24px;font-size:14px}
+.mn-empty-small{color:#8c8c8c;text-align:center;padding:12px 14px;font-size:12px}
 
-.mn-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
-.mn-coins{display:flex;gap:6px;flex-wrap:wrap}
-.mn-coin-tab{background:#141c2e;border:1px solid #232d42;border-radius:7px;padding:6px 12px;font-weight:700;font-size:12.5px;color:#8b93a7}
-.mn-coin-tab.active{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
-.mn-coin-tab:hover:not(.active){border-color:#3b82f6;color:#dbe4f3}
-.mn-wallet{font-size:11.5px;color:#6b7690}
-.mn-wallet b{color:#8b93a7}
+/* Command bar */
+.mn-cmdbar{height:52px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid #2e2e2e}
+.mn-cmdbar-title{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:600;color:#f2f2f2}
+.mn-cta-btn{display:flex;align-items:center;gap:7px;padding:6px 16px;border-radius:4px;border:1px solid #3f3f3f;background:#2b2b2b;font-size:12.5px;font-weight:600}
+.mn-cta-btn svg{flex-shrink:0}
+.mn-cta-btn.mn-cta-start{background:var(--mn-accent);border-color:var(--mn-accent);color:#0a0f14;font-weight:700}
+.mn-cta-btn.mn-cta-start:hover{filter:brightness(1.08)}
+.mn-cta-btn.mn-cta-stop{color:#e4e4e4}
+.mn-cta-btn.mn-cta-stop:hover{background:#333}
+.mn-cta-btn.mn-cta-neutral{color:#7c7c7c;cursor:default}
+.mn-cta-btn:disabled{cursor:default}
 
-.mn-state{font-size:12.5px;font-weight:700;padding:5px 12px;border-radius:999px}
-.mn-state-on{background:rgba(34,197,94,.15);color:#4ade80;animation:mn-pulse 2.2s ease-in-out infinite}
-.mn-state-off{background:#141c2e;color:#6b7690}
+/* Body: nav rail + content */
+.mn-body{flex-grow:1;display:flex;min-height:0}
+.mn-nav{width:150px;flex-shrink:0;border-right:1px solid #2e2e2e;padding:10px 8px;display:flex;flex-direction:column;gap:2px}
+.mn-navitem{position:relative;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:4px;color:#cfcfcf}
+.mn-navitem.active{background:#2c2c2c;color:#f2f2f2;font-weight:600}
+.mn-navtick{position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--mn-accent)}
+.mn-navitem-static{color:#6f6f6f;cursor:default}
+.mn-navitem-static svg{opacity:.55}
 
-.mn-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
-.mn-stat{background:#141c2e;border:1px solid #232d42;border-radius:9px;padding:10px 12px}
-.mn-stat-label{color:#6b7690;font-size:11px;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px}
-.mn-stat-val{font-size:16px;font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;transition:color .25s ease;color:#e6eaf2}
-.mn-stat-delta{font-size:11.5px;font-weight:600;margin-left:6px}
-.mn-stat-delta.up{color:#4ade80}
-.mn-stat-delta.down{color:#f87171}
+.mn-content{flex-grow:1;overflow-y:auto;padding:16px 18px 18px;min-width:0}
 
-/* a payout just landed (mining.js flashes this in for ~0.9s then removes it) */
-.mn-stat-val.mn-flash{color:#4ade80;animation:mn-flash-pop .9s ease-out}
+.mn-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.mn-head-title{font-size:16px;font-weight:600;color:#f7f7f7}
+.mn-head-sub{font-size:12px;color:#9a9a9a;margin-top:1px}
+.mn-status-chip{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:4px;background:#262626;border:1px solid #333;font-size:11.5px;font-weight:600;color:#d6d6d6;white-space:nowrap}
+.mn-dot{width:7px;height:7px;border-radius:999px;display:block;flex-shrink:0}
+.mn-dot.on{background:var(--mn-accent)}
+.mn-dot.off{background:#6b6b6b}
 
-@keyframes mn-pulse{0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.35)}50%{box-shadow:0 0 0 5px rgba(74,222,128,0)}}
-@keyframes mn-flash-pop{0%{transform:scale(1.12)}100%{transform:scale(1)}}
-@media (prefers-reduced-motion:reduce){.mn-state-on{animation:none}.mn-stat-val.mn-flash{animation:none}}
+.mn-warn{display:flex;align-items:center;background:#2b2620;border-left:3px solid #ffcc66;border-radius:0 4px 4px 0;padding:9px 12px;font-size:12px;color:#e4c88a;margin-bottom:14px}
 
-.mn-warn{background:rgba(234,179,8,.12);color:#eab308;border:1px solid rgba(234,179,8,.35);border-radius:8px;padding:9px 12px;font-size:12.5px;margin-bottom:14px}
+/* Coin segmented control */
+.mn-segmented{display:inline-flex;border:1px solid #3a3a3a;border-radius:4px;overflow:hidden;margin-bottom:16px;max-width:100%;overflow-x:auto}
+.mn-segbtn{padding:6px 13px;border:none;border-right:1px solid #3a3a3a;background:#242424;color:#c7c7c7;font-size:12px;font-weight:600;white-space:nowrap}
+.mn-segbtn:last-child{border-right:none}
+.mn-segbtn.active{background:var(--mn-accent);color:#0a0f14}
+.mn-segbtn:hover:not(.active){background:#2b2b2b}
+.mn-locked .mn-segbtn{opacity:.45;pointer-events:none}
 
-.mn-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
-.mn-card{background:#141c2e;border:1px solid #232d42;border-radius:10px;padding:12px}
-.mn-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-weight:700;color:#e6eaf2}
-.mn-card-head .tag{color:#f87171;font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em}
-.mn-addbtn{font-weight:600;font-size:12.5px;color:#60a5fa}
+/* Grouped panels (Overview / Tower components / Linked rigs) */
+.mn-group{border:1px solid #303030;border-radius:6px;margin-bottom:14px}
+.mn-group-last{margin-bottom:0}
+.mn-group-head{padding:8px 12px;border-bottom:1px solid #2b2b2b;font-size:11.5px;font-weight:600;color:#a8a8a8}
+.mn-group-head-row{display:flex;align-items:center;justify-content:space-between}
+.mn-addbtn{font-size:11.5px;font-weight:600;color:var(--mn-accent);background:none;border:none;padding:0}
 .mn-addbtn:hover{text-decoration:underline}
 
-.mn-parts{display:flex;flex-direction:column;gap:8px}
-.mn-part{display:grid;grid-template-columns:56px 1fr 36px;align-items:center;gap:10px}
-.mn-part-empty{grid-template-columns:56px 1fr}
-.mn-part-name{font-weight:600;font-size:12.5px;color:#c4cbdb}
-.mn-part-missing{color:#f87171;font-size:12px;text-align:right}
-.mn-wearbar{height:6px;border-radius:5px;background:#0b1220;overflow:hidden}
-.mn-wearfill{height:100%;border-radius:5px}
-.mn-wear-ok{background:#3b82f6}
-.mn-wear-warn{background:#eab308}
-.mn-wear-bad{background:#f87171}
-.mn-wearpct{text-align:right;color:#6b7690;font-size:11.5px}
+.mn-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:1px solid #262626}
+.mn-row-last{border-bottom:none}
+.mn-row:hover{background:#242424}
+.mn-row-label{color:#b9b9b9}
+.mn-row-val{font-weight:600;color:#f2f2f2;transition:color .2s ease}
+.mn-row-val.muted{font-weight:400;color:#d6d6d6}
+.mn-row-val.mn-flash{color:var(--mn-accent)}
+.mn-delta{font-weight:600}
+.mn-delta.up{color:#8fd6a6}
+.mn-delta.down{color:#ff99a4}
 
-.mn-cta{text-align:center;border-radius:9px;padding:11px 14px;font-weight:700;font-size:14px;margin-bottom:18px}
-.mn-cta-disabled{background:#141c2e;color:#6b7690;border:1px solid #232d42}
-.mn-cta-start{background:#1d4ed8;color:#fff}
-.mn-cta-start:hover{background:#1e40af}
-.mn-cta-stop{background:#dc2626;color:#fff}
-.mn-cta-stop:hover{background:#b91c1c}
+/* Tower components table */
+.mn-table-head{display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #2b2b2b;font-size:11px;color:#7c7c7c}
+.mn-th-name{flex:1.1}
+.mn-th-tier{flex:1}
+.mn-th-wear{flex:1.4}
+.mn-th-status{width:70px;text-align:right}
+.mn-crow{display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #262626}
+.mn-crow:last-child{border-bottom:none}
+.mn-crow:hover{background:#242424}
+.mn-crow-name{flex:1.1;color:#e4e4e4}
+.mn-crow-tier{flex:1;color:#9a9a9a}
+.mn-crow-wear{flex:1.4;display:flex;align-items:center;gap:8px}
+.mn-empty-dash{color:#5a5a5a}
+.mn-wearbar{flex-grow:1;height:5px;border-radius:3px;background:#2b2b2b;overflow:hidden;max-width:90px}
+.mn-wearfill{display:block;height:100%;border-radius:3px}
+.mn-wear-ok{background:var(--mn-accent)}
+.mn-wear-warn{background:#ffcc66}
+.mn-wear-bad{background:#ff99a4}
+.mn-wearpct{font-size:11px;color:#9a9a9a;width:30px;flex-shrink:0}
+.mn-crow-badge{width:70px;text-align:right}
+.mn-badge{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:3px;white-space:nowrap}
+.mn-badge-ok{background:#22322c;color:#8fd6a6}
+.mn-badge-warn{background:#3a3320;color:#ffcc66}
+.mn-badge-bad{background:#3a2226;color:#ff99a4}
+.mn-badge-empty{background:#262626;color:#7c7c7c}
 
-.mn-rig{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid #1c2540}
-.mn-rig:first-child{border-top:none;padding-top:0}
-.mn-rig-info{min-width:0}
-.mn-rig-name{font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:block;color:#e6eaf2}
-.mn-rig-slots{color:#6b7690;font-size:11.5px}
-.mn-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap}
-.mn-badge-ok{background:rgba(34,197,94,.15);color:#4ade80}
-.mn-badge-warn{background:rgba(234,179,8,.15);color:#eab308}
-.mn-badge-bad{background:rgba(239,68,68,.15);color:#f87171}
-.mn-rig-link,.mn-rig-unlink{font-weight:600;font-size:12px;color:#60a5fa;white-space:nowrap}
-.mn-rig-unlink{color:#f87171}
+/* Linked rigs */
+.mn-rigrow{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #262626}
+.mn-rigrow:last-child{border-bottom:none}
+.mn-rigrow:hover{background:#242424}
+.mn-rig-dot{width:8px;height:8px;border-radius:999px;flex-shrink:0}
+.mn-rig-info{min-width:0;flex-grow:1;display:flex;align-items:baseline;gap:8px}
+.mn-rig-name{color:#e4e4e4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mn-rig-slots{color:#9a9a9a;font-size:11.5px;flex-shrink:0}
+.mn-rig-link,.mn-rig-unlink{font-size:11.5px;font-weight:600;color:var(--mn-accent);white-space:nowrap}
+.mn-rig-unlink{color:#ff99a4}
 .mn-rig-link:hover,.mn-rig-unlink:hover{text-decoration:underline}
-.mn-available{margin-top:8px;padding-top:8px;border-top:1px dashed #232d42}
+.mn-available{border-top:1px dashed #2e2e2e}
 
-.mn-toast{position:absolute;left:50%;bottom:18px;transform:translate(-50%,12px);background:#1c2540;border:1px solid #2f3b56;color:#e6eaf2;
-  padding:9px 16px;border-radius:8px;font-size:12.5px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;
-  box-shadow:0 6px 20px rgba(0,0,0,.35);max-width:80%;text-align:center}
+/* Status bar */
+.mn-statusbar{height:26px;flex-shrink:0;border-top:1px solid #2e2e2e;background:#1b1b1b;display:flex;align-items:center;padding:0 14px;gap:14px;font-size:11px;color:#8c8c8c}
+.mn-statusbar-sep{width:1px;height:12px;background:#333;flex-shrink:0}
+.mn-statusbar-fill{flex-grow:1}
+
+/* Toast */
+.mn-toast{position:absolute;left:50%;bottom:38px;transform:translate(-50%,12px);background:#2b2b2b;border:1px solid #3f3f3f;color:#e4e4e4;
+  padding:9px 16px;border-radius:6px;font-size:12.5px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;
+  box-shadow:0 6px 20px rgba(0,0,0,.4);max-width:80%;text-align:center}
 .mn-toast.on{opacity:1;transform:translate(-50%,0)}
-.mn-toast.bad{background:#3a1620;border-color:#5c2130;color:#fca5a5}
+.mn-toast.bad{background:#2b1a1c;border-color:#4a2a26;color:#ff99a4}

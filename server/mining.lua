@@ -169,6 +169,16 @@ end
 --- All 5 of a tower row's slots filled (the locked spec's requirement to mine at all).
 ---@param row table a row from Mining.GetTower/EnsureTower
 ---@return boolean
+-- mysql-async/oxmysql sometimes hand back a TINYINT(1) column as a real Lua boolean instead of 0/1
+-- (depends on the driver/connector config) - `row.running == 1` is then ALWAYS false even when the
+-- tower is genuinely running, since Lua does no boolean<->number coercion (true ~= 1). This is exactly
+-- why the Mining Rig app persistently showed "Stopped"/"Start mining" while the tower kept mining and
+-- paying out in the background: miningApp.info's `running = row.running == 1` was silently always
+-- false. Every running-state check must go through this helper instead of comparing to 1 directly.
+local function isRunning(row)
+  return row and (row.running == 1 or row.running == true) or false
+end
+
 local function allPartsInstalled(row)
   if not row then return false end
   for _, s in ipairs(SLOTS) do if not row[s .. '_item'] then return false end end
@@ -229,11 +239,20 @@ end
 ---@return boolean ok, string|nil error 'not_ready' when a slot is missing
 function Mining.Start(computerKey)
   local row = Mining.EnsureTower(computerKey)
-  if not allPartsInstalled(row) then return false, 'not_ready' end
-  if row.running == 1 then return true end -- already running: leave started_at where it was
-  MySQL.update.await(
+  local ready = allPartsInstalled(row)
+  if Config.Debug then
+    print(('^5[as-computer:mining]^0 Start(%s): ready=%s running=%s cpu=%s gpu=%s ram=%s psu=%s hdd=%s'):format(
+      tostring(computerKey), tostring(ready), tostring(row.running),
+      tostring(row.cpu_item), tostring(row.gpu_item), tostring(row.ram_item), tostring(row.psu_item), tostring(row.hdd_item)))
+  end
+  if not ready then return false, 'not_ready' end
+  if isRunning(row) then return true end -- already running: leave started_at where it was
+  local affected = MySQL.update.await(
     'UPDATE `computer_mining_towers` SET running = 1, last_tick_at = ?, started_at = ? WHERE computer_key = ?',
     { os.time(), os.time(), computerKey })
+  if Config.Debug then
+    print(('^5[as-computer:mining]^0 Start(%s): UPDATE affected=%s'):format(tostring(computerKey), tostring(affected)))
+  end
   return true
 end
 
@@ -654,7 +673,7 @@ if Config.Debug then
     if not row then return say(src, 'No tower record for ' .. key .. ' yet (nothing installed).') end
     local owner = Accounts.getOwnerCitizenId(key)
     say(src, ('running=%s coin=%s rate=%.4f owner=%s cpu=%s/%s(%.0f%%) gpu=%s/%s(%.0f%%) ram=%s/%s(%.0f%%) psu=%s/%s(%.0f%%) hdd=%s/%s(%.0f%%)'):format(
-      tostring(row.running == 1), row.coin, Mining.HashRate(key), tostring(owner),
+      tostring(isRunning(row)), row.coin, Mining.HashRate(key), tostring(owner),
       tostring(row.cpu_item), tostring(row.cpu_tier), tonumber(row.cpu_wear) or 0,
       tostring(row.gpu_item), tostring(row.gpu_tier), tonumber(row.gpu_wear) or 0,
       tostring(row.ram_item), tostring(row.ram_tier), tonumber(row.ram_wear) or 0,
@@ -682,7 +701,7 @@ function miningApp.info(src, computerKey)
   local row = Mining.EnsureTower(computerKey)
   local ready = allPartsInstalled(row)
   local hashRate = Mining.HashRate(computerKey)
-  local uptime = (row.running == 1 and row.started_at) and (os.time() - tonumber(row.started_at)) or 0
+  local uptime = (isRunning(row) and row.started_at) and (os.time() - tonumber(row.started_at)) or 0
 
   local ownerCid = Accounts.getOwnerCitizenId(computerKey)
   local price, balance = 0, 0
@@ -705,7 +724,7 @@ function miningApp.info(src, computerKey)
 
   return { success = true, data = {
     ready     = ready,
-    running   = row.running == 1,
+    running   = isRunning(row),
     coin      = row.coin,
     hashRate  = hashRate,
     uptime    = uptime,
@@ -811,6 +830,11 @@ MotCallback.Register('miningApi', function(src, respond, name, data)
   local ok, result
   if name == 'info' or name == 'start' or name == 'stop' or name == 'listAvailableRigs' then
     ok, result = pcall(fn, src, data.computerKey)
+    if not ok then
+      -- pcall swallows a real Lua error into `result` as a plain string, and the line below this
+      -- block turns that into an unhelpful {success=false} with NO clue why - always print it.
+      print(('^1[as-computer:mining]^0 miningApi %s(%s) errored: %s'):format(tostring(name), tostring(data.computerKey), tostring(result)))
+    end
   elseif name == 'setCoin' then
     ok, result = pcall(fn, src, data.computerKey, data.coin)
   elseif name == 'linkRig' then
