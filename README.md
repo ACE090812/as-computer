@@ -417,6 +417,82 @@ A placed monitor, tower or rig is tracked in its own database table (`computer_m
 
 **Crypto cash-out.** The coin balance is spent the same way as the original Phase 1 design, through sd-phone's crypto app — this feature doesn't introduce a second currency.
 
+**Requires two exports on `sd-phone`.** Mining payout and the app's balance/wallet display talk to sd-phone's crypto holdings directly (`server/mining.lua`), and stock sd-phone does not ship these — you have to add them to your `sd-phone` install yourself before the Mining Rig app will work:
+
+- `exports['sd-phone']:creditCrypto(citizenid, coin, amount)` — adds `amount` of `coin` to that citizen's crypto balance (the periodic mining payout tick, paid straight to the tower's *owner*, never whoever's currently logged into the computer). Return `true` on success, or `false, "reason"` on failure (as-computer only checks the first value and logs the second on failure — `"unknown_asset"` is a sensible reason for a coin symbol your sd-phone build doesn't recognise). Coin symbols come from `Config.Mining.Coins` in `config/mining.lua` and are **not** validated against sd-phone's own asset list before this call — a typo'd symbol in that config just means every payout for it fails here instead of being caught earlier.
+- `exports['sd-phone']:getCryptoInfo(citizenid, coin)` — read-only lookup used for the app's dashboard (current payout coin) and the Wallet tab (every configured coin at once). Return `true, { price = <number>, quantity = <number> }` on success (`price` = that coin's current price, `quantity` = how much of it this citizen holds), or `false` if the citizen or coin can't be resolved.
+
+Both are called with the *citizenid* of the computer's owner (from `Accounts.getOwnerCitizenId`), not a player source, so they need to work for offline citizens too, the same way sd-phone's own crypto app would look up a balance. If these exports are missing entirely, the payout tick will error and the app's balance/price will always show as 0 — check your server console for `[as-computer:mining]` errors naming a missing export if crypto mining seems to do nothing.
+
+**Exactly what to add to `sd-phone`** (tested against sd-phone's Stocks app, which already ships a `kind = 'crypto'` asset type — `configs/stocks.lua` needs no changes if your crypto symbols there already match `Config.Mining.Coins`, e.g. the default `SDC`/`BTL`/`ETD`/`SPC`/`MZC`/`FLC`/`WZC`/`POG`/`VWC`/`KIF`):
+
+1. Open `sd-phone/server/stocks/actions.lua`. Add these two functions right before the file's final `return actions` line:
+
+   ```lua
+   ---Credits a citizenid's holding of a crypto symbol directly, with NO wallet cash or bank movement -
+   ---for another resource paying out crypto it generated itself (as-computer's Crypto Mining Rig).
+   ---Not a trade: no fee, no market impact, no price effect, and it works for an offline citizenid.
+   ---@param citizenid string framework per-character id (the payout's owner)
+   ---@param symbol string a crypto asset's symbol, e.g. 'SDC'
+   ---@param units number units to credit; must be > 0
+   ---@return boolean success, string|nil error one of 'unknown_asset' | 'not_crypto' | 'invalid_units' | 'db_error'
+   function actions.creditCrypto(citizenid, symbol, units)
+       if type(citizenid) ~= 'string' or citizenid == '' then return false, 'invalid_units' end
+       symbol = tostring(symbol or '')
+       local meta = engine.meta(symbol)
+       if not meta then return false, 'unknown_asset' end
+       if meta.kind ~= 'crypto' then return false, 'not_crypto' end
+       units = tonumber(units)
+       if not units or units <= 0 then return false, 'invalid_units' end
+
+       local ok = store.creditHolding(citizenid, symbol, units)
+       if not ok then return false, 'db_error' end
+       return true
+   end
+
+   ---Read-only price + a citizenid's own balance for one crypto symbol, with no wallet/holding writes -
+   ---for another resource that wants "current price" + "your balance" (as-computer's Mining Rig
+   ---dashboard). Works for an offline citizenid.
+   ---@param citizenid string framework per-character id
+   ---@param symbol string a crypto asset's symbol, e.g. 'SDC'
+   ---@return boolean success, table|string data { price, quantity } on success, else an error string
+   ---  one of 'unknown_asset' | 'not_crypto'
+   function actions.getCryptoInfo(citizenid, symbol)
+       symbol = tostring(symbol or '')
+       local meta = engine.meta(symbol)
+       if not meta then return false, 'unknown_asset' end
+       if meta.kind ~= 'crypto' then return false, 'not_crypto' end
+
+       local price = engine.priceOf(symbol) or meta.basePrice or 0
+       local holding = type(citizenid) == 'string' and citizenid ~= '' and store.getHolding(citizenid, symbol) or nil
+       return true, { price = price, quantity = holding and tonumber(holding.quantity) or 0 }
+   end
+   ```
+
+   Both reuse functions the Stocks module already has: `engine.meta`/`engine.priceOf` (the same price simulation the phone's own Stocks app reads) and `store.creditHolding`/`store.getHolding` (the same `phone_stock_holdings` table trades already write to). No new database table and no `configs/stocks.lua` changes are needed — you're adding two functions, not a feature.
+
+2. Open `sd-phone/server/stocks/init.lua`. Add these two exports anywhere after `local actions = require 'server.stocks.actions'` (right after the existing `lib.callback.register('sd-phone:server:stocks:...')` block is a natural spot):
+
+   ```lua
+   -- Cross-resource export: another resource crediting crypto it generated itself (no trade, no wallet
+   -- cash involved) calls exports.sd-phone:creditCrypto(citizenid, symbol, units) -> true, or false + an
+   -- error string ('unknown_asset' | 'not_crypto' | 'invalid_units' | 'db_error'). See actions.creditCrypto.
+   exports('creditCrypto', function(citizenid, symbol, units)
+       return actions.creditCrypto(citizenid, symbol, units)
+   end)
+
+   -- Cross-resource export: read-only price + a citizenid's own balance for one crypto symbol, e.g. for
+   -- as-computer's Mining Rig dashboard. exports.sd-phone:getCryptoInfo(citizenid, symbol) ->
+   -- true, {price, quantity} or false, errorString. See actions.getCryptoInfo.
+   exports('getCryptoInfo', function(citizenid, symbol)
+       return actions.getCryptoInfo(citizenid, symbol)
+   end)
+   ```
+
+3. Restart `sd-phone`, then restart `as-computer`. Test by placing a mining monitor, filling its 5 slots, starting it, and checking the Wallet tab shows a balance for the owner's citizen — or just wait for one payout tick and confirm the balance in the phone's own Stocks app went up too (it's the same holding row).
+
+If your `sd-phone` fork doesn't use the `server/stocks` module layout above (a heavily customized or much older fork), the two functions can go anywhere server-side as long as they end up exported under those exact names with that exact signature — `engine.meta`/`engine.priceOf`/`store.creditHolding`/`store.getHolding` are just this build's names for "look up an asset's config", "get its current price", "atomically add to a holding" and "read a holding"; swap in your fork's equivalents if the names differ.
+
 **Config:** `config/mining.lua` — tower/rig prop and item tables, the monitor prop/item, `TowerLinkRange`, chassis prices, and the Phase 5 tuning values (`RateLimitSeconds`, `AuditLog`, `Notifications`). **Locales:** `locales/en.lua` (`mp_*` keys for placement/power/parts/GPUs, `shop_*` keys for the shop, `mining_notify_failure` for the part-failure push). **Files:** `server/mining.lua`, `server/mining_place.lua`, `client/mining_place.lua`, `client/mining_shop.lua`, `ui/mining.js`, `ui/mining.css`, item defs in `ox_inventory/data/items.lua`.
 
 **Pickup.** A tower, monitor or rig's owner (whoever placed it) can pick it back up from the same target menu it was placed with ("Pick up"), returning the item to their inventory. Picking up a monitor force-closes any active session on it, hands back everything its linked tower held plus every GPU on any linked rig (the rigs are auto-unlinked, not deleted — they stay placed, idle, ready to link to another monitor), and wipes its account/owner record entirely, since the machine stops existing. Picking up a tower or rig on its own just hands back what it was holding and unlinks it. A full inventory refuses the whole pickup up front rather than stranding a half-unwound prop.
