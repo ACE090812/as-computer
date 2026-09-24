@@ -1,12 +1,19 @@
-/* Mining Rig app for Los Santos OS (Crypto Mining Rig feature, Phase 3, restyled Phase 8). Laid out
-   like a real Windows desktop utility - command bar with a Start/Stop button, a nav rail, grouped
-   panels with label/value rows, a column-headed table for part health, and a status bar - rather than
-   a generic rounded-card dashboard. Registers itself with LSOS.registerApp. Every call goes through
-   the 'miningApi' NUI callback (client/dui.lua), which injects the current computer's key
-   server-side - this file never has to know or send it itself.
-   Nav rail items other than Dashboard are decorative (no second screen exists yet) - a real gap, not
-   an oversight: Rigs/Wallet/Settings would each need their own view built out. Documented gap vs. the
-   original mockup: a sidebar to switch between EVERY computer you own without walking to each, coin
+/* Mining Rig app for Los Santos OS (Crypto Mining Rig feature, Phase 3, restyled Phase 8, reskinned
+   Phase 9). Laid out like a real Windows desktop utility - command bar with a Start/Stop button, a nav
+   rail, grouped panels with label/value rows, a column-headed table for part health, and a status bar.
+   Phase 9 reskinned it to match the OS's own Store/Settings apps exactly (ui/mining.css borrows their
+   tokens and component shapes directly from ui/style.css's ".st-" and ".se-" rules) - light by default,
+   a real dark-mode variant, and the player's own accent color throughout, instead of a fixed dark theme.
+   Registers itself with LSOS.registerApp. Every call goes through the 'miningApi' NUI callback
+   (client/dui.lua), which injects the current computer's key server-side - this file never has to know
+   or send it itself.
+   Nav rail (Dashboard/Rigs/Wallet/Settings) switches between four client-side views. Dashboard/Rigs/
+   Settings are all built from the same 'info' poll; Wallet additionally fetches every sd-phone coin's
+   balance via 'wallets' (server/mining.lua) - one call per configured coin, so it's only fired when the
+   Wallet tab is actually opened, never on the 8s dashboard poll - so a player mining SDC can still see
+   a BTL bag from before without switching the payout coin just to look. Documented gap vs. the original
+   mockup: a sidebar to switch
+   between EVERY computer you own without walking to each, coin
    tabs that mine several coins in parallel, and a live 24h price chart are also not built (real
    architecture changes - remote computer switching needs a new server-side "list my computers"
    endpoint and each miningApi call taking an explicit computerKey instead of always using the one
@@ -39,7 +46,42 @@
       .catch(function () { return { success: false }; });
   }
 
-  var M = { loading: true, error: false, data: null, busy: false, timer: null, addOpen: false, available: [], prevBalance: null, prevPrice: null };
+  var M = { loading: true, error: false, data: null, busy: false, timer: null, addOpen: false, available: [], prevBalance: null, prevPrice: null,
+    wallets: null, walletsLoading: false, theme: 'auto' };
+
+  // Phase 10: Settings > Appearance can force this app to light or dark independent of whatever the
+  // OS-wide theme is (html.dark on <html>, toggled from the real Settings app) - some players want the
+  // mining screen to stay one way regardless. 'auto' (the default) just follows the OS like before;
+  // localStorage keeps the choice across sessions since a CEF NUI page's storage survives resource
+  // restarts (it's cleared with the rest of the game's cache, same as any browser profile).
+  var THEME_KEY = 'as-computer:mining:theme';
+  function loadTheme() {
+    try {
+      var v = window.localStorage.getItem(THEME_KEY);
+      if (v === 'light' || v === 'dark') return v;
+    } catch (e) { /* storage blocked - just fall back to auto */ }
+    return 'auto';
+  }
+  function applyTheme() {
+    // The variables these classes flip live on .win-body (ui/mining.css explains why: #mn-toast is a
+    // SIBLING of #mn, both children of .win-body, so the override has to sit on their shared parent to
+    // reach the toast too, not just the main .mn panel).
+    var mnEl = $('mn');
+    var el = mnEl && mnEl.parentElement;
+    if (!el) return;
+    el.classList.remove('mn-force-light', 'mn-force-dark');
+    if (M.theme === 'light') el.classList.add('mn-force-light');
+    else if (M.theme === 'dark') el.classList.add('mn-force-dark');
+  }
+  function setTheme(t) {
+    M.theme = t;
+    try {
+      if (t === 'auto') window.localStorage.removeItem(THEME_KEY);
+      else window.localStorage.setItem(THEME_KEY, t);
+    } catch (e) { /* best-effort only */ }
+    applyTheme();
+    render();
+  }
 
   // Phase 6: a short synthesized "ping" on payout - no audio asset to ship, just WebAudio. Silently
   // does nothing if the browser blocks autoplay-without-interaction; missing a ping once in a while
@@ -177,61 +219,111 @@
       ctaButton(d, locked) +
       '</div>';
 
-    // Nav rail (Dashboard is the only real screen; the rest are a documented gap - see header comment)
+    // Nav rail - every item is a real screen (switches M.view, no server round trip needed since
+    // 'info' already carries everything all four views show).
+    var view = M.view || 'dashboard';
+    function navItem(id, label, iconPath) {
+      return '<div class="mn-navitem' + (view === id ? ' active' : '') + '" data-view="' + id + '">' +
+        (view === id ? '<span class="mn-navtick"></span>' : '') +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">' + iconPath + '</svg>' +
+        '<span>' + esc(label) + '</span></div>';
+    }
     html += '<div class="mn-body"><div class="mn-nav">' +
-      '<div class="mn-navitem active"><span class="mn-navtick"></span>' +
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="3" y="3" width="8" height="8" rx="1.2"/><rect x="13" y="3" width="8" height="5" rx="1.2"/><rect x="13" y="11" width="8" height="10" rx="1.2"/><rect x="3" y="14" width="8" height="7" rx="1.2"/></svg>' +
-      '<span>' + esc(T('mn_nav_dashboard', 'Dashboard')) + '</span></div>' +
-      '<div class="mn-navitem mn-navitem-static"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="3" y="4" width="18" height="16" rx="1.6"/><path d="M7 9h2M7 12h2M7 15h2M12 9h5M12 12h5M12 15h3"/></svg>' +
-      '<span>' + esc(T('mn_nav_rigs', 'Rigs')) + '</span></div>' +
-      '<div class="mn-navitem mn-navitem-static"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M16 12h3M2.5 10h19"/></svg>' +
-      '<span>' + esc(T('mn_nav_wallet', 'Wallet')) + '</span></div>' +
+      navItem('dashboard', T('mn_nav_dashboard', 'Dashboard'), '<rect x="3" y="3" width="8" height="8" rx="1.2"/><rect x="13" y="3" width="8" height="5" rx="1.2"/><rect x="13" y="11" width="8" height="10" rx="1.2"/><rect x="3" y="14" width="8" height="7" rx="1.2"/>') +
+      navItem('rigs', T('mn_nav_rigs', 'Rigs'), '<rect x="3" y="4" width="18" height="16" rx="1.6"/><path d="M7 9h2M7 12h2M7 15h2M12 9h5M12 12h5M12 15h3"/>') +
+      navItem('wallet', T('mn_nav_wallet', 'Wallet'), '<rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M16 12h3M2.5 10h19"/>') +
+      '<div style="flex-grow:1"></div>' +
+      navItem('settings', T('mn_nav_settings', 'Settings'), '<circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a1.7 1.7 0 000-3l1-1.7-1.7-1.7-1.7 1a1.7 1.7 0 00-3 0l-1.7-1-1.7 1.7 1 1.7a1.7 1.7 0 00-3 0l-1.7-1L4.6 10.5l1 1.7a1.7 1.7 0 000 3l-1 1.7 1.7 1.7 1.7-1a1.7 1.7 0 003 0l1.7 1 1.7-1.7-1-1.7a1.7 1.7 0 003 0l1.7 1 1.7-1.7z"/>') +
       '</div>';
 
     // Content
     html += '<div class="mn-content">';
 
-    html += '<div class="mn-head"><div><div class="mn-head-title">' + esc(T('mn_app_name', 'Mining Rig Manager')) + '</div>' +
-      '<div class="mn-head-sub">' + (d.hasOwner
-        ? esc(T('mn_wallet_detected', 'sd-phone wallet detected'))
-        : esc(T('mn_wallet_missing', 'No sd-phone wallet linked'))) + '</div></div>' +
-      '<div class="mn-status-chip"><span class="mn-dot ' + (d.running ? 'on' : 'off') + '"></span><span>' + esc(d.running ? T('mn_running', 'Mining active') : T('mn_stopped', 'Stopped')) + '</span></div>' +
+    var titles = {
+      dashboard: [T('mn_app_name', 'Mining Rig Manager'), d.hasOwner ? T('mn_wallet_detected', 'sd-phone wallet detected') : T('mn_wallet_missing', 'No sd-phone wallet linked')],
+      rigs:      [T('mn_nav_rigs', 'Rigs'), T('mn_rigs_sub', 'GPU rigs linked to this tower')],
+      wallet:    [T('mn_nav_wallet', 'Wallet'), d.hasOwner ? T('mn_wallet_detected', 'sd-phone wallet detected') : T('mn_wallet_missing', 'No sd-phone wallet linked')],
+      settings:  [T('mn_nav_settings', 'Settings'), T('mn_settings_sub', 'Payout and tower preferences')]
+    };
+    var title = titles[view] || titles.dashboard;
+    html += '<div class="mn-head"><div><div class="mn-head-title">' + esc(title[0]) + '</div>' +
+      '<div class="mn-head-sub">' + esc(title[1]) + '</div></div>' +
+      '<div class="mn-status-chip' + (d.running ? ' on' : '') + '"><span class="mn-dot ' + (d.running ? 'on' : 'off') + '"></span><span>' + esc(d.running ? T('mn_running', 'Mining active') : T('mn_stopped', 'Stopped')) + '</span></div>' +
       '</div>';
 
     if (!d.hasOwner) {
       html += '<div class="mn-warn">' + esc(T('mn_no_owner', "This computer has no recorded owner yet - payouts can't be delivered until it does.")) + '</div>';
     }
 
-    // Coin segmented control
-    html += '<div class="mn-segmented' + (locked ? ' mn-locked' : '') + '" id="mn-coins">' + COINS.map(function (c) {
-      return '<button class="mn-segbtn' + (c === d.coin ? ' active' : '') + '" data-coin="' + c + '">' + esc(c) + '</button>';
-    }).join('') + '</div>';
+    if (view === 'rigs') {
+      html += '<div class="mn-group mn-group-last">' +
+        '<div class="mn-group-head mn-group-head-row"><span>' + esc(T('mn_rigs', 'Linked rigs')) + ' (' + d.rigs.length + ')</span>' +
+        '<button class="mn-addbtn" id="mn-addtoggle">' + esc(M.addOpen ? T('mn_close', 'Close') : T('mn_add_rig', '+ Link rig')) + '</button></div>';
+      html += d.rigs.length ? d.rigs.map(rigRow).join('') : '<div class="mn-empty-small">' + esc(T('mn_no_rigs', 'No mining rigs linked yet.')) + '</div>';
+      if (M.addOpen) {
+        html += '<div class="mn-available">' + (M.available.length
+          ? M.available.map(availableRow).join('')
+          : '<div class="mn-empty-small">' + esc(T('mn_no_available', 'No unlinked mining rigs found.')) + '</div>') + '</div>';
+      }
+      html += '</div>';
 
-    // Overview group
-    html += '<div class="mn-group"><div class="mn-group-head">' + esc(T('mn_overview', 'Overview')) + '</div>' +
-      '<div class="mn-row"><span class="mn-row-label">' + esc(T('mn_balance', 'Wallet balance')) + '</span><span class="mn-row-val" id="mn-balance-val">' + fmtCoin(d.balance) + ' ' + esc(d.coin) + '</span></div>' +
-      '<div class="mn-row"><span class="mn-row-label">' + esc(T('mn_price', 'Spot price')) + '</span><span class="mn-row-val muted">$' + fmtCoin(d.price) + deltaHtml + '</span></div>' +
-      '<div class="mn-row"><span class="mn-row-label">' + esc(T('mn_hashrate', 'Hash rate')) + '</span><span class="mn-row-val muted">' + fmtRate(d.hashRate) + ' MH/s</span></div>' +
-      '<div class="mn-row mn-row-last"><span class="mn-row-label">' + esc(T('mn_uptime', 'Session uptime')) + '</span><span class="mn-row-val muted">' + (d.running ? fmtUptime(d.uptime) : '—') + '</span></div>' +
-      '</div>';
+    } else if (view === 'wallet') {
+      html += '<div class="mn-group mn-group-last">' +
+        '<div class="mn-group-head">' + esc(T('mn_all_wallets', 'Balances - every coin')) + '</div>';
+      if (M.walletsLoading || !M.wallets) {
+        html += '<div class="mn-empty-small">' + esc(T('mn_loading', 'Loading…')) + '</div>';
+      } else if (!d.hasOwner) {
+        html += '<div class="mn-empty-small">' + esc(T('mn_wallet_missing', 'No sd-phone wallet linked')) + '</div>';
+      } else {
+        html += '<div class="mn-table-head"><span class="mn-th-name">' + esc(T('mn_th_coin', 'Coin')) + '</span><span class="mn-th-tier">' + esc(T('mn_price', 'Spot price')) + '</span><span class="mn-th-status" style="width:auto;flex:1;text-align:right;">' + esc(T('mn_balance', 'Wallet balance')) + '</span></div>' +
+          M.wallets.map(function (w) {
+            var mining = w.coin === d.coin;
+            return '<div class="mn-crow">' +
+              '<span class="mn-crow-name">' + esc(w.coin) + (mining ? '&nbsp;<span class="mn-badge mn-badge-ok">' + esc(T('mn_mining_tag', 'Mining')) + '</span>' : '') + '</span>' +
+              '<span class="mn-crow-tier">$' + fmtCoin(w.price) + '</span>' +
+              '<span style="flex:1;text-align:right;color:#e4e4e4;font-weight:600;">' + fmtCoin(w.balance) + '</span>' +
+              '</div>';
+          }).join('');
+      }
+      html += '</div>' +
+        '<div class="mn-empty-small">' + esc(T('mn_cashout_hint', 'Cash out from the crypto app on your phone - this screen is balance only.')) + '</div>';
 
-    // Tower components table
-    html += '<div class="mn-group"><div class="mn-group-head">' + esc(T('mn_tower_health', 'Tower components')) + '</div>' +
-      '<div class="mn-table-head"><span class="mn-th-name">' + esc(T('mn_th_component', 'Component')) + '</span><span class="mn-th-tier">' + esc(T('mn_th_tier', 'Tier')) + '</span><span class="mn-th-wear">' + esc(T('mn_th_wear', 'Wear')) + '</span><span class="mn-th-status">' + esc(T('mn_th_status', 'Status')) + '</span></div>' +
-      SLOT_ORDER.map(function (s) { return partRow(s, d.parts[s]); }).join('') +
-      '</div>';
+    } else if (view === 'settings') {
+      var theme = M.theme || 'auto';
+      html += '<div class="mn-group">' +
+        '<div class="mn-group-head">' + esc(T('mn_appearance', 'Appearance')) + '</div>' +
+        '<div style="padding:12px;">' +
+        '<div class="mn-segmented" id="mn-theme">' +
+          '<button class="mn-segbtn' + (theme === 'auto' ? ' active' : '') + '" data-theme="auto">' + esc(T('mn_theme_auto', 'Match OS')) + '</button>' +
+          '<button class="mn-segbtn' + (theme === 'light' ? ' active' : '') + '" data-theme="light">' + esc(T('mn_theme_light', 'Light')) + '</button>' +
+          '<button class="mn-segbtn' + (theme === 'dark' ? ' active' : '') + '" data-theme="dark">' + esc(T('mn_theme_dark', 'Dark')) + '</button>' +
+        '</div>' +
+        '<div class="mn-settings-hint">' + esc(T('mn_appearance_hint', "Match OS follows the theme set in this computer's own Settings app; Light or Dark overrides it just for the Mining Rig app.")) + '</div>' +
+        '</div></div>';
 
-    // Linked rigs group
-    html += '<div class="mn-group mn-group-last">' +
-      '<div class="mn-group-head mn-group-head-row"><span>' + esc(T('mn_rigs', 'Linked rigs')) + ' (' + d.rigs.length + ')</span>' +
-      '<button class="mn-addbtn" id="mn-addtoggle">' + esc(M.addOpen ? T('mn_close', 'Close') : T('mn_add_rig', '+ Link rig')) + '</button></div>';
-    html += d.rigs.length ? d.rigs.map(rigRow).join('') : '<div class="mn-empty-small">' + esc(T('mn_no_rigs', 'No mining rigs linked yet.')) + '</div>';
-    if (M.addOpen) {
-      html += '<div class="mn-available">' + (M.available.length
-        ? M.available.map(availableRow).join('')
-        : '<div class="mn-empty-small">' + esc(T('mn_no_available', 'No unlinked mining rigs found.')) + '</div>') + '</div>';
+      html += '<div class="mn-group mn-group-last">' +
+        '<div class="mn-group-head">' + esc(T('mn_payout_coin', 'Payout coin')) + '</div>' +
+        '<div style="padding:12px;">' +
+        '<div class="mn-segmented' + (locked ? ' mn-locked' : '') + '" id="mn-coins">' + COINS.map(function (c) {
+          return '<button class="mn-segbtn' + (c === d.coin ? ' active' : '') + '" data-coin="' + c + '">' + esc(c) + '</button>';
+        }).join('') + '</div>' +
+        '<div class="mn-settings-hint">' + esc(T('mn_payout_coin_hint', 'Balance and price on the Wallet screen switch to whichever coin is selected here.')) + '</div>' +
+        '</div></div>';
+
+    } else {
+      // dashboard
+      html += '<div class="mn-group"><div class="mn-group-head">' + esc(T('mn_overview', 'Overview')) + '</div>' +
+        '<div class="mn-row"><span class="mn-row-label">' + esc(T('mn_balance', 'Wallet balance')) + '</span><span class="mn-row-val" id="mn-balance-val">' + fmtCoin(d.balance) + ' ' + esc(d.coin) + '</span></div>' +
+        '<div class="mn-row"><span class="mn-row-label">' + esc(T('mn_price', 'Spot price')) + '</span><span class="mn-row-val muted">$' + fmtCoin(d.price) + deltaHtml + '</span></div>' +
+        '<div class="mn-row"><span class="mn-row-label">' + esc(T('mn_hashrate', 'Hash rate')) + '</span><span class="mn-row-val muted">' + fmtRate(d.hashRate) + ' MH/s</span></div>' +
+        '<div class="mn-row mn-row-last"><span class="mn-row-label">' + esc(T('mn_uptime', 'Session uptime')) + '</span><span class="mn-row-val muted">' + (d.running ? fmtUptime(d.uptime) : '—') + '</span></div>' +
+        '</div>';
+
+      html += '<div class="mn-group mn-group-last"><div class="mn-group-head">' + esc(T('mn_tower_health', 'Tower components')) + '</div>' +
+        '<div class="mn-table-head"><span class="mn-th-name">' + esc(T('mn_th_component', 'Component')) + '</span><span class="mn-th-tier">' + esc(T('mn_th_tier', 'Tier')) + '</span><span class="mn-th-wear">' + esc(T('mn_th_wear', 'Wear')) + '</span><span class="mn-th-status">' + esc(T('mn_th_status', 'Status')) + '</span></div>' +
+        SLOT_ORDER.map(function (s) { return partRow(s, d.parts[s]); }).join('') +
+        '</div>';
     }
-    html += '</div>';
 
     html += '</div></div>'; // .mn-content, .mn-body
 
@@ -244,7 +336,13 @@
 
     root.innerHTML = html;
 
+    root.querySelectorAll('[data-view]').forEach(function (el) { el.addEventListener('click', function () {
+      M.view = el.dataset.view;
+      render();
+      if (M.view === 'wallet') loadWallets();
+    }); });
     root.querySelectorAll('[data-coin]').forEach(function (el) { el.addEventListener('click', function () { setCoin(el.dataset.coin); }); });
+    root.querySelectorAll('[data-theme]').forEach(function (el) { el.addEventListener('click', function () { setTheme(el.dataset.theme); }); });
     var startBtn = $('mn-start'); if (startBtn) startBtn.addEventListener('click', start);
     var stopBtn = $('mn-stop'); if (stopBtn) stopBtn.addEventListener('click', stop);
     var addToggle = $('mn-addtoggle'); if (addToggle) addToggle.addEventListener('click', toggleAdd);
@@ -311,6 +409,17 @@
   }
   function fail(r) { toast(errText(r), true); }
 
+  // Fetched only when the Wallet tab is opened (see this file's header comment) - not part of the 8s
+  // 'info' poll, so switching to Wallet then back to Dashboard a lot doesn't hammer sd-phone.
+  function loadWallets() {
+    M.walletsLoading = true;
+    api('wallets', {}).then(function (r) {
+      M.walletsLoading = false;
+      M.wallets = (r && r.success && r.data && r.data.wallets) || [];
+      render();
+    });
+  }
+
   // Every mutating mining action shares ONE 0.75s per-player cooldown server-side (Mining.Throttled,
   // server/mining.lua) - switching coins right before clicking Start used to just silently eat the
   // click (throttled, no feedback). Two fixes: markBusy() disables the CTA/coin-tabs the INSTANT you
@@ -372,7 +481,8 @@
   var root = S.registerApp({
     id: 'mining', icon: ICON_APP, titleKey: 'mn_app_name', titleDef: 'Mining Rig', w: 660, h: 760, html: HTML,
     onOpen: function () {
-      M.loading = true; M.addOpen = false; render();
+      M.loading = true; M.addOpen = false; M.view = 'dashboard'; M.wallets = null; M.walletsLoading = false;
+      M.theme = loadTheme(); render(); applyTheme();
       load();
       if (M.timer) clearInterval(M.timer);
       M.timer = setInterval(load, 8000);

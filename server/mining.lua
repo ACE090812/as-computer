@@ -736,6 +736,29 @@ function miningApp.info(src, computerKey)
   } }
 end
 
+--- Every sd-phone coin's balance for the tower's OWNER (not just the one it currently mines) - the
+--- Wallet screen's "every coin" view (Phase 8): a player who's mining SDC but holds a BTL bag from
+--- before wants to see both without switching the payout coin just to look. One sd-phone call per
+--- configured coin (Config.Mining.Coins) - only fired when the Wallet tab is actually opened, never on
+--- the 8s dashboard poll, so this doesn't multiply sd-phone traffic for players who never look at it.
+---@param src integer player server id (unused - same reasoning as miningApp.info)
+---@param computerKey string
+---@return table result { success, data } - data is { hasOwner, wallets: [{ coin, price, balance }] }
+function miningApp.wallets(src, computerKey)
+  if not validKey(computerKey) then return { success = false } end
+  local ownerCid = Accounts.getOwnerCitizenId(computerKey)
+  if not ownerCid then return { success = true, data = { hasOwner = false, wallets = {} } } end
+
+  local wallets = {}
+  for _, coin in ipairs(Config.Mining.Coins) do
+    local price, balance = 0, 0
+    local ok, info = exports['sd-phone']:getCryptoInfo(ownerCid, coin)
+    if ok and type(info) == 'table' then price, balance = info.price or 0, info.quantity or 0 end
+    wallets[#wallets + 1] = { coin = coin, price = price, balance = balance }
+  end
+  return { success = true, data = { hasOwner = true, wallets = wallets } }
+end
+
 function miningApp.start(src, computerKey)
   local ok, err = Mining.Start(tostring(computerKey or ''))
   return { success = ok, error = err }
@@ -828,7 +851,7 @@ MotCallback.Register('miningApi', function(src, respond, name, data)
   end
 
   local ok, result
-  if name == 'info' or name == 'start' or name == 'stop' or name == 'listAvailableRigs' then
+  if name == 'info' or name == 'start' or name == 'stop' or name == 'listAvailableRigs' or name == 'wallets' then
     ok, result = pcall(fn, src, data.computerKey)
     if not ok then
       -- pcall swallows a real Lua error into `result` as a plain string, and the line below this

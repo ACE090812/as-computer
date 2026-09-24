@@ -7,7 +7,9 @@
 --
 -- Phase 0.5: every machine now needs a valid account to use, not just any character. A machine with zero
 -- accounts granted onto it has never been through setup - 'session:open' reports `needsSetup` for that case
--- so the client shows the first-boot wizard instead of a login screen.
+-- so the client shows the first-boot wizard instead of a login screen (the wizard itself now also links to
+-- the login screen, since session:login below can claim a fresh machine for an existing account too - a
+-- player doesn't have to create a brand-new account on every computer they ever sit down at).
 
 local sessions = {}   -- computer key ('c<index>', 'p<placed id>' or 'm<mining-placed id>') -> { cid, accountId, state = 'active'|'locked'|'off', at }
 local RESUME = (Config.Session and Config.Session.resumeMinutes) or 60
@@ -68,6 +70,16 @@ end)
 --- THIS machine (shared login: the same account can be granted on several machines, but not every
 --- machine automatically accepts every account - see the plan doc's public-computer exception,
 --- not yet wired in here).
+---
+--- The one exception, added to close the plan's "Still open: exactly how a machine grants access to
+--- a shared account" gap: a machine that has NEVER been set up (zero grants at all) accepts a valid
+--- login from any EXISTING account and claims it as that machine's first admin/owner, exactly like
+--- session:setup does for a brand-new account. This is what makes logins actually feel shared - a
+--- player who already made an account on one computer can walk up to any other never-configured
+--- computer and sign straight in with the same credentials, instead of being forced through "Create
+--- account" again (which would just fail with 'taken' since usernames are unique server-wide). A
+--- machine some other account already claimed still requires an explicit grant - this only fires on
+--- the very first login a fresh machine ever sees.
 MotCallback.Register('session:login', function(src, respond, key, username, password)
   if not validKey(key) then return respond({ success = false }) end
   local cid = Bridge.GetIdentifier(src)
@@ -80,7 +92,12 @@ MotCallback.Register('session:login', function(src, respond, key, username, pass
 
   local granted = Accounts.isGranted(key, account.id)
   if not granted then
-    return respond({ success = false, error = 'not_granted' })
+    if Accounts.hasAnyGrants(key) then
+      return respond({ success = false, error = 'not_granted' })
+    end
+    -- Fresh machine, nobody's claimed it yet - this login claims it instead of failing.
+    Accounts.grant(key, account.id, true, nil)
+    Accounts.setOwner(key, account.id, cid)
   end
 
   sessions[key] = { cid = cid, accountId = account.id, state = 'active', at = os.time() }

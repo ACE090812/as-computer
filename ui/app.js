@@ -653,11 +653,22 @@
     setTimeout(function () { $('gs-user').focus(); }, 30);
   }
 
-  function showGateLogin() {
+  // fromFreshMachine: true only when this machine has never been set up (reached via the setup
+  // wizard's "already have an account?" link) - session:login (server/session.lua) claims the machine
+  // for whichever existing account signs in first, so the "create an account instead" link only makes
+  // sense in that case. On an ORDINARY login (machine already claimed, this player just isn't signed
+  // in on it right now) that link would be actively wrong - Setup always fails once a machine has an
+  // owner, so it's kept hidden for the normal `needsLogin` flow.
+  function showGateLogin(fromFreshMachine) {
     $('gate-setup').classList.add('hidden');
     $('gl-user').value = '';
     $('gl-pass').value = '';
     gateErr('gl-err', '');
+    var sub = $('gl-sub'), link = $('gl-link');
+    if (sub) sub.textContent = fromFreshMachine
+      ? t('ui_login_sub_fresh', "Sign in with any existing account - it'll become this computer's admin.")
+      : t('ui_login_sub', "Enter an account that's been granted access to this computer.");
+    if (link) link.classList.toggle('hidden', !fromFreshMachine);
     $('gate-login').classList.remove('hidden');
     setTimeout(function () { $('gl-user').focus(); }, 30);
   }
@@ -2556,9 +2567,14 @@
 
   // Phase 0.5 setup / login gate screens - registered here alongside the lock screen's own listeners.
   (function () {
-    var gsBtn = $('gs-btn'), glBtn = $('gl-btn');
+    var gsBtn = $('gs-btn'), glBtn = $('gl-btn'), gsLink = $('gs-link'), glLink = $('gl-link');
     if (gsBtn) gsBtn.addEventListener('click', submitGateSetup);
     if (glBtn) glBtn.addEventListener('click', submitGateLogin);
+    // gs-link: "already have an account?" on the fresh-machine setup wizard -> login screen, flagged
+    // as a fresh-machine claim so it shows the right subtitle/link (see showGateLogin above).
+    if (gsLink) gsLink.addEventListener('click', function () { showGateLogin(true); });
+    // gl-link: only visible when showGateLogin(true) put it there - takes the player back to Setup.
+    if (glLink) glLink.addEventListener('click', showGateSetup);
     ['gs-user', 'gs-pass', 'gs-pass2'].forEach(function (id) {
       var el = $(id); if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitGateSetup(); });
     });

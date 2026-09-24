@@ -1,126 +1,172 @@
 /* Mining Rig app (Los Santos OS). Everything is scoped under .mn so it cannot touch other windows.
-   Phase 8: rebuilt to look like a real Windows 11 desktop utility - a command bar with a Start/Stop
-   button, a nav rail, grouped panels with label/value rows, a column-headed table for part health,
-   and a status bar - instead of a rounded-card dashboard. Segoe UI Variable/Segoe UI is the actual
-   system font on a Windows game client, so it's used directly rather than a web font. Functionality
-   (single computer, single coin at a time, no price chart) is unchanged - see ui/mining.js's own
-   header comment for what's still a documented gap vs. the original mockup. */
-#win-mining .win-body{background:#202020;font-family:"Segoe UI Variable Text","Segoe UI",var(--ui-font),system-ui,sans-serif;color:#e4e4e4}
-html.dark #win-mining .win-body{background:#202020} /* already dark - don't also apply the OS's light->dark invert filter */
-.mn{position:absolute;inset:0;overflow:hidden;display:flex;flex-direction:column;font-size:13px;line-height:1.35}
+   Phase 9: restyled to match the OS's own Store/Settings apps exactly (see ui/style.css's ".st-*"/
+   ".se-*" rules, which this borrows tokens and component shapes from) - light by default, a real
+   dark-mode variant via html.dark, and var(--accent) throughout instead of a fixed color, so it
+   reskins itself with whatever accent color the player has picked in Settings. Segoe UI Variable/
+   Segoe UI is the actual system font on a Windows game client. Functionality (single computer, single
+   coin at a time, no price chart) is unchanged - see ui/mining.js's own header comment for what's
+   still a documented gap vs. the original mockup. */
+/* Variables live on #win-mining .win-body, not on .mn itself, because the toast (#mn-toast) is a
+   SIBLING of .mn - both are direct children of .win-body (ui/app.js wraps registerApp's html in one
+   "win-body" div) - not a descendant of .mn, so a variable set only on .mn would never reach it.
+   ui/mining.js's applyTheme() toggles mn-force-light/mn-force-dark on this same .win-body element
+   (found as #mn's parentElement) for Settings > Appearance, so the override reaches the toast too. */
+#win-mining .win-body{
+  --mn-bg:#f7f7f9; --mn-text:#1b1b1f; --mn-sub:#666; --mn-sub2:#777;
+  --mn-rail:#efeff3; --mn-rail-line:#e0e0e6; --mn-hover:rgba(0,0,0,.05);
+  --mn-card:#fff; --mn-card-h:#f6f6f6; --mn-line:#e3e3ea;
+  --mn-top:#fbfbfd; --mn-topline:#e6e6ec;
+  --mn-track:#eceef3;
+  --mn-accent:var(--accent,#0f6cbd);
+  background:var(--mn-bg);
+}
+html.dark #win-mining .win-body:not(.mn-force-light), #win-mining .win-body.mn-force-dark{
+  --mn-bg:#202020; --mn-text:#f3f3f3; --mn-sub:#b8b8b8; --mn-sub2:#a0a0a0;
+  --mn-rail:#282828; --mn-rail-line:#333; --mn-hover:rgba(255,255,255,.07);
+  --mn-card:#2b2b2b; --mn-card-h:#323232; --mn-line:#3a3a3a;
+  --mn-top:#242424; --mn-topline:#333;
+  --mn-track:#3a3a3a;
+}
+.mn{
+  position:absolute;inset:0;overflow:hidden;display:flex;flex-direction:column;
+  background:var(--mn-bg);color:var(--mn-text);
+  font-family:"Segoe UI Variable Text","Segoe UI",var(--ui-font),system-ui,sans-serif;font-size:14px;line-height:1.35
+}
 .mn *{box-sizing:border-box}
 .mn button{font:inherit;color:inherit;cursor:pointer}
-.mn{--mn-accent:#60cdff}
-.mn-empty{color:#8c8c8c;text-align:center;padding:90px 24px;font-size:14px}
-.mn-empty-small{color:#8c8c8c;text-align:center;padding:12px 14px;font-size:12px}
+.mn-empty{color:var(--mn-sub);text-align:center;padding:90px 24px;font-size:14px}
+.mn-empty-small{color:var(--mn-sub);text-align:center;padding:12px 14px;font-size:12.5px}
 
-/* Command bar */
-.mn-cmdbar{height:52px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid #2e2e2e}
-.mn-cmdbar-title{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:600;color:#f2f2f2}
-.mn-cta-btn{display:flex;align-items:center;gap:7px;padding:6px 16px;border-radius:4px;border:1px solid #3f3f3f;background:#2b2b2b;font-size:12.5px;font-weight:600}
+/* Command bar (mirrors .st-top) */
+.mn-cmdbar{height:56px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--mn-topline);background:var(--mn-top)}
+.mn-cmdbar-title{display:flex;align-items:center;gap:10px;font-size:15.5px;font-weight:600;color:var(--mn-text)}
+.mn-cta-btn{display:inline-flex;align-items:center;gap:8px;min-width:92px;height:36px;padding:0 18px;border:1px solid #c9c9d3;border-radius:6px;background:var(--mn-card);color:var(--mn-text);font-size:14px;font-weight:600}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-cta-btn, #win-mining .win-body.mn-force-dark .mn-cta-btn{border-color:#4a4a4a}
+.mn-cta-btn:hover{background:var(--mn-card-h)}
 .mn-cta-btn svg{flex-shrink:0}
-.mn-cta-btn.mn-cta-start{background:var(--mn-accent);border-color:var(--mn-accent);color:#0a0f14;font-weight:700}
-.mn-cta-btn.mn-cta-start:hover{filter:brightness(1.08)}
-.mn-cta-btn.mn-cta-stop{color:#e4e4e4}
-.mn-cta-btn.mn-cta-stop:hover{background:#333}
-.mn-cta-btn.mn-cta-neutral{color:#7c7c7c;cursor:default}
+.mn-cta-btn.mn-cta-start{background:var(--mn-accent);border-color:var(--mn-accent);color:var(--accent-ink,#fff)}
+.mn-cta-btn.mn-cta-start:hover{filter:brightness(.94)}
+.mn-cta-btn.mn-cta-neutral{color:var(--mn-sub);cursor:default}
+.mn-cta-btn.mn-cta-neutral:hover{background:var(--mn-card)}
 .mn-cta-btn:disabled{cursor:default}
 
-/* Body: nav rail + content */
+/* Body: nav rail + content (mirrors .st-rail / .st-main) */
 .mn-body{flex-grow:1;display:flex;min-height:0}
-.mn-nav{width:150px;flex-shrink:0;border-right:1px solid #2e2e2e;padding:10px 8px;display:flex;flex-direction:column;gap:2px}
-.mn-navitem{position:relative;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:4px;color:#cfcfcf}
-.mn-navitem.active{background:#2c2c2c;color:#f2f2f2;font-weight:600}
-.mn-navtick{position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:2px;background:var(--mn-accent)}
-.mn-navitem-static{color:#6f6f6f;cursor:default}
-.mn-navitem-static svg{opacity:.55}
+.mn-nav{width:180px;flex-shrink:0;background:var(--mn-rail);border-right:1px solid var(--mn-rail-line);padding:14px 10px;display:flex;flex-direction:column;gap:3px}
+.mn-navitem{position:relative;display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:8px;color:var(--mn-text);cursor:pointer}
+.mn-navitem:hover:not(.active){background:var(--mn-hover)}
+.mn-navitem.active{background:var(--mn-card);box-shadow:0 1px 2px rgba(0,0,0,.08);font-weight:600}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-navitem.active, #win-mining .win-body.mn-force-dark .mn-navitem.active{box-shadow:none}
+.mn-navitem.active::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:2px;background:var(--mn-accent)}
+.mn-navitem svg{flex-shrink:0;color:#666}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-navitem svg, #win-mining .win-body.mn-force-dark .mn-navitem svg{color:#ccc}
+.mn-navitem.active svg{color:var(--mn-accent)}
 
-.mn-content{flex-grow:1;overflow-y:auto;padding:16px 18px 18px;min-width:0}
+.mn-content{flex-grow:1;overflow-y:auto;padding:20px 24px 26px;min-width:0}
+.mn-content::-webkit-scrollbar{width:12px}
+.mn-content::-webkit-scrollbar-thumb{background:#c8c8d0;border-radius:6px;border:3px solid var(--mn-bg)}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-content::-webkit-scrollbar-thumb, #win-mining .win-body.mn-force-dark .mn-content::-webkit-scrollbar-thumb{background:#4a4a4a;border-color:var(--mn-bg)}
 
-.mn-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
-.mn-head-title{font-size:16px;font-weight:600;color:#f7f7f7}
-.mn-head-sub{font-size:12px;color:#9a9a9a;margin-top:1px}
-.mn-status-chip{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:4px;background:#262626;border:1px solid #333;font-size:11.5px;font-weight:600;color:#d6d6d6;white-space:nowrap}
+.mn-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
+.mn-head-title{font-size:19px;font-weight:600;color:var(--mn-text)}
+.mn-head-sub{font-size:13px;color:var(--mn-sub);margin-top:2px}
+.mn-status-chip{display:flex;align-items:center;gap:7px;padding:4px 12px;border-radius:12px;background:#eceef3;font-size:12.5px;font-weight:600;color:#48505f;white-space:nowrap}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-status-chip, #win-mining .win-body.mn-force-dark .mn-status-chip{background:#3a3a3a;color:#e0e0e0}
+.mn-status-chip.on{background:#dff3e7;color:#0d6b3a}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-status-chip.on, #win-mining .win-body.mn-force-dark .mn-status-chip.on{background:rgba(16,137,62,.22);color:#6ccb8f}
 .mn-dot{width:7px;height:7px;border-radius:999px;display:block;flex-shrink:0}
-.mn-dot.on{background:var(--mn-accent)}
-.mn-dot.off{background:#6b6b6b}
+.mn-dot.on{background:#0d6b3a}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-dot.on, #win-mining .win-body.mn-force-dark .mn-dot.on{background:#6ccb8f}
+.mn-dot.off{background:#888}
 
-.mn-warn{display:flex;align-items:center;background:#2b2620;border-left:3px solid #ffcc66;border-radius:0 4px 4px 0;padding:9px 12px;font-size:12px;color:#e4c88a;margin-bottom:14px}
+.mn-warn{display:flex;align-items:center;background:#fff4e0;border:1px solid #f0dcae;border-radius:8px;padding:10px 14px;font-size:13px;color:#7a4a00;margin-bottom:16px}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-warn, #win-mining .win-body.mn-force-dark .mn-warn{background:rgba(202,80,16,.16);border-color:rgba(202,80,16,.35);color:#f2a06e}
 
 /* Coin segmented control */
-.mn-segmented{display:inline-flex;border:1px solid #3a3a3a;border-radius:4px;overflow:hidden;margin-bottom:16px;max-width:100%;overflow-x:auto}
-.mn-segbtn{padding:6px 13px;border:none;border-right:1px solid #3a3a3a;background:#242424;color:#c7c7c7;font-size:12px;font-weight:600;white-space:nowrap}
+.mn-segmented{display:inline-flex;border:1px solid #c9c9d3;border-radius:6px;overflow:hidden;margin-bottom:18px;max-width:100%;overflow-x:auto}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-segmented, #win-mining .win-body.mn-force-dark .mn-segmented{border-color:#4a4a4a}
+.mn-segbtn{padding:7px 14px;border:none;border-right:1px solid #c9c9d3;background:var(--mn-card);color:var(--mn-text);font-size:13px;font-weight:600;white-space:nowrap}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-segbtn, #win-mining .win-body.mn-force-dark .mn-segbtn{border-right-color:#4a4a4a}
 .mn-segbtn:last-child{border-right:none}
-.mn-segbtn.active{background:var(--mn-accent);color:#0a0f14}
-.mn-segbtn:hover:not(.active){background:#2b2b2b}
+.mn-segbtn.active{background:var(--mn-accent);color:var(--accent-ink,#fff)}
+.mn-segbtn:hover:not(.active){background:var(--mn-card-h)}
 .mn-locked .mn-segbtn{opacity:.45;pointer-events:none}
 
-/* Grouped panels (Overview / Tower components / Linked rigs) */
-.mn-group{border:1px solid #303030;border-radius:6px;margin-bottom:14px}
+/* Grouped panels (mirrors .se-card / .se-row) */
+.mn-group{background:var(--mn-card);border:1px solid var(--mn-line);border-radius:8px;margin-bottom:16px;overflow:hidden}
 .mn-group-last{margin-bottom:0}
-.mn-group-head{padding:8px 12px;border-bottom:1px solid #2b2b2b;font-size:11.5px;font-weight:600;color:#a8a8a8}
-.mn-group-head-row{display:flex;align-items:center;justify-content:space-between}
-.mn-addbtn{font-size:11.5px;font-weight:600;color:var(--mn-accent);background:none;border:none;padding:0}
+.mn-group-head{padding:11px 16px;border-bottom:1px solid var(--mn-line);font-size:12.5px;font-weight:600;color:var(--mn-sub2);text-transform:uppercase;letter-spacing:.02em}
+.mn-group-head-row{display:flex;align-items:center;justify-content:space-between;text-transform:none;letter-spacing:0}
+.mn-group-head-row span{text-transform:uppercase;letter-spacing:.02em}
+.mn-addbtn{font-size:12.5px;font-weight:600;color:var(--mn-accent);background:none;border:none;padding:0;text-transform:none}
 .mn-addbtn:hover{text-decoration:underline}
 
-.mn-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:1px solid #262626}
-.mn-row-last{border-bottom:none}
-.mn-row:hover{background:#242424}
-.mn-row-label{color:#b9b9b9}
-.mn-row-val{font-weight:600;color:#f2f2f2;transition:color .2s ease}
-.mn-row-val.muted{font-weight:400;color:#d6d6d6}
+.mn-row{display:flex;align-items:center;justify-content:space-between;min-height:48px;padding:10px 16px;border-top:1px solid var(--mn-line)}
+.mn-group>.mn-row:first-of-type{border-top:none}
+.mn-row:hover{background:var(--mn-card-h)}
+.mn-row-label{color:var(--mn-sub)}
+.mn-row-val{font-weight:600;color:var(--mn-text);transition:color .2s ease}
+.mn-row-val.muted{font-weight:400;color:var(--mn-text)}
 .mn-row-val.mn-flash{color:var(--mn-accent)}
 .mn-delta{font-weight:600}
-.mn-delta.up{color:#8fd6a6}
-.mn-delta.down{color:#ff99a4}
+.mn-delta.up{color:#0d6b3a}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-delta.up, #win-mining .win-body.mn-force-dark .mn-delta.up{color:#6ccb8f}
+.mn-delta.down{color:#b3261e}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-delta.down, #win-mining .win-body.mn-force-dark .mn-delta.down{color:#f2a09a}
 
 /* Tower components table */
-.mn-table-head{display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #2b2b2b;font-size:11px;color:#7c7c7c}
+.mn-table-head{display:flex;align-items:center;padding:9px 16px;border-top:1px solid var(--mn-line);font-size:11.5px;font-weight:600;color:var(--mn-sub);text-transform:uppercase;letter-spacing:.02em}
 .mn-th-name{flex:1.1}
 .mn-th-tier{flex:1}
 .mn-th-wear{flex:1.4}
-.mn-th-status{width:70px;text-align:right}
-.mn-crow{display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid #262626}
-.mn-crow:last-child{border-bottom:none}
-.mn-crow:hover{background:#242424}
-.mn-crow-name{flex:1.1;color:#e4e4e4}
-.mn-crow-tier{flex:1;color:#9a9a9a}
+.mn-th-status{width:78px;text-align:right}
+.mn-crow{display:flex;align-items:center;padding:9px 16px;border-top:1px solid var(--mn-line)}
+.mn-crow:hover{background:var(--mn-card-h)}
+.mn-crow-name{flex:1.1;color:var(--mn-text)}
+.mn-crow-tier{flex:1;color:var(--mn-sub)}
 .mn-crow-wear{flex:1.4;display:flex;align-items:center;gap:8px}
-.mn-empty-dash{color:#5a5a5a}
-.mn-wearbar{flex-grow:1;height:5px;border-radius:3px;background:#2b2b2b;overflow:hidden;max-width:90px}
+.mn-empty-dash{color:var(--mn-sub)}
+.mn-wearbar{flex-grow:1;height:6px;border-radius:3px;background:var(--mn-track);overflow:hidden;max-width:90px}
 .mn-wearfill{display:block;height:100%;border-radius:3px}
-.mn-wear-ok{background:var(--mn-accent)}
-.mn-wear-warn{background:#ffcc66}
-.mn-wear-bad{background:#ff99a4}
-.mn-wearpct{font-size:11px;color:#9a9a9a;width:30px;flex-shrink:0}
-.mn-crow-badge{width:70px;text-align:right}
-.mn-badge{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:3px;white-space:nowrap}
-.mn-badge-ok{background:#22322c;color:#8fd6a6}
-.mn-badge-warn{background:#3a3320;color:#ffcc66}
-.mn-badge-bad{background:#3a2226;color:#ff99a4}
-.mn-badge-empty{background:#262626;color:#7c7c7c}
+.mn-wear-ok{background:#0d8a4a}
+.mn-wear-warn{background:#c77a1a}
+.mn-wear-bad{background:#c8382c}
+.mn-wearpct{font-size:11.5px;color:var(--mn-sub);width:30px;flex-shrink:0}
+.mn-crow-badge{width:78px;text-align:right}
+.mn-badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 10px;border-radius:11px;white-space:nowrap;background:var(--mn-track);color:var(--mn-sub2)}
+.mn-badge-ok{background:#dff3e7;color:#0d6b3a}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-badge-ok, #win-mining .win-body.mn-force-dark .mn-badge-ok{background:rgba(16,137,62,.22);color:#6ccb8f}
+.mn-badge-warn{background:#f3e9e2;color:#8a4a17}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-badge-warn, #win-mining .win-body.mn-force-dark .mn-badge-warn{background:rgba(202,80,16,.2);color:#f2a06e}
+.mn-badge-bad{background:#fdeceb;color:#8c1d18}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-badge-bad, #win-mining .win-body.mn-force-dark .mn-badge-bad{background:rgba(212,53,28,.2);color:#f2a09a}
+.mn-badge-empty{background:var(--mn-track);color:var(--mn-sub)}
 
 /* Linked rigs */
-.mn-rigrow{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #262626}
-.mn-rigrow:last-child{border-bottom:none}
-.mn-rigrow:hover{background:#242424}
+.mn-rigrow{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--mn-line)}
+.mn-rigrow:hover{background:var(--mn-card-h)}
 .mn-rig-dot{width:8px;height:8px;border-radius:999px;flex-shrink:0}
 .mn-rig-info{min-width:0;flex-grow:1;display:flex;align-items:baseline;gap:8px}
-.mn-rig-name{color:#e4e4e4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mn-rig-slots{color:#9a9a9a;font-size:11.5px;flex-shrink:0}
-.mn-rig-link,.mn-rig-unlink{font-size:11.5px;font-weight:600;color:var(--mn-accent);white-space:nowrap}
-.mn-rig-unlink{color:#ff99a4}
+.mn-rig-name{color:var(--mn-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mn-rig-slots{color:var(--mn-sub);font-size:12px;flex-shrink:0}
+.mn-rig-link,.mn-rig-unlink{font-size:12.5px;font-weight:600;color:var(--mn-accent);white-space:nowrap}
+.mn-rig-unlink{color:#b3261e}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-rig-unlink, #win-mining .win-body.mn-force-dark .mn-rig-unlink{color:#f2a09a}
 .mn-rig-link:hover,.mn-rig-unlink:hover{text-decoration:underline}
-.mn-available{border-top:1px dashed #2e2e2e}
+.mn-available{border-top:1px dashed var(--mn-line)}
+
+/* Settings screen extras */
+.mn-settings-hint{font-size:12.5px;color:var(--mn-sub);margin-top:10px;line-height:1.5}
 
 /* Status bar */
-.mn-statusbar{height:26px;flex-shrink:0;border-top:1px solid #2e2e2e;background:#1b1b1b;display:flex;align-items:center;padding:0 14px;gap:14px;font-size:11px;color:#8c8c8c}
-.mn-statusbar-sep{width:1px;height:12px;background:#333;flex-shrink:0}
+.mn-statusbar{height:28px;flex-shrink:0;border-top:1px solid var(--mn-topline);background:var(--mn-top);display:flex;align-items:center;padding:0 16px;gap:14px;font-size:11.5px;color:var(--mn-sub)}
+.mn-statusbar-sep{width:1px;height:12px;background:var(--mn-line);flex-shrink:0}
 .mn-statusbar-fill{flex-grow:1}
 
 /* Toast */
-.mn-toast{position:absolute;left:50%;bottom:38px;transform:translate(-50%,12px);background:#2b2b2b;border:1px solid #3f3f3f;color:#e4e4e4;
-  padding:9px 16px;border-radius:6px;font-size:12.5px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;
-  box-shadow:0 6px 20px rgba(0,0,0,.4);max-width:80%;text-align:center}
+.mn-toast{position:absolute;left:50%;bottom:40px;transform:translate(-50%,12px);background:var(--mn-card);border:1px solid var(--mn-line);color:var(--mn-text);
+  padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;
+  box-shadow:0 8px 24px rgba(0,0,0,.18);max-width:80%;text-align:center}
 .mn-toast.on{opacity:1;transform:translate(-50%,0)}
-.mn-toast.bad{background:#2b1a1c;border-color:#4a2a26;color:#ff99a4}
+.mn-toast.bad{background:#fdeceb;border-color:#f0c1be;color:#8c1d18}
+html.dark #win-mining .win-body:not(.mn-force-light) .mn-toast.bad, #win-mining .win-body.mn-force-dark .mn-toast.bad{background:#3a2226;border-color:#5c2130;color:#f2a09a}

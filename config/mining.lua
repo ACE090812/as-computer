@@ -53,6 +53,10 @@ Config.Mining.CoinPerHashPerSecond = 0.00015  -- base payout rate; a part's tier
 Config.Mining.DefaultCoin = 'SDC'       -- which sd-phone crypto symbol a NEW tower defaults to mining
                                         -- (locked spec: "coin TBD" - SDC is sd-phone's own native coin;
                                         -- Phase 3's app lets the owner change this per tower)
+Config.Mining.Coins = {                -- sd-phone's own configured crypto symbols (configs/stocks.lua) -
+  'SDC', 'BTL', 'ETD', 'SPC', 'MZC', 'FLC', 'WZC', 'POG', 'VWC', 'KIF'  -- not fetched live, so a coin
+}                                       -- added there later needs adding here too (Phase 8: the Wallet
+                                        -- screen's "every coin's balance" view reads this same list).
 Config.Mining.OfflineAccrualCapHours = 12  -- a tower/server restart never pays out for more than this
                                             -- many hours of missed ticks, however long it was actually down
 

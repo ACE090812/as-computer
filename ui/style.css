@@ -154,6 +154,10 @@ input{user-select:text;-webkit-user-select:text}
 .g-err{min-height:32px;font-size:13px;color:#ffb4a8;text-shadow:0 1px 4px rgba(0,0,0,.4);margin-top:8px;line-height:1.3}
 .g-btn{margin-top:6px;padding:10px 0;border-radius:6px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);font-size:15.5px;text-align:center;cursor:pointer}
 .g-btn:hover{background:rgba(255,255,255,.3)}
+/* Phase 0.5 follow-up: switches between the setup wizard and the login screen (a fresh machine's
+   login can now claim it for an existing account - server/session.lua's session:login). */
+.g-link{align-self:center;margin-top:14px;font-size:13px;opacity:.8;text-align:center;cursor:pointer}
+.g-link:hover{opacity:1;text-decoration:underline}
 
 /* ---- File Explorer ---- */
 .ex{display:flex;flex-direction:column;height:100%;background:#fff;font-size:16.1px;color:#1b1b1b}

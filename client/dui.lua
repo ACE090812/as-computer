@@ -82,6 +82,41 @@ end
 
 local AddTarget -- defined further down
 
+-- Confirmed in-game: the lgmods_sinner_monitor screen has NO collision at all - a player's whole body
+-- passes straight through it (this model was only ever used before as a texture swap glued onto another
+-- prop's screen, never as a freestanding object, so it was never given its own collision mesh). This bit
+-- everyone placing/spawning that model as a real object: the mining-tower monitor (client/mining_place.lua)
+-- had the same bug and was fixed there by spawning a SECOND, invisible object with real collision as a
+-- physical blocker underneath the visible one - ported here so every computer using this model (built-in
+-- Config.Locations entries AND /placeprops-placed ones, since both go through SpawnComputer) gets it too.
+-- prop_monitor_02 is a normal vanilla desk-monitor prop with real collision in the base game, used purely
+-- as the invisible blocker - the visible monitor (and its texture-swapped screen) stays what it was.
+local NO_COLLISION_MODEL = GetHashKey('lgmods_sinner_monitor')
+local BLOCKER_MODEL = GetHashKey('prop_monitor_02')
+
+local function spawnCollisionBlocker(pos, rot, heading)
+  local timeout = GetGameTimer() + 10000
+  repeat RequestModel(BLOCKER_MODEL) Wait(50) until HasModelLoaded(BLOCKER_MODEL) or GetGameTimer() > timeout
+  if not HasModelLoaded(BLOCKER_MODEL) then return nil end
+  local obj = CreateObject(BLOCKER_MODEL, pos.x, pos.y, pos.z, false, false, false)
+  if obj == 0 or not DoesEntityExist(obj) then return nil end
+  SetEntityCoordsNoOffset(obj, pos.x, pos.y, pos.z, false, false, false)
+  if rot then
+    SetEntityRotation(obj, rot.x, rot.y, rot.z, 2, false)
+  else
+    SetEntityHeading(obj, heading)
+  end
+  RequestCollisionAtCoord(pos.x, pos.y, pos.z)
+  local colTimeout = GetGameTimer() + 2000
+  while not HasCollisionLoadedAroundEntity(obj) and GetGameTimer() < colTimeout do Wait(0) end
+  SetEntityCollision(obj, true, true)
+  SetEntityVisible(obj, false, false)
+  SetEntityAlpha(obj, 0, false)
+  FreezeEntityPosition(obj, true)
+  SetModelAsNoLongerNeeded(BLOCKER_MODEL)
+  return obj
+end
+
 --- Spawns one terminal: its DUI (once per monitor model), the prop and its target zone.
 --- `key` is the Config.Locations index, or 'p<id>' for a computer placed with /placeprops (client/placement.lua).
 --- loc.rot (vector3) is used when present (placed props), otherwise loc.heading.
@@ -121,9 +156,26 @@ function SpawnComputer(loc, key)
         else
           SetEntityHeading(obj, loc.heading)
         end
+
+        -- Force real collision (the same fix client/mining_place.lua uses): collision for this exact
+        -- spot may not have streamed in yet at the instant we freeze it, and SetEntityCollision can be
+        -- left disabled on some archetypes by default regardless.
+        RequestCollisionAtCoord(loc.coords.x, loc.coords.y, loc.coords.z)
+        local colTimeout = GetGameTimer() + 2000
+        while not HasCollisionLoadedAroundEntity(obj) and GetGameTimer() < colTimeout do Wait(0) end
+        SetEntityCollision(obj, true, true)
+
         FreezeEntityPosition(obj, true)
         loc.spawnedObject = obj
         SetModelAsNoLongerNeeded(loc.prop)
+
+        -- lgmods_sinner_monitor has no collision mesh at all (see NO_COLLISION_MODEL comment above) -
+        -- SetEntityCollision above can't create collision a model doesn't have, so give it a real one
+        -- from an invisible blocker object. Applies to every computer using this model: built-in
+        -- Config.Locations entries and /placeprops-placed ones alike, since both call SpawnComputer.
+        if loc.prop == NO_COLLISION_MODEL then
+          loc.spawnedCollider = spawnCollisionBlocker(loc.coords, loc.rot, loc.heading)
+        end
         if Config.Debug then
           print(('[as-computer] "%s": spawned at %s'):format(loc.label, tostring(loc.coords)))
         end
@@ -141,6 +193,8 @@ function DespawnComputer(loc)
   end
   if loc.spawnedObject and DoesEntityExist(loc.spawnedObject) then DeleteEntity(loc.spawnedObject) end
   loc.spawnedObject = nil
+  if loc.spawnedCollider and DoesEntityExist(loc.spawnedCollider) then DeleteEntity(loc.spawnedCollider) end
+  loc.spawnedCollider = nil
 end
 
 CreateThread(function()

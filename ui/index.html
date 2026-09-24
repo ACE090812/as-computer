@@ -14,7 +14,7 @@
 <!-- ?v=N cache-busts the game client's NUI (CEF) cache, which can otherwise keep serving an old
      mining.js/mining.css after a plain resource restart. Bump BOTH v= numbers below whenever either
      file changes, or testers will see stale behavior despite a correct file on disk. -->
-<link rel="stylesheet" href="mining.css?v=10">
+<link rel="stylesheet" href="mining.css?v=14">
 </head>
 <body>
 <div class="app" id="app">
@@ -335,21 +335,25 @@
       <input type="password" class="g-input" id="gs-pass2" autocomplete="off" maxlength="64" data-i18n-placeholder="ui_setup_pass_ph" placeholder="At least 4 characters">
       <div class="g-err" id="gs-err"></div>
       <div class="g-btn" id="gs-btn" data-i18n="ui_setup_btn">Create account</div>
+      <div class="g-link" id="gs-link" data-i18n="ui_setup_existing_link">Already have an account? Sign in</div>
     </div>
   </div>
 
-  <!-- Phase 0.5: login screen (machine already set up, no resumable session for this player) -->
+  <!-- Phase 0.5: login screen (machine already set up, no resumable session for this player) - also
+       doubles as the "claim a fresh machine with an existing account" screen; server/session.lua's
+       session:login grants+owns automatically the first time it succeeds on a never-set-up machine. -->
   <div id="gate-login" class="hidden">
     <div class="g-card">
       <div class="g-icon"><span class="ic" data-ic="user"></span></div>
       <div class="g-title" data-i18n="ui_login_title">Sign in</div>
-      <div class="g-sub" data-i18n="ui_login_sub">Enter an account that's been granted access to this computer.</div>
+      <div class="g-sub" id="gl-sub" data-i18n="ui_login_sub">Enter an account that's been granted access to this computer.</div>
       <label class="g-label" data-i18n="ui_setup_user">Username</label>
       <input type="text" class="g-input" id="gl-user" autocomplete="off" maxlength="20" data-i18n-placeholder="ui_setup_user_ph" placeholder="e.g. admin">
       <label class="g-label" data-i18n="ui_setup_pass">Password</label>
       <input type="password" class="g-input" id="gl-pass" autocomplete="off" maxlength="64" data-i18n-placeholder="ui_lock_pw_ph" placeholder="Password">
       <div class="g-err" id="gl-err"></div>
       <div class="g-btn" id="gl-btn" data-i18n="ui_login_btn">Sign in</div>
+      <div class="g-link" id="gl-link" data-i18n="ui_login_new_link">New computer? Create an account instead</div>
     </div>
   </div>
 
@@ -363,6 +367,6 @@
 <script src="mdt.js"></script>
 <script src="courtmdt.js"></script>
 <script src="evidences.js"></script>
-<script src="mining.js?v=10"></script>
+<script src="mining.js?v=14"></script>
 </body>
 </html>
