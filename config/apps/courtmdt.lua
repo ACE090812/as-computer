@@ -11,6 +11,7 @@ Config.CourtMDT = {
 
 Config.Apps.courtmdt = {
   store     = false,
+  workOnly  = true,           -- only usable on a /placeprops computer locked to one of Config.CourtMDT.jobs - never on a home/personal computer
   jobs      = Config.CourtMDT.jobs,
   icon      = 'courtmdt',
   tint      = '#8a6a34',      -- brass, matching the Court MDT's own colour scheme

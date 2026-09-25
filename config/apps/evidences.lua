@@ -1,7 +1,14 @@
 -- Evidences apps: each of evidences' own tools gets its own desktop icon/window (see ui/evidences.js),
--- instead of one "Evidences" app nesting the whole laptop UI. Access control is entirely evidences'
--- own (config.permissions.access, checked in its own client/dui/focus.lua export), so none of these
--- carry a `jobs` restriction at the as-computer level — same as the single app entry they replace.
+-- instead of one "Evidences" app nesting the whole laptop UI. Evidences' own permission system
+-- (config.permissions.access, checked in its own client/dui/focus.lua export) still decides which of
+-- the unlocked tools a given job can actually use once the app is reachable at all - but at the
+-- as-computer level these are police apps: their `jobs` list is set from config/apps/mdt.lua (which
+-- loads after this file) to Config.MDT.jobs, the same police job list the MDT app uses, instead of
+-- being hand-duplicated here. Edit Config.MDT.jobs (not this file) to change who can use them.
+--
+-- workOnly = true: these are only granted for free (Apps.has/Apps.allowed) on a /placeprops computer
+-- that is job-locked (see server/placement.lua's PlacedJobLock) to the player's own job - never on a
+-- home/personal computer or an unlocked one.
 
 -- 'citizens' was removed on purpose: its data now shows on MDT's own People section instead of a
 -- separate app (same underlying citizenid records, since evidences' config.citizens.synced = true).
@@ -9,6 +16,7 @@
 
 Config.Apps.fingerprint = {
   store     = false,
+  workOnly  = true,
   icon      = 'fingerprint',
   tint      = '#334155',
   category  = 'work',
@@ -19,6 +27,7 @@ Config.Apps.fingerprint = {
 
 Config.Apps.dna = {
   store     = false,
+  workOnly  = true,
   icon      = 'dna',
   tint      = '#334155',
   category  = 'work',
@@ -29,6 +38,7 @@ Config.Apps.dna = {
 
 Config.Apps.firearms_registry = {
   store     = false,
+  workOnly  = true,
   icon      = 'firearms_registry',
   tint      = '#334155',
   category  = 'work',
@@ -39,6 +49,7 @@ Config.Apps.firearms_registry = {
 
 Config.Apps.ballistics = {
   store     = false,
+  workOnly  = true,
   icon      = 'ballistics',
   tint      = '#334155',
   category  = 'work',
@@ -49,6 +60,7 @@ Config.Apps.ballistics = {
 
 Config.Apps.wiretap = {
   store     = false,
+  workOnly  = true,
   icon      = 'wiretap',
   tint      = '#334155',
   category  = 'work',

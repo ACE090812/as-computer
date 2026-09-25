@@ -14,6 +14,31 @@ local busy = {}
 local function storeOn() return not (Config.Store and Config.Store.enabled == false) end
 Apps.storeOn = storeOn
 
+-- Job-locked /placeprops computers (server/placement.lua's PlacedJobLock): src -> the computer key
+-- they last opened a terminal on (client/dui.lua's appsInfo trigger passes it every time a computer
+-- is opened). Used to make a job-locked computer's job apps behave as installed without an actual
+-- Store purchase, but ONLY while using that specific computer - a mechanic sitting at their home
+-- computer still needs the boss to buy the app normally. This is intentionally the same "trust the
+-- last computer this player opened" model the rest of as-computer's app gating already uses (no
+-- app callback anywhere threads a computer key through to Apps.allowed) - it goes stale a few
+-- seconds after closing a terminal, same margin every other app already has.
+local lastComputer = {}
+
+local function freeJobFor(src)
+  local key = lastComputer[src]
+  return key and PlacedJobLock and PlacedJobLock(key) or nil
+end
+Apps.freeJobFor = freeJobFor
+
+--- server/apps.lua's appsInfo callback records this on every computer open (see below).
+function Apps.noteComputer(src, computerKey)
+  if type(computerKey) == 'string' and computerKey ~= '' then lastComputer[src] = computerKey end
+end
+
+AddEventHandler('playerDropped', function()
+  lastComputer[source] = nil
+end)
+
 local function reload()
   local rows = MySQL.query.await(
     "SELECT job, app, installed, paid, installed_name, DATE_FORMAT(installed_at, '%Y-%m-%d %H:%i') AS at FROM computer_apps") or {}
@@ -76,12 +101,20 @@ function Apps.isInstalled(job, id)
   return r ~= nil and r.installed == true
 end
 
---- Does this job have the app right now?
-function Apps.has(job, id)
+--- Does this job have the app right now? `freeJob` is a job-locked computer's job (freeJobFor above) -
+--- when it matches this job, a store app behaves as installed without actually being bought.
+function Apps.has(job, id, freeJob)
   local d = Apps.def(id)
   if not d or not Apps.jobAllowed(id, job) then return false end
   if Apps.available[id] and not Apps.available[id]() then return false end
+  -- workOnly apps (Config.Apps.<id>.workOnly = true, e.g. Mechanic/MOT) only ever work on a
+  -- /placeprops computer that is job-locked to this exact job (freeJob == job) - never on a
+  -- home/personal computer or an unlocked one, no matter how the app is otherwise gated.
+  if d.workOnly then
+    return freeJob ~= nil and freeJob == job
+  end
   if d.store ~= true or not storeOn() then return true end
+  if freeJob and freeJob == job then return true end
   return Apps.isInstalled(job, id)
 end
 
@@ -97,7 +130,7 @@ end
 function Apps.allowed(src, id)
   if Apps.isPublic(id) then return true end
   local j = Bridge.GetJob(src)
-  return j ~= nil and Bridge.AllowedJobs()[j.name] == true and Apps.has(j.name, id)
+  return j ~= nil and Bridge.AllowedJobs()[j.name] == true and Apps.has(j.name, id, freeJobFor(src))
 end
 
 --- { [appId] = bool } for the player's job (sent to the desktop when it opens).
@@ -105,8 +138,9 @@ function Apps.stateFor(src)
   local out = {}
   local j = Bridge.GetJob(src)
   local usable = j ~= nil and Bridge.AllowedJobs()[j.name] == true
+  local freeJob = freeJobFor(src)
   for id in pairs(Config.Apps or {}) do
-    out[id] = Apps.isPublic(id) or (usable and Apps.has(j.name, id)) or false
+    out[id] = Apps.isPublic(id) or (usable and Apps.has(j.name, id, freeJob)) or false
   end
   return out
 end
@@ -145,13 +179,16 @@ end
 
 -- ---- listing -----------------------------------------------------------------------------------------------
 
-local function entry(id, d, job)
+--- `freeJob` (a job-locked computer's job, see freeJobFor above) makes the entry show as installed
+--- without a real Store purchase, same bypass Apps.has gives the app's own visibility/usability.
+local function entry(id, d, job, freeJob)
   local rec = cache[job.name] and cache[job.name][id]
   local jobs = nil
   if type(d.jobs) == 'table' and #d.jobs > 0 then
     jobs = {}
     for _, j in ipairs(d.jobs) do jobs[#jobs + 1] = { name = j, label = Bridge.JobLabel(j) } end
   end
+  local free = freeJob ~= nil and freeJob == job.name
   return {
     id = id, price = math.max(0, math.floor(tonumber(d.price) or 0)),
     icon = d.icon, tint = d.tint, category = d.category, publisher = d.publisher, version = d.version,
@@ -159,18 +196,26 @@ local function entry(id, d, job)
     jobs = jobs,
     allowed = Apps.jobAllowed(id, job.name),
     canManage = Apps.canManage(job, id),
-    installed = rec ~= nil and rec.installed == true,
+    installed = free or (rec ~= nil and rec.installed == true),
     paid = rec ~= nil and rec.paid == true,
     installedBy = rec and rec.installed and rec.by or nil,
     installedAt = rec and rec.installed and rec.at or nil,
   }
 end
 
-local function list(job)
+--- Store listing for this job. Apps this job's `jobs` restriction doesn't cover are left out
+--- entirely (not shown locked/greyed-out) - a player never sees apps made for a different job.
+--- On a computer locked to the player's own job (freeJob == job.name), every store app for that
+--- job is already granted for free right here (see Apps.has/Apps.allowed) - there's nothing left
+--- to buy, so those apps are left out of the Store on THIS computer too. The Store still shows
+--- them normally (for purchase) on any other, non-locked computer.
+local function list(job, freeJob)
   local out = {}
+  local free = freeJob ~= nil and freeJob == job.name
   for id, d in pairs(Config.Apps or {}) do
-    if Apps.enabled(id) and d.store == true and (not Apps.available[id] or Apps.available[id]()) then
-      out[#out + 1] = entry(id, d, job)
+    if Apps.enabled(id) and d.store == true and Apps.jobAllowed(id, job.name)
+      and (not Apps.available[id] or Apps.available[id]()) and not free then
+      out[#out + 1] = entry(id, d, job, freeJob)
     end
   end
   table.sort(out, function(a, b)
@@ -239,7 +284,11 @@ local function broadcast(jobName)
   end
 end
 
-MotCallback.Register('appsInfo', function(src, respond)
+-- computerKey: the key of the computer this open is for (client/dui.lua's OpenTerminal passes loc.key
+-- alongside the trigger). Recorded so Apps.allowed/stateFor/the Store's list can tell a job-locked
+-- computer's free apps apart from anywhere else this player might use one (see freeJobFor above).
+MotCallback.Register('appsInfo', function(src, respond, computerKey)
+  Apps.noteComputer(src, computerKey)
   local hasJob = Bridge.HasComputerJob(src)
   respond({
     apps = Apps.stateFor(src), store = storeOn() and Bridge.HasJobComputer(src),
@@ -276,7 +325,7 @@ MotCallback.Register('storeApi', function(src, respond, name, data)
       canManage = canManage,
       currency = Config.Store and Config.Store.currency or '£',
       funds = funds,
-      apps = list(job),
+      apps = list(job, freeJobFor(src)),
     })
   end
 

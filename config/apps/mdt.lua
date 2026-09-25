@@ -8,7 +8,7 @@ Config.MDT = {
   -- (Config.Jobs in config/config.lua currently only allows 'mechanic' to use any as-computer device
   -- at all) — remove 'mechanic' here and add your real police job name(s) to both this list AND
   -- Config.Jobs in config/config.lua once you're ready to test with an actual police character/computer.
-  jobs = { 'police', 'sheriff', 'lspd', 'bcso', 'sast' },
+  jobs = { 'police', 'sheriff', 'lspd', 'bcso', 'sast', 'mechanic' },
 
   -- Uses your framework's own job grade numbers directly (qb/qbox job.grade.level, esx job.grade),
   -- same as as-mdt's Config.Permissions.adminMinGrade. Anyone with grade >= adminMinGrade can:
@@ -42,6 +42,7 @@ Config.MDT = {
 
 Config.Apps.mdt = {
   store     = false,          -- built-in: always available to Config.MDT.jobs, never bought from the Store
+  workOnly  = true,           -- only usable on a /placeprops computer locked to one of Config.MDT.jobs - never on a home/personal computer
   jobs      = Config.MDT.jobs,
   icon      = 'mdt',
   tint      = '#1d4ed8',      -- police blue
@@ -56,4 +57,12 @@ Config.Apps.mdt = {
 -- Edit Config.MDT.jobs (not legalfolder.lua) when your police job list changes.
 if Config.LegalFolder then
   Config.LegalFolder.writeJobs = Config.MDT.jobs
+end
+
+-- config/apps/evidences.lua also loads before this file (alphabetically): the forensics apps
+-- (Fingerprint, DNA, Firearms Registry, Ballistics, Wiretap) are police apps, so their `jobs`
+-- list is set here too, kept permanently in sync with Config.MDT.jobs above. Edit Config.MDT.jobs
+-- (not evidences.lua) when your police job list changes.
+for _, id in ipairs({ 'fingerprint', 'dna', 'firearms_registry', 'ballistics', 'wiretap' }) do
+  if Config.Apps[id] then Config.Apps[id].jobs = Config.MDT.jobs end
 end

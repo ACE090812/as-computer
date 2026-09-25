@@ -356,7 +356,9 @@ function OpenTerminal(loc)
     local userName = nil
     MotCallback.Trigger('whoami', function(r) userName = (r and r.name) or false end)
     local appsInfo = nil
-    MotCallback.Trigger('appsInfo', function(r) appsInfo = r or false end)
+    -- loc.key tells the server which computer this is, so a job-locked /placeprops computer
+    -- (server/apps.lua's Apps.noteComputer/freeJobFor) can hand out its job's apps for free here only.
+    MotCallback.Trigger('appsInfo', function(r) appsInfo = r or false end, loc.key)
     local session = nil
     MotCallback.Trigger('session:open', function(r) session = r or false end, loc.key)
 
@@ -607,7 +609,7 @@ RegisterNetEvent('as-computer:client:appsChanged', function()
   if not currentTerminal then return end
   MotCallback.Trigger('appsInfo', function(r)
     if r and currentTerminal then SendNuiMessage(json.encode({ action = 'apps', apps = r.apps })) end
-  end)
+  end, currentTerminal.key)
 end)
 
 -- Settings app: read-only info for the pages, and saving personal settings.

@@ -48,7 +48,8 @@ Config.Mechanic = {
 }
 
 Config.Apps.mechanic = {
-  store     = true,
+  store     = false,  -- no Store purchase needed - free for the mechanic job
+  workOnly  = true,   -- only usable on a /placeprops computer locked to 'mechanic' - never on a home/personal computer
   jobs      = { 'mechanic' },
   manage    = 'boss',
   price     = 0,

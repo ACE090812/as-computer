@@ -2,14 +2,28 @@
 -- the database and spawned for every player. Placed computers work exactly like Config.Locations ones.
 -- Placed TVs can show a Presento presentation (as-browser) cast from a computer, with a keybind clicker.
 --
+-- Job-locked computers: a placed COMPUTER (not a TV) can optionally be locked to one job via its `job`
+-- column. This is a workplace-terminal shortcut, not an access gate - anyone can still sit down and log
+-- into a job-locked computer same as any other. What locking does is make that one job's apps behave as
+-- already installed while using THIS specific computer, without the boss ever buying them from the
+-- Store (server/apps.lua's Apps.stateFor/Apps.has `freeJob` param) - a mechanic shop's computer can come
+-- job-locked to 'mechanic' out of the box. It's deliberately per-computer, not per-job: sitting at a
+-- different computer (including a home computer) still needs the app bought normally. This reuses the
+-- same `computer_placed` table as the TV `jobs` restriction below, but is a separate column (`job`,
+-- singular) since the two mean different things: a TV's `jobs` restricts who may CAST to it, while a
+-- computer's `job` grants free app installs to that one job on that one machine.
+--
 -- Exports used by as-browser (Presento):
 --   tvNearby(src)                                   -> { { id, label, dist, busy, mine } }
 --   tvCast(src, tvId, deck, slides, slide, step)    -> true | nil, message
 --   tvGo(src, tvId, slide, step)                    -> true | nil, message
 --   tvStop(src, tvId)                               -> true | nil, message
+--
+-- Exported for server/apps.lua:
+--   PlacedJobLock(computerKey) -> job name string, or nil (not a placed computer, or not locked)
 
 local PC = Config.Placement or {}
-local placed = {}          -- id -> row (kind, variant, x, y, z, rx, ry, rz, label, jobs = { ... })
+local placed = {}          -- id -> row (kind, variant, x, y, z, rx, ry, rz, label, jobs = { ... }, job = 'mechanic' | nil)
 local casts = {}           -- tvId -> { deck, title, slides, steps = { per slide }, slide, step, by (source), byCid, at }
 local ready = false
 
@@ -42,6 +56,7 @@ local function load()
   placed = {}
   for _, r in ipairs(rows) do
     r.jobs = decodeJobs(r.jobs)
+    if type(r.job) ~= 'string' or r.job == '' then r.job = nil end
     placed[r.id] = r
   end
   ready = true
@@ -56,12 +71,17 @@ MySQL.ready(function()
       variant    INT NOT NULL DEFAULT 1,
       label      VARCHAR(60) NOT NULL DEFAULT '',
       jobs       VARCHAR(400) NULL,
+      job        VARCHAR(40) NULL,
       x DOUBLE NOT NULL, y DOUBLE NOT NULL, z DOUBLE NOT NULL,
       rx DOUBLE NOT NULL DEFAULT 0, ry DOUBLE NOT NULL DEFAULT 0, rz DOUBLE NOT NULL DEFAULT 0,
       created_by VARCHAR(80) NOT NULL DEFAULT '',
       created_at INT NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   ]])
+  -- Upgrading an existing install: add the `job` column if this table already existed without it.
+  pcall(function()
+    MySQL.query.await('ALTER TABLE computer_placed ADD COLUMN job VARCHAR(40) NULL AFTER jobs')
+  end)
   load()
 end)
 
@@ -69,11 +89,20 @@ end)
 local function publicList()
   local out = {}
   for id, r in pairs(placed) do
-    out[#out + 1] = { id = id, kind = r.kind, variant = r.variant, label = r.label, jobs = r.jobs,
+    out[#out + 1] = { id = id, kind = r.kind, variant = r.variant, label = r.label, jobs = r.jobs, job = r.job,
       pos = { x = r.x, y = r.y, z = r.z }, rot = { x = r.rx, y = r.ry, z = r.rz } }
   end
   table.sort(out, function(a, b) return a.id < b.id end)
   return out
+end
+
+--- server/apps.lua: the job a placed computer is locked to, or nil. Only 'p<id>' keys (placed computers)
+--- can be locked - built-in Config.Locations computers and mining towers never are.
+function PlacedJobLock(computerKey)
+  local id = type(computerKey) == 'string' and computerKey:match('^p(%d+)$')
+  if not id then return nil end
+  local r = placed[tonumber(id)]
+  return (r and r.kind == 'computer') and r.job or nil
 end
 
 local function broadcast() TriggerClientEvent('as-computer:client:placedChanged', -1, publicList()) end
@@ -116,6 +145,14 @@ end
 
 local function cleanLabel(s) return (tostring(s or ''):gsub('%c', ' ')):sub(1, 60) end
 
+--- Single job name for a computer's `job` lock, or nil (unlocked). Same character rules as cleanJobs.
+local function cleanJob(j)
+  if type(j) ~= 'string' or j == '' then return nil end
+  j = j:gsub('%s', ''):lower()
+  if j:match('^[%w_%-]+$') and #j <= 40 then return j end
+  return nil
+end
+
 MotCallback.Register('placement:can', function(src, respond)
   respond({ ok = canPlace(src) })
 end)
@@ -125,7 +162,8 @@ MotCallback.Register('placement:list', function(src, respond)
   respond(publicList())
 end)
 
---- data = { kind = 'computer'|'tv', variant, pos, rot, label, jobs }
+--- data = { kind = 'computer'|'tv', variant, pos, rot, label, jobs, job } - `jobs` is TVs' cast
+--- restriction, `job` is a computer's job lock (see file header comment); each only applies to its own kind.
 MotCallback.Register('placement:add', function(src, respond, data)
   if not canPlace(src) then return respond({ ok = false, reason = 'not_authorised' }) end
   data = type(data) == 'table' and data or {}
@@ -136,13 +174,14 @@ MotCallback.Register('placement:add', function(src, respond, data)
   if not x then return respond({ ok = false, reason = 'invalid' }) end
   local rx, ry, rz = cleanRot(data.rot)
   local jobs = kind == 'tv' and cleanJobs(data.jobs) or nil
+  local job = kind == 'computer' and cleanJob(data.job) or nil
   local label = cleanLabel(data.label)
   if label == '' then label = variants(kind)[variant].label or kind end
   local id = MySQL.insert.await(
-    'INSERT INTO computer_placed (kind, variant, label, jobs, x, y, z, rx, ry, rz, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    { kind, variant, label, jobs and json.encode(jobs) or nil, x, y, z, rx, ry, rz, (Bridge.GetName(src) or GetPlayerName(src) or ''):sub(1, 80), os.time() })
+    'INSERT INTO computer_placed (kind, variant, label, jobs, job, x, y, z, rx, ry, rz, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    { kind, variant, label, jobs and json.encode(jobs) or nil, job, x, y, z, rx, ry, rz, (Bridge.GetName(src) or GetPlayerName(src) or ''):sub(1, 80), os.time() })
   if not id then return respond({ ok = false, reason = 'error' }) end
-  placed[id] = { id = id, kind = kind, variant = variant, label = label, jobs = jobs, x = x, y = y, z = z, rx = rx, ry = ry, rz = rz }
+  placed[id] = { id = id, kind = kind, variant = variant, label = label, jobs = jobs, job = job, x = x, y = y, z = z, rx = rx, ry = ry, rz = rz }
   log('%s placed %s #%d (%s) at %.1f %.1f %.1f', GetPlayerName(src) or 'console', kind, id, label, x, y, z)
   broadcast()
   respond({ ok = true, id = id })
@@ -162,7 +201,7 @@ MotCallback.Register('placement:move', function(src, respond, data)
   respond({ ok = true })
 end)
 
---- data = { id, label, jobs } - TVs only have jobs.
+--- data = { id, label, jobs, job } - TVs only have jobs (a list); computers only have job (a single lock).
 MotCallback.Register('placement:edit', function(src, respond, data)
   if not canPlace(src) then return respond({ ok = false, reason = 'not_authorised' }) end
   data = type(data) == 'table' and data or {}
@@ -170,8 +209,13 @@ MotCallback.Register('placement:edit', function(src, respond, data)
   if not r then return respond({ ok = false, reason = 'invalid' }) end
   local label = cleanLabel(data.label)
   if label ~= '' then r.label = label end
-  if r.kind == 'tv' then r.jobs = cleanJobs(data.jobs) end
-  MySQL.update.await('UPDATE computer_placed SET label = ?, jobs = ? WHERE id = ?', { r.label, r.jobs and json.encode(r.jobs) or nil, r.id })
+  if r.kind == 'tv' then
+    r.jobs = cleanJobs(data.jobs)
+  elseif r.kind == 'computer' then
+    r.job = cleanJob(data.job)
+  end
+  MySQL.update.await('UPDATE computer_placed SET label = ?, jobs = ?, job = ? WHERE id = ?',
+    { r.label, r.jobs and json.encode(r.jobs) or nil, r.job, r.id })
   broadcast()
   respond({ ok = true })
 end)

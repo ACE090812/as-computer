@@ -16,8 +16,8 @@ Config.PrintEvent = nil
 
 -- Store listing. Every app has one of these entries in Config.Apps (this is the template for a new app).
 Config.Apps.mot = {
-  store     = true,                 -- true: a boss installs it from the Store, then the whole job has it.
-                                    -- false: always on the desktop (built in).
+  store     = false,                -- no Store purchase needed - free for the mechanic job.
+  workOnly  = true,                 -- only usable on a /placeprops computer locked to 'mechanic' - never on a home/personal computer.
   jobs      = { 'mechanic' },       -- jobs allowed to install and use it. nil / {} = any job.
   manage    = 'boss',               -- who may install / remove it for the job: 'boss' | 'any' | a minimum grade number.
                                     -- Leave out to use Config.Store.manage. Every app can set its own.

@@ -301,6 +301,23 @@ local function tvSetup(title, label, jobs)
   return input[1], splitJobs(input[2])
 end
 
+-- Computers only: an optional single job to lock the placed computer to (server/placement.lua's
+-- PlacedJobLock / server/apps.lua's Apps.noteComputer). Left blank, the computer behaves exactly as
+-- before - no free apps, visible/usable by any job allowed to use computers at all.
+local function firstJob(s)
+  local list = splitJobs(s)
+  return list and list[1] or nil
+end
+
+local function computerSetup(title, label, job)
+  local input = lib.inputDialog(title, {
+    { type = 'input', label = L('place_name'), default = label or '' },
+    { type = 'input', label = L('place_job'), description = L('place_job_hint'), default = job or '' },
+  })
+  if not input then return nil end
+  return input[1], firstJob(input[2])
+end
+
 local KIND_VARIANTS = { tv = PC.tvs, printer = PC.printers, computer = PC.computers }
 
 local function place(kind, variant)
@@ -315,13 +332,16 @@ local function place(kind, variant)
   local pos, rot = gizmo(obj)
   if DoesEntityExist(obj) then DeleteEntity(obj) end
   if not pos then return end
-  local label, jobs
+  local label, jobs, job
   if kind == 'tv' then
     label, jobs = tvSetup(L('place_tv_setup'), v.label, nil)
     if label == nil then return end
+  elseif kind == 'computer' then
+    label, job = computerSetup(L('place_pc_setup'), v.label, nil)
+    if label == nil then return end
   end
   MotCallback.Trigger('placement:add', function(r) result(r, 'place_saved') end,
-    { kind = kind, variant = variant, pos = pos, rot = rot, label = label, jobs = jobs })
+    { kind = kind, variant = variant, pos = pos, rot = rot, label = label, jobs = jobs, job = job })
 end
 
 local function entryObject(e)
@@ -348,11 +368,15 @@ local function entryMenu(e, back)
       if pos then MotCallback.Trigger('placement:move', function(r) result(r, 'place_saved') end, { id = e.id, pos = pos, rot = rot }) end
     end },
     { title = e.kind == 'tv' and L('place_edit_tv') or L('place_rename'), icon = 'pen', onSelect = function()
-      -- (printers use the plain rename path below, same as computers - they have no jobs list to edit)
+      -- (printers use the plain rename path below - they have no jobs/job lock to edit)
       if e.kind == 'tv' then
         local label, jobs = tvSetup(L('place_edit_tv'), e.label, e.jobs)
         if label == nil then return end
         MotCallback.Trigger('placement:edit', function(r) result(r, 'place_saved') end, { id = e.id, label = label, jobs = jobs })
+      elseif e.kind == 'computer' then
+        local label, job = computerSetup(L('place_edit_pc'), e.label, e.job)
+        if label == nil then return end
+        MotCallback.Trigger('placement:edit', function(r) result(r, 'place_saved') end, { id = e.id, label = label, job = job })
       else
         local input = lib.inputDialog(L('place_rename'), { { type = 'input', label = L('place_name'), default = e.label } })
         if input then MotCallback.Trigger('placement:edit', function(r) result(r, 'place_saved') end, { id = e.id, label = input[1] }) end
@@ -390,7 +414,7 @@ local function listMenu(nearbyOnly)
       title = ('%s #%d'):format(e.label, e.id),
       description = ('%s · %.0f m%s'):format(
         e.kind == 'tv' and L('place_kind_tv') or e.kind == 'printer' and L('place_kind_printer') or L('place_kind_pc'), r.d,
-        e.jobs and (' · ' .. table.concat(e.jobs, ', ')) or ''),
+        e.jobs and (' · ' .. table.concat(e.jobs, ', ')) or e.job and (' · ' .. L('place_job_locked', e.job)) or ''),
       icon = e.kind == 'tv' and 'tv' or e.kind == 'printer' and 'print' or 'computer',
       arrow = true,
       onSelect = function() entryMenu(e, nearbyOnly and 'asc_place_near' or 'asc_place_all') end,
