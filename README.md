@@ -136,7 +136,7 @@ Remove any old `ensure mot-dui` line (see "Rename from mot-dui" above); `provide
 
 ### Vehicle key scripts
 
-as-computer does not read or give keys, so no key script needs changing to use it. The only thing that touches keys is a plate change, and that is as-browser's job: see its README, "1. Vehicle key scripts" (item keys such as `acestudios_vehiclekeys` are rewritten, table keys go in `extraTables`, and anything else uses the `onChanged` hook). Keys in the ox_inventory database follow along; nothing in as-computer needs to know.
+as-computer does not read or give keys, so no key script needs changing to use it. The only thing that touches keys is a plate change, and that is as-browser's job: see its README, "1. Vehicle key scripts" (item keys such as `as-vehiclekeys` are rewritten, table keys go in `extraTables`, and anything else uses the `onChanged` hook). Keys in the ox_inventory database follow along; nothing in as-computer needs to know.
 
 ### Garages and impound
 
