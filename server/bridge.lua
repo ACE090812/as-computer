@@ -125,6 +125,16 @@ function Bridge.AllowedJobs()
   local function add(list) for _, j in ipairs(list or {}) do allowed[j] = true end end
   add(Config.Jobs or (Config.MechanicJob and { Config.MechanicJob }) or {})
   for _, loc in ipairs(Config.Locations or {}) do add(loc.jobs) end
+  -- Config.AllJobs: every job counts as a computer job (Store, File Explorer, Calendar, Mail...) except
+  -- Config.ExcludeJobs. Job-specific apps (MOT, Mechanic, MDT, Court MDT) are still limited by their own
+  -- Config.Apps.<id>.jobs list, so this only opens up the apps that have no `jobs` restriction.
+  if Config.AllJobs then
+    local ex = Config.ExcludeJobs or { unemployed = true }
+    setmetatable(allowed, { __index = function(_, name)
+      if type(name) ~= 'string' or name == '' or ex[name] then return nil end
+      return true
+    end })
+  end
   return allowed
 end
 

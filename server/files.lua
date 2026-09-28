@@ -1358,3 +1358,24 @@ CreateThread(function()
     Wait(3600000)
   end
 end)
+
+-- ---------------------------------------------------------------------------------------------
+-- For other resources: save a text document into a character's Downloads folder (as-tradingcards
+-- uses this for appraisal letters). Returns the new file id, or nil + reason.
+--   exports['as-computer']:saveToDownloads(citizenid, 'Appraisal AP-123', '<p>...</p>', 'LS Card Exchange')
+-- The body goes through the same sanitizing as Notepad.
+-- ---------------------------------------------------------------------------------------------
+exports('saveToDownloads', function(cid, name, body, fromName)
+  if not on() then return nil, 'files_off' end
+  if type(cid) ~= 'string' or cid == '' then return nil, 'bad_owner' end
+  local p = { scope = 'personal', owner = cid, folder = 'dl', key = 'dl' }
+  local clean = cleanName(tostring(name or 'Document'), 'text')
+  local text = cleanBody(tostring(body or ''))
+  if not clean or not text then return nil, 'bad_file' end
+  if #text > maxLen() then text = text:sub(1, maxLen()) end
+  if countIn(p, 0) >= maxPer() or countAll(p) >= maxTotal() then return nil, 'full' end
+  local unique = uniqueName(p, 0, clean)
+  if not unique then return nil, 'full' end
+  local id = insertRow(p, 0, 'text', unique, text, '', cid, tostring(fromName or ''):sub(1, 100))
+  return id, id and nil or 'error'
+end)

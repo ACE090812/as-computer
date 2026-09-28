@@ -95,6 +95,12 @@ Config.Locations = {
 -- - EDIT these to your server's real job names, same as Config.MDT.jobs/Config.CourtMDT.jobs.
 Config.Jobs = { 'mechanic', 'judge', 'lawyer', 'solicitor', 'barrister' }
 
+-- true = EVERY job may use the computer's job apps (Store, File Explorer + shared job folder, Calendar, Mail ...),
+-- not just the ones in Config.Jobs. Apps with their own `jobs` list (MOT, Mechanic, MDT, Court MDT) stay locked
+-- to those jobs. Jobs in Config.ExcludeJobs never count.
+Config.AllJobs = true
+Config.ExcludeJobs = { unemployed = true }
+
 -- Apps anyone may use on any computer, whatever their job (no Store install needed). Job apps (MOT, Mechanic,
 -- MDT, Mail ...) stay limited to Config.Jobs. Leave the table empty to keep computers job-only.
 -- Scout ('browser') is what gives everyone Presento and the other websites.
