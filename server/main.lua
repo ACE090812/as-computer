@@ -386,6 +386,13 @@ MySQL.ready(function()
   end
   local first = (Config.Jobs and Config.Jobs[1]) or Config.MechanicJob
   if first then MySQL.update.await('UPDATE mot_calendar SET job = ? WHERE job IS NULL', { first }) end
+  -- `ref` lets other resources (e.g. as-mdt-v2's court dates) own events they added through the
+  -- addCalendarEvent / removeCalendarEvents exports below, so they can update or remove them later.
+  local hasRef = MySQL.scalar.await(
+    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mot_calendar' AND COLUMN_NAME = 'ref'")
+  if (tonumber(hasRef) or 0) == 0 then
+    MySQL.query.await('ALTER TABLE `mot_calendar` ADD COLUMN `ref` VARCHAR(64) DEFAULT NULL, ADD INDEX `idx_ref` (`ref`)')
+  end
 end)
 
 local CAL_COLORS = { blue = true, green = true, red = true, orange = true, purple = true, grey = true }
@@ -494,6 +501,45 @@ MotCallback.Register('calendarApi', function(src, respond, name, data)
   end
 
   respond({ ok = false, reason = 'invalid' })
+end)
+
+--- Server export for other resources: add (or update) a Calendar event on one job's calendar.
+--- data = { job, title, date = 'YYYY-MM-DD', startTime?, endTime?, notes?, color?, ref?, createdName? }
+--- With `ref`, an existing event with the same ref + job is updated instead of duplicated.
+--- Returns the event id, or nil, reason.
+exports('addCalendarEvent', function(data)
+  if not CalendarEnabled() or type(data) ~= 'table' then return nil, 'invalid' end
+  local job = type(data.job) == 'string' and data.job ~= '' and data.job or nil
+  local title = CleanText(data.title, 80)
+  local date = ValidDate(data.date)
+  if not job or title == '' or not date then return nil, 'invalid' end
+  local notes = CleanText(data.notes, 300)
+  local color = CAL_COLORS[data.color] and data.color or 'blue'
+  local startT, endT = ValidTime(data.startTime), ValidTime(data.endTime)
+  if not startT then endT = nil end
+  if startT and endT and endT < startT then endT = nil end
+  local ref = type(data.ref) == 'string' and data.ref ~= '' and data.ref:sub(1, 64) or nil
+  local by = CleanText(data.createdName, 64)
+  if by == '' then by = 'System' end
+
+  if ref then
+    local id = MySQL.scalar.await('SELECT id FROM mot_calendar WHERE ref = ? AND job = ? LIMIT 1', { ref, job })
+    if id then
+      MySQL.update.await(
+        'UPDATE mot_calendar SET title = ?, notes = ?, color = ?, event_date = ?, start_time = ?, end_time = ? WHERE id = ?',
+        { title, notes ~= '' and notes or nil, color, date, startT, endT, id })
+      return id
+    end
+  end
+  return MySQL.insert.await(
+    'INSERT INTO mot_calendar (title, notes, color, event_date, start_time, end_time, created_by, created_name, job, ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    { title, notes ~= '' and notes or nil, color, date, startT, endT, 'system', by, job, ref })
+end)
+
+--- Server export: delete every Calendar event added with this `ref` (all jobs). Returns how many.
+exports('removeCalendarEvents', function(ref)
+  if type(ref) ~= 'string' or ref == '' then return 0 end
+  return tonumber(MySQL.update.await('DELETE FROM mot_calendar WHERE ref = ?', { ref:sub(1, 64) })) or 0
 end)
 
 -- ---- Certificates (File Explorer) ---------------------------------------------

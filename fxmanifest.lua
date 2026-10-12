@@ -3,7 +3,7 @@ game 'gta5'
 
 name 'as-computer'
 author 'ACE Studios'
-description 'Los Santos OS: a desktop computer on a prop monitor (Store, MOT Testing Service, File Explorer, Scout browser, Calendar, Mechanic, Mail, Calculator, Notepad, MDT)'
+description 'Los Santos OS: a desktop computer on a prop monitor (Store, MOT Testing Service, File Explorer, Scout browser, Calendar, Mechanic, Mail, Calculator, Notepad)'
 version '0.9.0'
 
 provide 'mot-dui'
@@ -28,8 +28,6 @@ client_scripts {
   'client/notepad.lua',
   'client/files.lua',
   'client/printing.lua',
-  'client/mdt.lua',
-  'client/courtmdt.lua',
   'client/evidences.lua',
   'client/mining_place.lua',   -- Crypto Mining Rig, Phase 4: player placement (needs SpawnComputer/DespawnComputer from client/dui.lua, and PC.gizmo from client/placement.lua's Config.Placement, both above)
   'client/mining_shop.lua',    -- Crypto Mining Rig, Phase 4: the physical parts/chassis shop ped
@@ -49,8 +47,6 @@ server_scripts {
   'server/notepad.lua',
   'server/files.lua',
   'server/printing.lua',
-  'server/mdt.lua',
-  'server/courtmdt.lua',
   'server/evidence_reports.lua',
   'server/placement.lua',
   'server/session.lua',
@@ -80,9 +76,6 @@ files {
   'ui/notepad.js',
   'ui/notepad.css',
   'ui/files.css',
-  'ui/mdt.js',
-  'ui/mdt.css',
-  'ui/courtmdt.js',
   'ui/evidences.js',
   'ui/mirror.html',
   'ui/vendor/html-to-image.js',

@@ -2,17 +2,16 @@
 -- instead of one "Evidences" app nesting the whole laptop UI. Evidences' own permission system
 -- (config.permissions.access, checked in its own client/dui/focus.lua export) still decides which of
 -- the unlocked tools a given job can actually use once the app is reachable at all - but at the
--- as-computer level these are police apps: their `jobs` list is set from config/apps/mdt.lua (which
--- loads after this file) to Config.MDT.jobs, the same police job list the MDT app uses, instead of
--- being hand-duplicated here. Edit Config.MDT.jobs (not this file) to change who can use them.
+-- as-computer level these are police apps: their `jobs` list is set from config/apps/policejobs.lua (which
+-- loads after this file) to Config.PoliceJobs, instead of being hand-duplicated here. Edit
+-- Config.PoliceJobs (not this file) to change who can use them.
 --
 -- workOnly = true: these are only granted for free (Apps.has/Apps.allowed) on a /placeprops computer
 -- that is job-locked (see server/placement.lua's PlacedJobLock) to the player's own job - never on a
 -- home/personal computer or an unlocked one.
 
--- 'citizens' was removed on purpose: its data now shows on MDT's own People section instead of a
--- separate app (same underlying citizenid records, since evidences' config.citizens.synced = true).
--- See ui/mdt.js / server/mdt.lua.
+-- 'citizens' was removed on purpose: its data shows in the MDT's People section (the separate as-mdt-v2
+-- resource) instead of a separate app (same underlying citizenid records, since evidences' config.citizens.synced = true).
 
 Config.Apps.fingerprint = {
   store     = false,

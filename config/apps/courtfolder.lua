@@ -4,9 +4,7 @@
 -- Filing.txt / Verdict.txt for a case still get written into the normal Case Files (legal) folder so
 -- officers keep seeing case outcomes; only the working court material lives here.
 --
--- NOTE: do not reference Config.MDT at this (top) level -- config/apps/*.lua files load in
--- glob/alphabetical order. Config.CourtFolder is only read from inside a function body in
--- server/files.lua, never here.
+-- NOTE: writeJobs is overwritten by config/apps/policejobs.lua (Config.CourtJobs), which loads after this file.
 Config.CourtFolder = {
   enabled   = true,
   label     = 'Court Files',       -- folder name as it appears in File Explorer's sidebar

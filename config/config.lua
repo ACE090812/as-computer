@@ -91,18 +91,18 @@ Config.Locations = {
 -- Jobs that may use the computer at all (bridged across QBCore / Qbox / ESX in bridge.lua).
 -- A location can override this with its own `jobs = { ... }`.
 -- WHICH APPS a job gets is decided by the Store: see config/apps/store.lua and each app's Config.Apps entry.
--- 'judge', 'lawyer', 'solicitor', 'barrister' are placeholders for the Court MDT (config/apps/courtmdt.lua)
--- - EDIT these to your server's real job names, same as Config.MDT.jobs/Config.CourtMDT.jobs.
+-- 'judge', 'lawyer', 'solicitor', 'barrister' are placeholders for court staff (Config.CourtJobs in config/apps/policejobs.lua)
+-- - EDIT these to your server's real job names, same as Config.PoliceJobs/Config.CourtJobs.
 Config.Jobs = { 'mechanic', 'judge', 'lawyer', 'solicitor', 'barrister' }
 
 -- true = EVERY job may use the computer's job apps (Store, File Explorer + shared job folder, Calendar, Mail ...),
--- not just the ones in Config.Jobs. Apps with their own `jobs` list (MOT, Mechanic, MDT, Court MDT) stay locked
+-- not just the ones in Config.Jobs. Apps with their own `jobs` list (MOT, Mechanic) stay locked
 -- to those jobs. Jobs in Config.ExcludeJobs never count.
 Config.AllJobs = true
 Config.ExcludeJobs = { unemployed = true }
 
 -- Apps anyone may use on any computer, whatever their job (no Store install needed). Job apps (MOT, Mechanic,
--- MDT, Mail ...) stay limited to Config.Jobs. Leave the table empty to keep computers job-only.
+-- Mail ...) stay limited to Config.Jobs. Leave the table empty to keep computers job-only.
 -- Scout ('browser') is what gives everyone Presento and the other websites.
 Config.PublicApps = {
   browser    = true,

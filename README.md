@@ -173,6 +173,17 @@ Used when an app has a `price` above 0 (Store) and by the Mechanic app when a cu
 - **Vehicle history.** Completed Mechanic job cards are logged as "service" events on LS Vehicle Check (`logToHistory`). Set `logToHistory = false` to stop.
 - **Not on the desktop:** the parts shop is desktop-only, so it only works from Scout, and needs its own Postal Prime and society bank setup (as-browser README, "Parts shop").
 
+### Calendar exports (other resources)
+
+```lua
+-- Add or update an event on one job's calendar. With `ref`, the same ref + job is updated instead of duplicated.
+exports['as-computer']:addCalendarEvent({
+  job = 'judge', title = 'Court: CASE-0001', date = '2026-11-02', startTime = '14:00', endTime = '15:00',
+  notes = 'Courtroom 1', color = 'purple', ref = 'court:12', createdName = 'Court MDT',
+})
+exports['as-computer']:removeCalendarEvents('court:12')   -- deletes every event with that ref, all jobs
+```
+
 ### Police, MDT and ANPR scripts
 
 ```lua
