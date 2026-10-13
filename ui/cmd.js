@@ -1,7 +1,7 @@
 /* Command Prompt (CMD) for Los Santos OS. Registers itself with LSOS.registerApp.
    The drive C:\ shows the player's REAL File Explorer folders (Documents, Downloads, the job's shared folder, and the legal / court
    folders when they have them) through the same 'filesApi' NUI callback File Explorer uses, so the server applies the same rules
-   (who may see or change what, name and size limits, the Recycle Bin) and logs the same Event Viewer lines. Windows and
+   (who may see or change what, name and size limits, the Recycle Bin) and logs the same Event Viewer lines. LSOS and
    Program Files are read-only decoration.
    Commands: help, cls, echo (also  echo text > file  and  >> file), whoami, hostname, date, time, ver, history, exit |
    dir, cd, pwd, type, mkdir, touch, ren, rm | ipconfig, ping | hack (practice minigames from ui/hack.js). */
