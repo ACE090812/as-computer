@@ -88,6 +88,8 @@ files {
   'ui/logs.css',
   'ui/hack.js',
   'ui/hack.css',
+  'ui/cmd.js',
+  'ui/cmd.css',
   'ui/admin.js',
   'ui/admin.css',
   'ui/evidences.js',

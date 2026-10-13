@@ -1,0 +1,14 @@
+/* Command Prompt (CMD). Always dark, like a real terminal. Scoped under #cmd. */
+#win-cmd .win-body{background:#0c0c0c}
+#cmd{position:absolute;inset:0;display:flex;flex-direction:column;background:#0c0c0c;color:#cccccc;font-family:Consolas,"Cascadia Mono","Courier New",monospace;font-size:14px;line-height:1.35}
+#cmd *{box-sizing:border-box}
+#cmd .cm-out{flex:1;overflow:auto;padding:10px 12px 4px;white-space:pre-wrap;word-break:break-word;user-select:text;-webkit-user-select:text}
+#cmd .cm-line{min-height:1.35em}
+#cmd .cm-err{color:#ff6b6b}
+#cmd .cm-ok{color:#4ade80}
+#cmd .cm-warn{color:#fbbf24}
+#cmd .cm-dim{color:#8b8b8b}
+#cmd .cm-hi{color:#7dd3fc}
+#cmd .cm-in{display:flex;align-items:center;padding:0 12px 10px}
+#cmd .cm-prompt{white-space:pre;color:#cccccc}
+#cmd input{flex:1;min-width:0;background:none;border:0;outline:0;color:#fff;font:inherit;caret-color:#fff;padding:0}
