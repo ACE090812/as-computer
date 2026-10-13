@@ -1,0 +1,65 @@
+/* Games (Snake, Blocks, Solitaire, Chess, Connect 4, Tic-tac-toe): shared look. Scoped under .gm so nothing leaks into other windows. */
+.gm{--g-bg:#f7f7f9;--g-text:#1b1b1f;--g-sub:#777;--g-card:#fff;--g-line:#e3e3ea;--g-hover:rgba(0,0,0,.06);--g-acc:var(--accent,#0f6cbd);--g-good:#13803d;--g-bad:#c42b1c;
+  position:absolute;inset:0;display:flex;flex-direction:column;background:var(--g-bg);color:var(--g-text);overflow:hidden;
+  font-family:"Segoe UI Variable Text","Segoe UI",var(--ui-font),system-ui,sans-serif;font-size:14px;line-height:1.35;user-select:none;-webkit-user-select:none}
+html.dark .gm{--g-bg:#202020;--g-text:#f3f3f3;--g-sub:#a8a8a8;--g-card:#2b2b2b;--g-line:#3a3a3a;--g-hover:rgba(255,255,255,.08);--g-good:#4cc278;--g-bad:#ff6b5e}
+.gm *{box-sizing:border-box}
+.gm button,.gm input,.gm select{font:inherit;color:inherit}
+.gm button{cursor:pointer}
+.gm-body{flex:1;display:flex;gap:18px;padding:16px 18px;min-height:0}
+.gm-main{flex:none;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
+.gm-side{flex:1;min-width:190px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.gm-boxes{display:flex;gap:10px}
+.gm-box{flex:1;background:var(--g-card);border:1px solid var(--g-line);border-radius:10px;padding:8px 12px;min-width:0}
+.gm-box small{display:block;font-size:12px;color:var(--g-sub)}
+.gm-box b{display:block;font-size:22px;font-weight:600;line-height:1.15;font-variant-numeric:tabular-nums}
+.gm-card{background:var(--g-card);border:1px solid var(--g-line);border-radius:10px;padding:9px 12px}
+.gm-card h4{margin:0 0 6px;font-size:12px;font-weight:400;color:var(--g-sub)}
+.gm-seg{display:flex;gap:6px}
+.gm-seg button{flex:1;padding:4px 0;border:1px solid #c9ccd6;border-radius:6px;background:transparent;font-size:13px}
+html.dark .gm-seg button{border-color:#4a4a4a}
+.gm-seg button.on{background:var(--g-acc);border-color:var(--g-acc);color:#fff}
+.gm-seg button[disabled]{opacity:.5;cursor:default}
+.gm-row{display:flex;gap:8px}
+.gm-btn{flex:1;padding:7px 10px;border-radius:7px;border:1px solid #c9ccd6;background:var(--g-card);text-align:center;white-space:nowrap}
+html.dark .gm-btn{border-color:#4a4a4a}
+.gm-btn:hover{border-color:var(--g-acc)}
+.gm-btn.pri{background:var(--g-acc);border-color:var(--g-acc);color:#fff}
+.gm-btn.bad{color:var(--g-bad)}
+.gm-btn[disabled]{opacity:.5;cursor:default}
+.gm-note{padding:8px 12px;border-radius:8px;border:1px dashed #9db8d6;color:#0f5a9c;background:#eef5fc;font-size:13px}
+html.dark .gm-note{background:#1d2b3a;border-color:#3a5a7a;color:#8fc3f5}
+.gm-note .gm-row{margin-top:6px}
+.gm-mini{flex:1;min-height:0;overflow:hidden}
+.gm-mini .r{display:flex;justify-content:space-between;padding:2px 0}
+.gm-mini .me{color:#0f5a9c;font-weight:600}
+html.dark .gm-mini .me{color:#8fc3f5}
+.gm-foot{display:flex;justify-content:space-between;align-items:center;color:var(--g-sub);font-size:12.5px;gap:8px}
+.gm-foot button{border:0;background:none;color:var(--g-acc);padding:0 2px;font-size:12.5px}
+.gm-hint{color:var(--g-sub);font-size:12.5px;text-align:center;margin-top:8px}
+.gm-over{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(14,18,24,.5);z-index:20}
+.gm-over.open{display:flex}
+.gm-dlg{width:min(430px,92%);max-height:92%;overflow:auto;background:var(--g-card);border-radius:14px;padding:20px 24px;box-shadow:0 16px 48px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:12px}
+.gm-dlg h3{margin:0;font-size:20px;font-weight:600}
+.gm-dlg .big{font-size:50px;font-weight:600;line-height:1;text-align:center}
+.gm-dlg .sub{color:var(--g-sub);font-size:13px;text-align:center}
+.gm-dlg .ranks{display:flex;gap:8px}
+.gm-dlg .ranks div{flex:1;background:var(--g-bg);border-radius:10px;padding:8px 12px}
+.gm-dlg .ranks small{display:block;color:var(--g-sub);font-size:12px}
+.gm-dlg .ranks b{font-size:19px;font-weight:600}
+.gm-tag{align-self:center;padding:3px 12px;border-radius:12px;background:#e6f6ec;color:var(--g-good);font-weight:600;font-size:13px}
+html.dark .gm-tag{background:#173323}
+.gm-tabs{display:flex;gap:4px;background:#e9eaf0;border-radius:8px;padding:3px;align-self:flex-start}
+html.dark .gm-tabs{background:#333}
+.gm-tabs button{border:0;background:none;padding:5px 14px;border-radius:6px;color:var(--g-sub)}
+.gm-tabs button.on{background:var(--g-card);color:var(--g-text);box-shadow:0 1px 2px rgba(0,0,0,.2);font-weight:600}
+.gm-table{width:100%;border-collapse:collapse}
+.gm-table td,.gm-table th{padding:5px 8px;text-align:left;border-top:1px solid var(--g-line)}
+.gm-table th{font-size:12px;font-weight:400;color:var(--g-sub);border-top:0}
+.gm-table td:last-child,.gm-table th:last-child{text-align:right}
+.gm-table tr.me td{background:rgba(15,108,189,.12);font-weight:600}
+.gm-slide{display:flex;align-items:center;gap:12px;padding:6px 0}
+.gm-slide span:first-child{width:110px}
+.gm-slide input[type=range]{flex:1}
+.gm-slide output{width:38px;text-align:right}
+.gm-empty{color:var(--g-sub);text-align:center;padding:24px 0}

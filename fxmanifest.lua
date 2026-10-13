@@ -23,6 +23,7 @@ client_scripts {
   'client/dui.lua',
   'client/placement.lua',   -- /placeprops: placed computers and TVs, Presento on TVs
   'client/boss.lua',
+  'client/games.lua',
   'client/logs.lua',
   'client/hack.lua',
   'client/admin.lua',        -- /pcadmin panel (needs PlacementApi from client/placement.lua at call time)
@@ -54,6 +55,7 @@ server_scripts {
   'server/evidence_reports.lua',
   'server/logs.lua',    -- Event Viewer: defines ComputerLog() used by session/boss/admin/hacking
   'server/hack.lua',    -- minigame targets + RequestHack export (needs Apps, Bridge above)
+  'server/games.lua',   -- game leaderboards, stats, saves (needs Apps above)
   'server/boss.lua',    -- Business Manager (needs Apps, Bank, Bridge above)
   'server/admin.lua',   -- /pcadmin: needs Accounts + MotCallback above; defines AdminProps/AdminLog for placement.lua
   'server/placement.lua',
@@ -85,6 +87,10 @@ files {
   'ui/notepad.css',
   'ui/files.css',
   'ui/kit.css',
+  'ui/audio/*',
+  'ui/games.js',
+  'ui/games.css',
+  'ui/games/snake.js',
   'ui/boss.js',
   'ui/logs.js',
   'ui/logs.css',

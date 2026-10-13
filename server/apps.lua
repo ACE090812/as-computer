@@ -8,6 +8,7 @@ Apps = {}
 Apps.available = {}   -- Apps.available.<id> = function() -> bool, set by main.lua when an app needs a resource to be running
 
 local cache = {}      -- cache[job][app] = { installed, paid, by, at }
+local personal = {}   -- personal[cid][app] = true   (apps with personal = true: each player installs them for themselves)
 local ready = false
 local busy = {}
 
@@ -66,7 +67,28 @@ MySQL.ready(function()
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   ]])
   reload()
+  MySQL.query.await([[
+    CREATE TABLE IF NOT EXISTS `computer_apps_personal` (
+      `cid` VARCHAR(64) NOT NULL,
+      `app` VARCHAR(50) NOT NULL,
+      `installed_at` INT NOT NULL,
+      PRIMARY KEY (`cid`, `app`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  ]])
+  for _, r in ipairs(MySQL.query.await('SELECT cid, app FROM computer_apps_personal') or {}) do
+    personal[r.cid] = personal[r.cid] or {}
+    personal[r.cid][r.app] = true
+  end
 end)
+
+--- Apps with `personal = true` (the games) belong to the character, not the job.
+local function isPersonalApp(id)
+  local d = Config.Apps and Config.Apps[id]
+  return d ~= nil and d.personal == true
+end
+Apps.isPersonal = isPersonalApp
+
+function Apps.hasPersonal(cid, id) return cid ~= nil and personal[cid] ~= nil and personal[cid][id] == true end
 
 --- Is the app switched on in the config? Config.EnabledApps.<id> = false, or Config.Apps.<id>.enabled = false, turns it off.
 function Apps.enabled(id)
@@ -138,6 +160,10 @@ end
 function Apps.allowed(src, id)
   if not bossGate(src, id) then return false end
   if Apps.isPublic(id) then return true end
+  if isPersonalApp(id) then
+    local pj = Bridge.GetJob(src)
+    return Apps.def(id) ~= nil and pj ~= nil and Bridge.AllowedJobs()[pj.name] == true and Apps.hasPersonal(Bridge.GetIdentifier(src), id)
+  end
   local j = Bridge.GetJob(src)
   return j ~= nil and Bridge.AllowedJobs()[j.name] == true and Apps.has(j.name, id, freeJobFor(src))
 end
@@ -151,8 +177,13 @@ function Apps.stateFor(src)
   local j = Bridge.GetJob(src)
   local usable = j ~= nil and Bridge.AllowedJobs()[j.name] == true
   local freeJob = freeJobFor(src)
+  local cid = Bridge.GetIdentifier(src)
   for id in pairs(Config.Apps or {}) do
-    out[id] = (Apps.isPublic(id) or (usable and Apps.has(j.name, id, freeJob)) or false) and bossGate(src, id)
+    if isPersonalApp(id) then
+      out[id] = Apps.isPublic(id) or (usable and Apps.def(id) ~= nil and Apps.hasPersonal(cid, id)) or false
+    else
+      out[id] = (Apps.isPublic(id) or (usable and Apps.has(j.name, id, freeJob)) or false) and bossGate(src, id)
+    end
   end
   return out
 end
@@ -193,7 +224,14 @@ end
 
 --- `freeJob` (a job-locked computer's job, see freeJobFor above) makes the entry show as installed
 --- without a real Store purchase, same bypass Apps.has gives the app's own visibility/usability.
-local function entry(id, d, job, freeJob)
+local function entry(id, d, job, freeJob, cid)
+  if d.personal == true then
+    return {
+      id = id, price = 0, icon = d.icon, tint = d.tint, category = d.category, publisher = d.publisher, version = d.version,
+      label = d.label, desc = d.desc, features = d.features, order = d.order, jobs = nil,
+      allowed = true, canManage = true, installed = Apps.hasPersonal(cid, id), paid = false, personal = true,
+    }
+  end
   local rec = cache[job.name] and cache[job.name][id]
   local jobs = nil
   if type(d.jobs) == 'table' and #d.jobs > 0 then
@@ -221,13 +259,13 @@ end
 --- job is already granted for free right here (see Apps.has/Apps.allowed) - there's nothing left
 --- to buy, so those apps are left out of the Store on THIS computer too. The Store still shows
 --- them normally (for purchase) on any other, non-locked computer.
-local function list(job, freeJob)
+local function list(job, freeJob, cid)
   local out = {}
   local free = freeJob ~= nil and freeJob == job.name
   for id, d in pairs(Config.Apps or {}) do
     if Apps.enabled(id) and d.store == true and Apps.jobAllowed(id, job.name)
-      and (not Apps.available[id] or Apps.available[id]()) and not free then
-      out[#out + 1] = entry(id, d, job, freeJob)
+      and (not Apps.available[id] or Apps.available[id]()) and (not free or d.personal == true) then
+      out[#out + 1] = entry(id, d, job, freeJob, cid)
     end
   end
   table.sort(out, function(a, b)
@@ -337,7 +375,7 @@ MotCallback.Register('storeApi', function(src, respond, name, data)
       canManage = canManage,
       currency = Config.Store and Config.Store.currency or '£',
       funds = funds,
-      apps = list(job, freeJobFor(src)),
+      apps = list(job, freeJobFor(src), Bridge.GetIdentifier(src)),
     })
   end
 
@@ -348,6 +386,21 @@ MotCallback.Register('storeApi', function(src, respond, name, data)
   if not Apps.canManage(job, id) then return respond({ ok = false, reason = 'not_boss' }) end
 
   if name ~= 'install' and name ~= 'uninstall' then return respond({ ok = false, reason = 'invalid' }) end
+
+  if d.personal == true then
+    local cid = Bridge.GetIdentifier(src)
+    if not cid then return respond({ ok = false, reason = 'error' }) end
+    if name == 'install' then
+      MySQL.query.await('INSERT IGNORE INTO computer_apps_personal (cid, app, installed_at) VALUES (?, ?, ?)', { cid, id, os.time() })
+      personal[cid] = personal[cid] or {}
+      personal[cid][id] = true
+    else
+      MySQL.query.await('DELETE FROM computer_apps_personal WHERE cid = ? AND app = ?', { cid, id })
+      if personal[cid] then personal[cid][id] = nil end
+    end
+    TriggerClientEvent('as-computer:client:appsChanged', src)
+    return respond({ ok = true })
+  end
 
   local key = job.name .. ':' .. id
   if busy[key] then return respond({ ok = false, reason = 'error' }) end

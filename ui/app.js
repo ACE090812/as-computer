@@ -4501,7 +4501,7 @@
     if (a.installed) {
       buttons = '<button class="st-btn primary" data-act="open" data-id="' + esc(a.id) + '">' + esc(t('store_open', 'Open')) + '</button>' +
         (a.canManage ? '<button class="st-btn danger" data-act="uninstall" data-id="' + esc(a.id) + '">' + esc(t('store_uninstall', 'Uninstall')) + '</button>' : '');
-      note = '<div class="st-note ok">' + esc(fmt(t('store_note_installed', 'Installed for everyone on %s.'), d.job.label)) + '</div>';
+      note = '<div class="st-note ok">' + esc(a.personal ? t('store_note_installed_me', 'Installed for you. Your scores and saves follow your character.') : fmt(t('store_note_installed', 'Installed for everyone on %s.'), d.job.label)) + '</div>';
     } else if (!a.allowed) {
       buttons = '<button class="st-btn primary" disabled>' + esc(t('store_get', 'Get')) + '</button>';
       note = '<div class="st-note warn">' + esc(fmt(t('store_note_locked', 'This app is made for: %s. Your job (%s) can’t install it.'), stJobs(a), d.job.label)) + '</div>';
@@ -4511,7 +4511,7 @@
     } else {
       buttons = '<button class="st-btn primary" data-act="install" data-id="' + esc(a.id) + '"' + (ST.busy ? ' disabled' : '') + '>' +
         esc(a.price > 0 && !a.paid ? fmt(t('store_buy', 'Buy %s'), stCur() + a.price) : t('store_get', 'Get')) + '</button>';
-      note = '<div class="st-note">' + esc(fmt(t('store_note_all', 'Installing adds it for everyone on %s.'), d.job.label)) +
+      note = '<div class="st-note">' + esc(a.personal ? t('store_note_me', 'Free. Installing adds it for you only.') : fmt(t('store_note_all', 'Installing adds it for everyone on %s.'), d.job.label)) +
         (a.price > 0 && !a.paid ? ' ' + esc(fmt(t('store_note_pay', 'The %s is paid from the job’s society account.'), stCur() + a.price)) : '') +
         (a.price > 0 && !a.paid && d.funds != null ? ' ' + esc(fmt(t('store_note_funds', 'Balance: %s.'), stCur() + d.funds)) : '') + '</div>';
     }
@@ -4592,7 +4592,7 @@
       ST.busy = false;
       if (r && r.ok) {
         var name = stName(a);
-        ST.msg = { kind: 'ok', text: kind === 'install'
+        ST.msg = a.personal ? { kind: 'ok', text: fmt(kind === 'install' ? t('store_done_install_me', '%s is now installed for you.') : t('store_done_uninstall_me', '%s was removed for you.'), name) } : { kind: 'ok', text: kind === 'install'
           ? fmt(t('store_done_install', '%s is now installed for everyone on %s.'), name, ST.data.job.label)
           : fmt(t('store_done_uninstall', '%s was removed for everyone on %s.'), name, ST.data.job.label) };
       } else {
