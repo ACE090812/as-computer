@@ -30,11 +30,11 @@ local ready = false
 local function log(fmt, ...) print(('^5[as-computer:placement]^0 ' .. fmt):format(...)) end
 
 local function canPlace(src)
-  if src == 0 then return true end
-  return IsPlayerAceAllowed(src, 'command.' .. (PC.command or 'placeprops'))
+  return Bridge.IsAdmin(src)
 end
 
 local function variants(kind)
+  if kind == 'prop' then return AdminProps or {} end   -- custom decorative props added from /pcadmin (server/admin.lua), keyed by id
   if kind == 'tv' then return PC.tvs or {} end
   if kind == 'printer' then return PC.printers or {} end
   return PC.computers or {}
@@ -89,7 +89,9 @@ end)
 local function publicList()
   local out = {}
   for id, r in pairs(placed) do
+    local custom = r.kind == 'prop' and AdminProps and AdminProps[r.variant] or nil
     out[#out + 1] = { id = id, kind = r.kind, variant = r.variant, label = r.label, jobs = r.jobs, job = r.job,
+      model = custom and custom.model or nil,
       pos = { x = r.x, y = r.y, z = r.z }, rot = { x = r.rx, y = r.ry, z = r.rz } }
   end
   table.sort(out, function(a, b) return a.id < b.id end)
@@ -106,6 +108,30 @@ function PlacedJobLock(computerKey)
 end
 
 local function broadcast() TriggerClientEvent('as-computer:client:placedChanged', -1, publicList()) end
+
+--- Every placed row (server/admin.lua). Read-only copy.
+function PlacedSnapshot()
+  local out = {}
+  for id, r in pairs(placed) do
+    out[#out + 1] = { id = id, kind = r.kind, variant = r.variant, label = r.label, jobs = r.jobs, job = r.job,
+      x = r.x, y = r.y, z = r.z, created_by = r.created_by, created_at = r.created_at }
+  end
+  table.sort(out, function(a, b) return a.id < b.id end)
+  return out
+end
+
+--- Called by server/admin.lua when a custom prop is removed: drop every placed row that used it.
+function PlacedRemoveProp(propId)
+  local changed = false
+  for id, r in pairs(placed) do
+    if r.kind == 'prop' and r.variant == propId then
+      MySQL.update.await('DELETE FROM computer_placed WHERE id = ?', { id })
+      placed[id] = nil
+      changed = true
+    end
+  end
+  if changed then broadcast() end
+end
 
 --- World position of a placed computer / TV (server/mirror.lua).
 function PlacedCoords(id)
@@ -167,7 +193,7 @@ end)
 MotCallback.Register('placement:add', function(src, respond, data)
   if not canPlace(src) then return respond({ ok = false, reason = 'not_authorised' }) end
   data = type(data) == 'table' and data or {}
-  local kind = (data.kind == 'tv' and 'tv') or (data.kind == 'printer' and 'printer') or (data.kind == 'computer' and 'computer') or nil
+  local kind = (data.kind == 'tv' and 'tv') or (data.kind == 'printer' and 'printer') or (data.kind == 'prop' and 'prop') or (data.kind == 'computer' and 'computer') or nil
   local variant = math.floor(tonumber(data.variant) or 0)
   if not kind or not variants(kind)[variant] then return respond({ ok = false, reason = 'invalid' }) end
   local x, y, z = cleanPos(data.pos)
@@ -183,6 +209,7 @@ MotCallback.Register('placement:add', function(src, respond, data)
   if not id then return respond({ ok = false, reason = 'error' }) end
   placed[id] = { id = id, kind = kind, variant = variant, label = label, jobs = jobs, job = job, x = x, y = y, z = z, rx = rx, ry = ry, rz = rz }
   log('%s placed %s #%d (%s) at %.1f %.1f %.1f', GetPlayerName(src) or 'console', kind, id, label, x, y, z)
+  if AdminLog then AdminLog(src, 'place', ('%s #%d (%s)'):format(kind, id, label)) end
   broadcast()
   respond({ ok = true, id = id })
 end)
@@ -197,6 +224,7 @@ MotCallback.Register('placement:move', function(src, respond, data)
   local rx, ry, rz = cleanRot(data.rot)
   MySQL.update.await('UPDATE computer_placed SET x = ?, y = ?, z = ?, rx = ?, ry = ?, rz = ? WHERE id = ?', { x, y, z, rx, ry, rz, r.id })
   r.x, r.y, r.z, r.rx, r.ry, r.rz = x, y, z, rx, ry, rz
+  if AdminLog then AdminLog(src, 'move', ('%s #%d (%s)'):format(r.kind, r.id, r.label)) end
   broadcast()
   respond({ ok = true })
 end)
@@ -216,6 +244,7 @@ MotCallback.Register('placement:edit', function(src, respond, data)
   end
   MySQL.update.await('UPDATE computer_placed SET label = ?, jobs = ?, job = ? WHERE id = ?',
     { r.label, r.jobs and json.encode(r.jobs) or nil, r.job, r.id })
+  if AdminLog then AdminLog(src, 'edit', ('%s #%d (%s)'):format(r.kind, r.id, r.label)) end
   broadcast()
   respond({ ok = true })
 end)
@@ -229,6 +258,7 @@ MotCallback.Register('placement:delete', function(src, respond, id)
   if MirrorClear then MirrorClear('p' .. r.id) end
   if casts[r.id] then casts[r.id] = nil; TriggerClientEvent('as-computer:client:tvState', -1, r.id, nil) end
   log('%s deleted %s #%d', GetPlayerName(src) or 'console', r.kind, r.id)
+  if AdminLog then AdminLog(src, 'delete', ('%s #%d (%s)'):format(r.kind, r.id, r.label)) end
   broadcast()
   respond({ ok = true })
 end)

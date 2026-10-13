@@ -22,6 +22,9 @@ client_scripts {
   'client/callback.lua',
   'client/dui.lua',
   'client/placement.lua',   -- /placeprops: placed computers and TVs, Presento on TVs
+  'client/boss.lua',
+  'client/logs.lua',
+  'client/admin.lua',        -- /pcadmin panel (needs PlacementApi from client/placement.lua at call time)
   'client/mirror.lua',      -- live monitor view for players nearby
   'client/mechanic.lua',
   'client/mail.lua',
@@ -48,6 +51,9 @@ server_scripts {
   'server/files.lua',
   'server/printing.lua',
   'server/evidence_reports.lua',
+  'server/logs.lua',    -- Event Viewer: defines ComputerLog() used by session/boss/admin/hacking
+  'server/boss.lua',    -- Business Manager (needs Apps, Bank, Bridge above)
+  'server/admin.lua',   -- /pcadmin: needs Accounts + MotCallback above; defines AdminProps/AdminLog for placement.lua
   'server/placement.lua',
   'server/session.lua',
   'server/mirror.lua',
@@ -76,6 +82,13 @@ files {
   'ui/notepad.js',
   'ui/notepad.css',
   'ui/files.css',
+  'ui/kit.css',
+  'ui/boss.js',
+  'ui/logs.js',
+  'ui/hack.js',
+  'ui/hack.css',
+  'ui/admin.js',
+  'ui/admin.css',
   'ui/evidences.js',
   'ui/mirror.html',
   'ui/vendor/html-to-image.js',

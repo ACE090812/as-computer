@@ -1,0 +1,46 @@
+/* Shared look for the newer apps (Business Manager, Event Viewer). Scoped under .ak, so it cannot touch other windows.
+   Variables follow the OS: light by default, dark under html.dark, accent from Settings. */
+.ak{--k-bg:#f7f7f9;--k-text:#1b1b1f;--k-sub:#666;--k-rail:#efeff3;--k-line:#e3e3ea;--k-hover:rgba(0,0,0,.05);--k-card:#fff;--k-top:#fbfbfd;--k-acc:var(--accent,#0f6cbd);--k-bad:#c42b1c;--k-good:#13803d;--k-warn:#9a6700;--k-track:#eceef3;
+  position:absolute;inset:0;display:flex;background:var(--k-bg);color:var(--k-text);overflow:hidden;
+  font-family:"Segoe UI Variable Text","Segoe UI",var(--ui-font),system-ui,sans-serif;font-size:14px;line-height:1.35}
+html.dark .ak{--k-bg:#202020;--k-text:#f3f3f3;--k-sub:#b8b8b8;--k-rail:#282828;--k-line:#3a3a3a;--k-hover:rgba(255,255,255,.07);--k-card:#2b2b2b;--k-top:#242424;--k-bad:#ff6b5e;--k-good:#4cc278;--k-warn:#e0b04c;--k-track:#3a3a3a}
+.ak *{box-sizing:border-box}
+.ak button,.ak input,.ak select{font:inherit;color:inherit}
+.ak button{cursor:pointer}
+.ak input,.ak select{user-select:text;-webkit-user-select:text;border:1px solid var(--k-line);background:var(--k-card);border-radius:6px;padding:6px 10px;min-width:0}
+.ak input:focus,.ak select:focus{outline:2px solid var(--k-acc);outline-offset:-1px}
+.ak-rail{width:190px;flex:none;background:var(--k-rail);border-right:1px solid var(--k-line);padding:12px 8px;display:flex;flex-direction:column;gap:2px}
+.ak-brand{padding:6px 10px 12px;font-weight:600}
+.ak-brand small{display:block;font-weight:400;color:var(--k-sub);font-size:12px}
+.ak-nav{border:0;background:none;text-align:left;padding:8px 12px;border-radius:7px}
+.ak-nav:hover{background:var(--k-hover)}
+.ak-nav.on{background:var(--k-card);box-shadow:inset 3px 0 0 var(--k-acc);font-weight:600}
+.ak-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.ak-top{flex:none;display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--k-line);background:var(--k-top);min-height:50px}
+.ak-top h2{margin:0;font-size:16px;font-weight:600;flex:1}
+.ak-body{flex:1;overflow:auto;padding:16px}
+.ak-btn{border:1px solid var(--k-line);background:var(--k-card);border-radius:6px;padding:6px 12px;white-space:nowrap}
+.ak-btn:hover{border-color:var(--k-acc)}
+.ak-btn.pri{background:var(--k-acc);border-color:var(--k-acc);color:#fff}
+.ak-btn.bad{color:var(--k-bad);border-color:var(--k-bad)}
+.ak-btn.sm{padding:3px 9px;font-size:12.5px}
+.ak-btn[disabled]{opacity:.45;cursor:default}
+.ak-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.ak-card{background:var(--k-card);border:1px solid var(--k-line);border-radius:8px;padding:14px}
+.ak-card b{display:block;font-size:24px;line-height:1.15}
+.ak-card span{color:var(--k-sub);font-size:12.5px}
+.ak table{width:100%;border-collapse:collapse;background:var(--k-card);border:1px solid var(--k-line);border-radius:8px;overflow:hidden}
+.ak th,.ak td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--k-line);vertical-align:middle}
+.ak th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--k-sub);background:var(--k-bg);font-weight:600}
+.ak tr:last-child td{border-bottom:0}
+.ak-tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;border:1px solid var(--k-line);background:var(--k-bg)}
+.ak-tag.good{color:var(--k-good);border-color:var(--k-good)}
+.ak-tag.warn{color:var(--k-warn);border-color:var(--k-warn)}
+.ak-tag.bad{color:var(--k-bad);border-color:var(--k-bad)}
+.ak-mute{color:var(--k-sub)}
+.ak-empty{color:var(--k-sub);text-align:center;padding:60px 20px}
+.ak-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.ak-acts{display:flex;gap:5px;flex-wrap:wrap}
+.ak h3{margin:16px 0 8px;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--k-sub)}
+.ak h3:first-child{margin-top:0}
+.ak-toast{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);background:var(--k-text);color:var(--k-bg);padding:7px 14px;border-radius:7px;font-size:13px;pointer-events:none;z-index:5}

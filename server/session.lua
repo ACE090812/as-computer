@@ -63,6 +63,10 @@ MotCallback.Register('session:setup', function(src, respond, key, username, pass
   end
 
   sessions[key] = { cid = cid, accountId = account.id, state = 'active', at = os.time() }
+  if ComputerLog then
+    ComputerLog(key, 'system', 'setup', ('First-time setup completed, owner account "%s"'):format(account.username), src)
+    ComputerLog(key, 'security', 'login', ('Signed in as "%s"'):format(account.username), src)
+  end
   respond({ success = true, accountName = account.username })
 end)
 
@@ -87,12 +91,14 @@ MotCallback.Register('session:login', function(src, respond, key, username, pass
 
   local account = Accounts.verifyLogin(username, password)
   if not account then
+    if ComputerLog then ComputerLog(key, 'security', 'login_failed', ('Failed sign-in as "%s"'):format(tostring(username):sub(1, 20)), src, 'warning') end
     return respond({ success = false, error = 'bad_credentials' })
   end
 
   local granted = Accounts.isGranted(key, account.id)
   if not granted then
     if Accounts.hasAnyGrants(key) then
+      if ComputerLog then ComputerLog(key, 'security', 'login_denied', ('"%s" has no access to this computer'):format(account.username), src, 'warning') end
       return respond({ success = false, error = 'not_granted' })
     end
     -- Fresh machine, nobody's claimed it yet - this login claims it instead of failing.
@@ -101,6 +107,7 @@ MotCallback.Register('session:login', function(src, respond, key, username, pass
   end
 
   sessions[key] = { cid = cid, accountId = account.id, state = 'active', at = os.time() }
+  if ComputerLog then ComputerLog(key, 'security', 'login', ('Signed in as "%s"'):format(account.username), src) end
   respond({ success = true, accountName = account.username })
 end)
 
@@ -109,6 +116,10 @@ RegisterNetEvent('as-computer:server:session', function(key, st)
   if not validKey(key) or (st ~= 'active' and st ~= 'locked' and st ~= 'off') then return end
   local rec = sessions[key]
   if rec and rec.cid == Bridge.GetIdentifier(src) then
+    if ComputerLog and rec.state ~= st then
+      local what = { locked = 'Computer locked', off = 'Computer shut down', active = 'Computer unlocked' }
+      ComputerLog(key, 'system', st == 'off' and 'shutdown' or st == 'locked' and 'lock' or 'unlock', what[st], src)
+    end
     rec.state, rec.at = st, os.time()
     if st == 'off' and MirrorClear then MirrorClear(key) end
   end
@@ -146,4 +157,23 @@ function ClearComputerSession(key)
   sessions[key] = nil
   if rec and rec.state ~= 'off' then return rec.cid end
   return nil
+end
+
+--- Snapshot of every live session for the admin panel (server/admin.lua): key -> { cid, state, at }.
+function ComputerSessionsList()
+  local out = {}
+  for key, rec in pairs(sessions) do
+    if rec.state ~= 'off' then out[key] = { cid = rec.cid, state = rec.state, at = rec.at } end
+  end
+  return out
+end
+
+--- Admin action: mark a machine locked (the user's windows stay) and return who was on it, or nil.
+---@param key string
+---@return string|nil cid
+function ComputerSessionForceLock(key)
+  local rec = sessions[key]
+  if not rec or rec.state == 'off' then return nil end
+  rec.state, rec.at = 'locked', os.time()
+  return rec.cid
 end

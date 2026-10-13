@@ -117,6 +117,31 @@ function Bridge.GetName(src)
   return GetPlayerName(src)
 end
 
+--- Is this player a server admin? Console (0) always is. Checks the ace for the admin command, then the
+--- framework's own admin permission (QBCore / QBox permission, ESX group). Used by /pcadmin and /placeprops.
+function Bridge.IsAdmin(src)
+  src = tonumber(src) or 0
+  if src == 0 then return true end
+  local cmd = (Config.Admin and Config.Admin.command) or 'pcadmin'
+  if IsPlayerAceAllowed(src, 'command.' .. cmd) or IsPlayerAceAllowed(src, 'command.' .. ((Config.Placement and Config.Placement.command) or 'placeprops')) then
+    return true
+  end
+  local ok, res = pcall(function()
+    if framework == 'qbcore' then
+      local f = exports['qb-core']:GetCoreObject().Functions
+      return f.HasPermission(src, 'admin') or f.HasPermission(src, 'god')
+    elseif framework == 'qbox' then
+      return IsPlayerAceAllowed(src, 'group.admin') or IsPlayerAceAllowed(src, 'qbox.admin') or IsPlayerAceAllowed(src, 'admin')
+    elseif framework == 'esx' then
+      local p = exports.es_extended:getSharedObject().GetPlayerFromId(src)
+      local g = p and p.getGroup and p.getGroup()
+      return g == 'admin' or g == 'superadmin'
+    end
+    return false
+  end)
+  return ok and res == true
+end
+
 --- Jobs allowed to use the computer anywhere: Config.Jobs plus any location's own `jobs`.
 local allowed
 function Bridge.AllowedJobs()
@@ -184,6 +209,144 @@ end
 function Bridge.HasComputerJob(src)
   for _, on in pairs(Config.PublicApps or {}) do if on then return true end end
   return Bridge.HasJobComputer(src)
+end
+
+
+-- ---- helpers used by the Boss app -----------------------------------------------------------------------
+
+function Bridge.Framework() return framework end
+
+local function jsonOf(v)
+  if type(v) == 'table' then return v end
+  if type(v) == 'string' and v ~= '' then
+    local ok, t = pcall(json.decode, v)
+    if ok and type(t) == 'table' then return t end
+  end
+  return {}
+end
+
+--- Raw job table from the framework's shared data (or nil): { label, grades = { [level] = { name, payment/salary, isboss } } }.
+local function sharedJob(name)
+  local j
+  pcall(function()
+    if framework == 'qbox' then
+      j = exports.qbx_core:GetJob(name)
+    elseif framework == 'qbcore' then
+      j = exports['qb-core']:GetCoreObject().Shared.Jobs[name]
+    elseif framework == 'esx' then
+      j = exports.es_extended:getSharedObject().GetJobs()[name]
+    end
+  end)
+  return j
+end
+
+--- Every grade of a job, lowest first: { { grade = number, label, pay, isBoss } }.
+function Bridge.JobGrades(name)
+  local sj = sharedJob(name)
+  local out = {}
+  if not sj or type(sj.grades) ~= 'table' then return out end
+  local topEsx = 0
+  for k, g in pairs(sj.grades) do
+    local lvl = tonumber(k)
+    if lvl then
+      if lvl > topEsx then topEsx = lvl end
+      out[#out + 1] = {
+        grade = lvl, label = g.name or g.label or tostring(lvl), pay = tonumber(g.payment or g.salary) or 0,
+        isBoss = g.isboss == true or g.name == 'boss' or g.grade_name == 'boss',
+      }
+    end
+  end
+  table.sort(out, function(a, b) return a.grade < b.grade end)
+  return out
+end
+
+local function gradeLabelOf(grades, level)
+  for _, g in ipairs(grades) do if g.grade == level then return g.label end end
+  return tostring(level)
+end
+
+--- Everyone on a job, online or not: { { id = identifier, name, grade, gradeLabel, online = src|nil } }.
+function Bridge.JobMembers(name)
+  local grades = Bridge.JobGrades(name)
+  local byId, order = {}, {}
+  local function put(r) if not byId[r.id] then order[#order + 1] = r.id end byId[r.id] = r end
+
+  local ok = pcall(function()
+    if framework == 'esx' then
+      for _, r in ipairs(MySQL.query.await('SELECT identifier, firstname, lastname, job_grade FROM users WHERE job = ? LIMIT 500', { name }) or {}) do
+        put({ id = r.identifier, name = ((r.firstname or '') .. ' ' .. (r.lastname or '')):gsub('^%s+', ''):gsub('%s+$', ''), grade = tonumber(r.job_grade) or 0 })
+      end
+    elseif framework then
+      for _, r in ipairs(MySQL.query.await(
+        "SELECT citizenid, charinfo, job FROM players WHERE JSON_UNQUOTE(JSON_EXTRACT(job, '$.name')) = ? LIMIT 500", { name }) or {}) do
+        local ci, jb = jsonOf(r.charinfo), jsonOf(r.job)
+        local g = type(jb.grade) == 'table' and jb.grade or {}
+        put({ id = r.citizenid, name = ((ci.firstname or '') .. ' ' .. (ci.lastname or '')):gsub('^%s+', ''):gsub('%s+$', ''),
+              grade = tonumber(g.level) or tonumber(jb.grade) or 0 })
+      end
+    end
+  end)
+  if not ok then print('^1[as-computer:boss] could not read the job members from the database^0') end
+
+  -- Online players are the truth: add / correct them, and drop an offline row for someone who has since changed job.
+  for _, pid in ipairs(GetPlayers()) do
+    local src = tonumber(pid)
+    local id = Bridge.GetIdentifier(src)
+    local j = Bridge.GetJob(src)
+    if j and id then
+      if j.name == name then
+        put({ id = id, name = Bridge.GetName(src), grade = j.grade })
+        byId[id].name, byId[id].grade = Bridge.GetName(src), j.grade
+        byId[id].online = src
+      elseif byId[id] then
+        byId[id] = nil
+      end
+    end
+  end
+
+  local out = {}
+  for _, id in ipairs(order) do
+    local r = byId[id]
+    if r then
+      r.gradeLabel = gradeLabelOf(grades, r.grade)
+      out[#out + 1] = r
+    end
+  end
+  table.sort(out, function(a, b) if a.grade ~= b.grade then return a.grade > b.grade end return (a.name or '') < (b.name or '') end)
+  return out
+end
+
+--- Puts a character (online or offline) on a job at a grade. true on success.
+function Bridge.SetJob(identifier, jobName, grade)
+  grade = math.floor(tonumber(grade) or 0)
+  local src = Bridge.FindSource(identifier)
+  local ok, res = pcall(function()
+    if framework == 'qbox' then
+      return exports.qbx_core:SetJob(identifier, jobName, grade) ~= false
+    elseif framework == 'qbcore' then
+      if src then
+        local p = Bridge.GetPlayer(src)
+        return p.Functions.SetJob(jobName, grade) ~= false
+      end
+      local sj = sharedJob(jobName)
+      local g = sj and sj.grades and (sj.grades[tostring(grade)] or sj.grades[grade])
+      if not sj or not g then return false end
+      local blob = json.encode({
+        name = jobName, label = sj.label, payment = g.payment or 0, type = sj.type, onduty = true,
+        isboss = g.isboss == true, grade = { name = g.name, level = grade },
+      })
+      return (MySQL.update.await('UPDATE players SET job = ? WHERE citizenid = ?', { blob, identifier }) or 0) > 0
+    elseif framework == 'esx' then
+      if src then
+        local p = Bridge.GetPlayer(src)
+        p.setJob(jobName, grade)
+        return true
+      end
+      return (MySQL.update.await('UPDATE users SET job = ?, job_grade = ? WHERE identifier = ?', { jobName, grade, identifier }) or 0) > 0
+    end
+    return false
+  end)
+  return ok and res == true
 end
 
 -- ---- helpers used by the Mechanic app ---------------------------------------------------------------

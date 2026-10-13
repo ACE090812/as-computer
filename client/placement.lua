@@ -90,6 +90,25 @@ local function addPrinter(e)
   end)
 end
 
+local props = {}       -- id -> { entry, obj }  (custom decorative props from /pcadmin's Props tab)
+
+local function addProp(e)
+  if type(e.model) ~= 'string' then return end
+  local t = { entry = e }
+  props[e.id] = t
+  CreateThread(function()
+    local obj = spawnProp(joaat(e.model), e.pos, e.rot)
+    if props[e.id] == t then t.obj = obj elseif obj then DeleteEntity(obj) end
+  end)
+end
+
+local function removeProp(id)
+  local t = props[id]
+  if not t then return end
+  if t.obj and DoesEntityExist(t.obj) then DeleteEntity(t.obj) end
+  props[id] = nil
+end
+
 local function removePrinter(id)
   local t = printers[id]
   if not t then return end
@@ -132,16 +151,18 @@ local function applyList(list)
   local seen = {}
   for _, e in ipairs(type(list) == 'table' and list or {}) do
     seen[e.id] = true
-    local cur = (tvs[e.id] and tvs[e.id].entry) or (printers[e.id] and printers[e.id].entry) or (placedLocs[e.id] and placedLocs[e.id].entry)
+    local cur = (tvs[e.id] and tvs[e.id].entry) or (printers[e.id] and printers[e.id].entry) or (props[e.id] and props[e.id].entry) or (placedLocs[e.id] and placedLocs[e.id].entry)
     if not same(cur, e) then
       removeTv(e.id)
       removePrinter(e.id)
+      removeProp(e.id)
       removeComputer(e.id)
-      if e.kind == 'tv' then addTv(e) elseif e.kind == 'printer' then addPrinter(e) else addComputer(e) end
+      if e.kind == 'tv' then addTv(e) elseif e.kind == 'printer' then addPrinter(e) elseif e.kind == 'prop' then addProp(e) else addComputer(e) end
     end
   end
   for id in pairs(tvs) do if not seen[id] then removeTv(id) end end
   for id in pairs(printers) do if not seen[id] then removePrinter(id) end end
+  for id in pairs(props) do if not seen[id] then removeProp(id) end end
   for id in pairs(placedLocs) do if not seen[id] then removeComputer(id) end end
 end
 
@@ -320,8 +341,8 @@ end
 
 local KIND_VARIANTS = { tv = PC.tvs, printer = PC.printers, computer = PC.computers }
 
-local function place(kind, variant)
-  local v = (KIND_VARIANTS[kind] or PC.computers)[variant]
+local function place(kind, variant, custom)
+  local v = custom or (KIND_VARIANTS[kind] or PC.computers)[variant]
   if not v or not loadModel(v.prop) then return notify(L('place_bad_model'), 'error') end
   local ped = PlayerPedId()
   local c = GetOffsetFromEntityInWorldCoords(ped, 0.0, 1.6, 0.0)
@@ -347,6 +368,7 @@ end
 local function entryObject(e)
   if e.kind == 'tv' then return tvs[e.id] and tvs[e.id].obj end
   if e.kind == 'printer' then return printers[e.id] and printers[e.id].obj end
+  if e.kind == 'prop' then return props[e.id] and props[e.id].obj end
   return placedLocs[e.id] and placedLocs[e.id].spawnedObject
 end
 
@@ -354,11 +376,28 @@ local function allEntries()
   local out = {}
   for _, t in pairs(tvs) do out[#out + 1] = t.entry end
   for _, t in pairs(printers) do out[#out + 1] = t.entry end
+  for _, t in pairs(props) do out[#out + 1] = t.entry end
   for _, l in pairs(placedLocs) do out[#out + 1] = l.entry end
   return out
 end
 
 local openMenu
+
+--- Used by client/admin.lua (the /pcadmin panel). Everything is checked again by the server.
+PlacementApi = {
+  place = function(kind, variant, model, label)
+    if kind == 'prop' then return place('prop', variant, { prop = joaat(model), label = label }) end
+    return place(kind, variant)
+  end,
+  move = function(id)
+    local e
+    for _, x in ipairs(allEntries()) do if x.id == id then e = x break end end
+    local obj = e and entryObject(e)
+    if not obj then return notify(L('place_bad_model'), 'error') end
+    local pos, rot = gizmo(obj)
+    if pos then MotCallback.Trigger('placement:move', function(r) result(r, 'place_saved') end, { id = id, pos = pos, rot = rot }) end
+  end,
+}
 
 local function entryMenu(e, back)
   local obj = entryObject(e)
@@ -464,4 +503,5 @@ AddEventHandler('onResourceStop', function(res)
   screenOff()
   for _, t in pairs(tvs) do if t.obj and DoesEntityExist(t.obj) then DeleteEntity(t.obj) end end
   for _, t in pairs(printers) do if t.obj and DoesEntityExist(t.obj) then DeleteEntity(t.obj) end end
+  for _, t in pairs(props) do if t.obj and DoesEntityExist(t.obj) then DeleteEntity(t.obj) end end
 end)

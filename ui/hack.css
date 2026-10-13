@@ -1,0 +1,32 @@
+/* Hacking minigames (ui/hack.js). One overlay, scoped under #hk. */
+#hk{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,8,4,.82);z-index:100000;font-family:Consolas,"Cascadia Mono","Courier New",monospace;color:#33ff99}
+#hk.open{display:flex}
+html.dui #hk{display:none!important}
+#hk *{box-sizing:border-box}
+#hk .hk-panel{background:#020b07;border:1px solid #116644;box-shadow:0 0 30px rgba(51,255,153,.18);border-radius:6px;padding:12px 14px;max-width:96vw;max-height:94vh;overflow:auto;position:relative}
+#hk .hk-head{display:flex;align-items:center;gap:14px;margin-bottom:10px;border-bottom:1px solid #0b3a28;padding-bottom:8px}
+#hk .hk-title{letter-spacing:.08em;text-transform:uppercase;font-size:14px}
+#hk .hk-info{flex:1;text-align:right;color:#8fe9c0;font-size:13px}
+#hk .hk-abort{background:none;border:1px solid #116644;color:#33ff99;font:inherit;font-size:12px;padding:3px 10px;cursor:pointer;border-radius:3px}
+#hk .hk-abort:hover{background:#0b3a28}
+#hk .hk-host{display:flex;justify-content:center;min-width:min(560px,86vw)}
+#hk .hk-canvas{max-width:100%;height:auto;border:1px solid #0b3a28;background:#04110b;cursor:crosshair}
+#hk .hk-result{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:30px;letter-spacing:.12em;background:rgba(2,11,7,.78)}
+#hk .hk-result.show{display:flex}
+#hk .hk-result.ok{color:#33ff99;text-shadow:0 0 14px #33ff99}
+#hk .hk-result.bad{color:#ff4d5e;text-shadow:0 0 14px #ff4d5e}
+#hk .hk-cipher{width:420px;max-width:100%}
+#hk .hk-note{color:#8fe9c0;font-size:12px;margin-bottom:10px}
+#hk .hk-row{display:flex;gap:16px;align-items:center;font-size:22px;letter-spacing:.3em;padding:4px 0;border-bottom:1px solid #0b3a28}
+#hk .hk-code.cur{color:#ffc233}
+#hk .hk-ok{color:#33ff99;font-size:16px;letter-spacing:0}
+#hk .hk-warn{color:#ffc233;font-size:16px;letter-spacing:0}
+#hk .hk-typing{width:520px;max-width:100%;font-size:17px}
+#hk .hk-line{padding:5px 8px;color:#116644;border-left:3px solid transparent;white-space:pre-wrap;word-break:break-all}
+#hk .hk-line.done{color:#33ff99;opacity:.55}
+#hk .hk-line.cur{color:#8fe9c0;border-left-color:#33ff99;background:rgba(51,255,153,.06)}
+#hk .hk-line .good{color:#33ff99}
+#hk .hk-line .wrong{color:#fff;background:#ff4d5e}
+#hk .hk-signal{display:grid;grid-template-columns:repeat(2,150px);gap:14px;padding:10px}
+#hk .hk-pad{height:150px;background:#04110b;border:2px solid var(--c);border-radius:10px;color:var(--c);font:inherit;font-size:24px;cursor:pointer;opacity:.45;transition:opacity .08s}
+#hk .hk-pad.lit{opacity:1;background:var(--c);color:#02100a;box-shadow:0 0 22px var(--c)}

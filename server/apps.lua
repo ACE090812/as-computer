@@ -127,11 +127,23 @@ function Apps.isPublic(id)
   return true
 end
 
+--- Apps with `bossOnly = true` (Config.Apps.<id>) are only for the boss grade of a job.
+local function bossGate(src, id)
+  local d = Config.Apps and Config.Apps[id]
+  if not (d and d.bossOnly) then return true end
+  local j = Bridge.GetJob(src)
+  return j ~= nil and j.isBoss == true
+end
+
 function Apps.allowed(src, id)
+  if not bossGate(src, id) then return false end
   if Apps.isPublic(id) then return true end
   local j = Bridge.GetJob(src)
   return j ~= nil and Bridge.AllowedJobs()[j.name] == true and Apps.has(j.name, id, freeJobFor(src))
 end
+
+--- The computer key this player last opened (server/boss.lua and server/logs.lua attribute their log lines to it).
+function Apps.computerOf(src) return lastComputer[src] end
 
 --- { [appId] = bool } for the player's job (sent to the desktop when it opens).
 function Apps.stateFor(src)
@@ -140,7 +152,7 @@ function Apps.stateFor(src)
   local usable = j ~= nil and Bridge.AllowedJobs()[j.name] == true
   local freeJob = freeJobFor(src)
   for id in pairs(Config.Apps or {}) do
-    out[id] = Apps.isPublic(id) or (usable and Apps.has(j.name, id, freeJob)) or false
+    out[id] = (Apps.isPublic(id) or (usable and Apps.has(j.name, id, freeJob)) or false) and bossGate(src, id)
   end
   return out
 end

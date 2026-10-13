@@ -24,6 +24,11 @@ local activeDuis = {}   -- [location index] = { dui, duiHandle, txd, runtimeTxt 
 local currentTerminal = nil -- location table of the terminal currently focused, or nil
 local nuiSessionKey = nil   -- which computer the windows in the (hidden) NUI belong to, so they can be resumed there
 
+--- Is any computer open on this client right now? (client/hack.lua then leaves the NUI focus alone)
+function IsTerminalOpen()
+  return currentTerminal ~= nil
+end
+
 --- Is this client sitting at that computer right now? (client/mirror.lua doesn't draw over your own screen)
 function IsUsingComputer(key)
   return currentTerminal ~= nil and currentTerminal.key == key
@@ -420,6 +425,11 @@ end
 --- exists.
 RegisterNetEvent('as-computer:client:forceCloseComputer', function(key)
   if currentTerminal and currentTerminal.key == key then CloseTerminal(true) end
+end)
+
+--- /pcadmin "Lock": the machine's session was set to locked server-side; close the screen but keep the windows.
+RegisterNetEvent('as-computer:client:forceLock', function(key)
+  if currentTerminal and currentTerminal.key == key then CloseTerminal(false) end
 end)
 
 -- Live framing (Config.Debug): /computer_screen [dx] [dz] [width] [height] [dist] [fov] [front]
