@@ -524,3 +524,8 @@ Other scripts can write to a computer's log:
 exports['as-computer']:LogEvent('p3', { source = 'my-heist', eventId = 9100, level = 'warning', message = 'Vault alarm tripped', data = { door = 2 } }, src)
 exports['as-computer']:ComputerKeyOf(src) -- the computer a player last opened
 ```
+
+### Notepad and Command Prompt
+
+- **Notepad** is plain text now: several notes open in tabs, a File/Edit/View menu bar, Find and Replace, an Open dialog and a status bar (line, column, characters). Notes still save by themselves and follow the character. Older rich-text notes are turned into plain text when opened (the stored copy changes only when you edit it).
+- **Command Prompt** (`cmd`) is built in: a terminal with a fake file system (nothing is saved), `ping` / `ipconfig`, and `hack list` / `hack play <program> [1-5]` to practise the ten minigames. Turn it off with `Config.EnabledApps.cmd = false`.

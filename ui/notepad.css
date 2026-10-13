@@ -1,47 +1,48 @@
-/* Notepad app (Los Santos OS). Everything is scoped to #win-notepad / .np so it cannot touch other windows. */
-#win-notepad .win-body{background:#f3f4f7;font-family:var(--ui-font);color:#1b1f27}
-html.dark #win-notepad .win-body{filter:invert(.9) hue-rotate(180deg)}
-.np{position:absolute;inset:0;display:flex;font-size:14.5px;line-height:1.35}
-.np *{box-sizing:border-box}
-.np button,.np input,.np textarea{font:inherit;color:inherit}
-.np button{cursor:pointer}
-.np input,.np textarea{user-select:text;-webkit-user-select:text}
-.np .hidden{display:none}
-.np-rail{width:270px;flex:none;background:#fbfbfd;border-right:1px solid #e1e4ea;display:flex;flex-direction:column;min-height:0}
-.np-rail-h{padding:12px 12px 8px}
-.np-search{padding:0 12px 8px}
-.np-search input{width:100%;border:1px solid #c9ced8;border-radius:7px;background:#fff;padding:7px 10px}
-.np-list{flex:1;overflow:auto;padding:2px 8px 10px;display:flex;flex-direction:column;gap:2px}
-.np-item{border:0;background:none;text-align:left;border-radius:8px;padding:9px 10px;display:block;width:100%}
-.np-item:hover{background:#eceff5}
-.np-item.on{background:#e3ecf9}
-.np-item .t{font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.np-item .s{color:#6b7280;font-size:12.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-top:2px}
-.np-item .s .d{color:#4b5563;font-weight:600;margin-right:4px}
-.np-empty{color:#8a909c;text-align:center;padding:26px 14px;font-size:13.5px}
-.np-empty.big{padding:90px 24px;font-size:15px}
-.np-btn{border:1px solid #c9ced8;background:#fff;border-radius:7px;padding:7px 14px;white-space:nowrap}
-.np-btn:hover{background:#f0f2f7}
-.np-btn.pri{background:#0f6cbd;border-color:#0f6cbd;color:#fff;width:100%}.np-btn.pri:hover{background:#0c5da3}
-.np-btn.danger{background:#c42b1c;border-color:#c42b1c;color:#fff}
-.np-main{flex:1;min-width:0;display:flex;flex-direction:column;background:#fff}
-.np-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-bottom:1px solid #e1e4ea;min-height:52px}
-.np-status{color:#6b7280;font-size:13px}
-.np-tools{display:flex;gap:8px}
-.np-err{background:#fde8e6;color:#8a1c12;padding:8px 16px;font-size:13.5px;border-bottom:1px solid #f4c5c0}
-.np-body{flex:1;min-height:0;display:flex;flex-direction:column}
-.np-toolbar{flex:none;display:flex;align-items:center;gap:2px;padding:6px 14px;border-bottom:1px solid #e1e4ea;background:#fafbfc}
-.np-tsep{width:1px;align-self:stretch;background:#dfe2e8;margin:2px 6px}
-.np-tbtn{width:30px;height:28px;border:0;background:none;border-radius:6px;font-size:14px;font-family:inherit;color:#1b1f27}
-.np-tbtn:hover{background:#eceff5}
-.np-tbtn.on{background:#dde7fb;color:#0f6cbd}
-.np-tsel{height:28px;border:1px solid #d7dbe2;border-radius:6px;background:#fff;font-size:12.5px;color:#1b1f27;padding:0 4px;margin-right:4px}
-.np-tfont{max-width:130px}
-.np-tcolor{width:28px;height:28px;padding:2px;border:1px solid #d7dbe2;border-radius:6px;background:#fff;margin-right:2px;cursor:pointer}
-.np-ed{flex:1;min-height:0;overflow:auto;outline:0;padding:16px 20px;background:#fff;line-height:1.5;font-family:'Segoe UI',Consolas,monospace}
-.np-ed ul,.np-ed ol{margin:0 0 0 22px;padding:0}
-.np-ed h1{font-size:1.6em;margin:.4em 0;font-weight:700}
-.np-ed h2{font-size:1.3em;margin:.4em 0;font-weight:700}
-.np-ed h3{font-size:1.1em;margin:.4em 0;font-weight:700}
-.np-ed:empty:before{content:attr(data-placeholder);color:#9aa0ab;pointer-events:none}
-.np-foot{flex:none;padding:6px 16px;border-top:1px solid #e1e4ea;color:#6b7280;font-size:12.5px;min-height:30px}
+/* Notepad app (Los Santos OS): plain-text notes in tabs. Everything is scoped to #win-notepad / .npd so it cannot touch other windows. */
+#win-notepad .win-body{background:#fff}
+.npd{--n-bg:#fff;--n-text:#1b1b1f;--n-sub:#6b7280;--n-bar:#f3f4f7;--n-line:#dfe2e9;--n-hover:rgba(0,0,0,.06);--n-acc:var(--accent,#0f6cbd);--n-bad:#c42b1c;
+  position:absolute;inset:0;display:flex;flex-direction:column;background:var(--n-bg);color:var(--n-text);font-family:"Segoe UI Variable Text","Segoe UI",var(--ui-font),system-ui,sans-serif;font-size:13.5px}
+html.dark .npd{--n-bg:#1e1e1e;--n-text:#f1f1f1;--n-sub:#a8a8a8;--n-bar:#2a2a2a;--n-line:#3a3a3a;--n-hover:rgba(255,255,255,.08);--n-bad:#ff6b5e}
+.npd *{box-sizing:border-box}
+.npd button,.npd input,.npd textarea{font:inherit;color:inherit}
+.npd button{cursor:pointer}
+.npd input,.npd textarea{user-select:text;-webkit-user-select:text}
+.npd-menubar{flex:none;display:flex;gap:2px;padding:2px 6px;background:var(--n-bar);border-bottom:1px solid var(--n-line);position:relative;z-index:6}
+.npd-menu{position:relative}
+.npd-mb{border:0;background:none;padding:4px 10px;border-radius:5px}
+.npd-mb:hover,.npd-mb.on{background:var(--n-hover)}
+.npd-drop{position:absolute;top:100%;left:0;min-width:230px;background:var(--n-bg);border:1px solid var(--n-line);border-radius:7px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:4px}
+.npd-it{display:flex;align-items:center;width:100%;border:0;background:none;text-align:left;padding:5px 8px;border-radius:5px;gap:6px}
+.npd-it:hover{background:var(--n-hover)}
+.npd-it .ck{width:14px;color:var(--n-acc)}.npd-it .lb{flex:1}.npd-it .sc{color:var(--n-sub);font-size:12px}
+.npd-sep{height:1px;background:var(--n-line);margin:4px 2px}
+.npd-tabs{flex:none;display:flex;align-items:flex-end;gap:2px;padding:6px 6px 0;background:var(--n-bar);overflow-x:auto}
+.npd-tab{display:flex;align-items:center;gap:6px;padding:6px 8px 6px 12px;border-radius:7px 7px 0 0;background:transparent;max-width:210px;cursor:default;white-space:nowrap}
+.npd-tab:hover{background:var(--n-hover)}
+.npd-tab.on{background:var(--n-bg);box-shadow:inset 0 2px 0 var(--n-acc)}
+.npd-tab .tt{overflow:hidden;text-overflow:ellipsis}
+.npd-tab .dot{color:var(--n-acc);font-size:10px}
+.npd-tab .x{border:0;background:none;width:18px;height:18px;line-height:16px;border-radius:4px;padding:0;color:var(--n-sub)}
+.npd-tab .x:hover{background:var(--n-hover);color:var(--n-text)}
+.npd-plus{border:0;background:none;width:28px;height:28px;border-radius:6px;font-size:18px;line-height:1;margin-bottom:2px}
+.npd-plus:hover{background:var(--n-hover)}
+.npd-findbar{flex:none;display:flex;gap:6px;align-items:center;padding:6px 8px;background:var(--n-bar);border-bottom:1px solid var(--n-line);flex-wrap:wrap}
+.npd-findbar input[type=text],.npd-findbar input:not([type]){border:1px solid var(--n-line);background:var(--n-bg);border-radius:5px;padding:4px 8px;width:170px}
+.npd-btn{border:1px solid var(--n-line);background:var(--n-bg);border-radius:5px;padding:3px 10px}
+.npd-btn:hover{border-color:var(--n-acc)}
+.npd-chk{display:flex;align-items:center;gap:4px;color:var(--n-sub)}
+.npd-count{color:var(--n-sub);min-width:18px}
+.npd-edit{flex:1;min-height:0;display:flex}
+.npd-edit textarea{flex:1;border:0;outline:0;resize:none;background:var(--n-bg);color:var(--n-text);padding:10px 14px;font-family:Consolas,"Cascadia Mono","Courier New",monospace;line-height:1.45;tab-size:4}
+.npd-status{flex:none;display:flex;gap:18px;padding:3px 12px;background:var(--n-bar);border-top:1px solid var(--n-line);font-size:12px;color:var(--n-sub)}
+.npd-status .gr{flex:1}.npd-status .bad{color:var(--n-bad)}
+.npd-over{position:absolute;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:8}
+.npd-dlg{width:min(520px,92%);max-height:80%;display:flex;flex-direction:column;gap:8px;background:var(--n-bg);border:1px solid var(--n-line);border-radius:10px;padding:12px;box-shadow:0 12px 40px rgba(0,0,0,.4)}
+.npd-dh{display:flex;justify-content:space-between;align-items:center}
+.npd-dlg>input{border:1px solid var(--n-line);background:var(--n-bg);border-radius:6px;padding:6px 10px}
+.npd-dl{overflow:auto;display:flex;flex-direction:column;gap:2px;min-height:120px}
+.npd-row{border:0;background:none;text-align:left;border-radius:7px;padding:8px 10px;display:flex;flex-direction:column}
+.npd-row:hover{background:var(--n-hover)}
+.npd-row .t{font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.npd-row .s{color:var(--n-sub);font-size:12.5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.npd-empty{color:var(--n-sub);text-align:center;padding:30px}
