@@ -55,7 +55,8 @@ server_scripts {
   'server/evidence_reports.lua',
   'server/logs.lua',    -- Event Viewer: defines ComputerLog() used by session/boss/admin/hacking
   'server/hack.lua',    -- minigame targets + RequestHack export (needs Apps, Bridge above)
-  'server/games.lua',   -- game leaderboards, stats, saves (needs Apps above)
+  'server/games.lua',
+  'server/games_pvp.lua',   -- player matches (needs GamesRecordPvp from games.lua)   -- game leaderboards, stats, saves (needs Apps above)
   'server/boss.lua',    -- Business Manager (needs Apps, Bank, Bridge above)
   'server/admin.lua',   -- /pcadmin: needs Accounts + MotCallback above; defines AdminProps/AdminLog for placement.lua
   'server/placement.lua',
@@ -91,6 +92,8 @@ files {
   'ui/games.js',
   'ui/games.css',
   'ui/games/snake.js',
+  'ui/games/tictactoe.js',
+  'ui/games/connect4.js',
   'ui/boss.js',
   'ui/logs.js',
   'ui/logs.css',

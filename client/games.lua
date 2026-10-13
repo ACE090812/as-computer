@@ -14,3 +14,13 @@ RegisterNUICallback('gamesConfig', function(_, cb)
   local g = Config.Games or {}
   cb({ music = (g.audio and g.audio.music) or {}, chessClock = g.pvp and g.pvp.chessClock or { 5, 10, 15 }, pvp = g.pvp and g.pvp.enabled ~= false })
 end)
+
+-- Player matches: the page sends lobby / move messages here, and the server's replies are passed back to the page.
+RegisterNUICallback('gamesPvpSend', function(data, cb)
+  cb('ok')
+  if type(data) == 'table' and type(data.a) == 'string' then TriggerServerEvent('as-computer:server:gamesPvp', data) end
+end)
+
+RegisterNetEvent('as-computer:client:gamesPvp', function(msg)
+  if type(msg) == 'table' then SendNuiMessage(json.encode({ action = 'gamesPvp', msg = msg })) end
+end)

@@ -84,6 +84,7 @@
       d.boxes.forEach(function (b) { h += '<div class="gm-box"><small>' + esc(T('gm_' + b.key, b.label)) + '</small><b data-box="' + b.key + '">-</b></div>'; });
       h += '</div>';
     }
+    if (d.pvp) h += '<div class="gm-seg" data-mode><button class="on" data-mode="cpu">' + esc(T('gm_vs_cpu', 'vs Computer')) + '</button><button data-mode="player">' + esc(T('gm_vs_player', 'vs Player')) + '</button></div>';
     if (d.extraSide) h += '<div class="gm-extra"></div>';
     if (d.levels) h += '<div class="gm-card"><h4>' + esc(d.levelLabel || T('gm_difficulty', 'Difficulty')) + '</h4><div class="gm-seg" data-levels></div></div>';
     h += '<div class="gm-row" data-buttons></div><div data-banner></div>';
@@ -96,6 +97,7 @@
     var n = el('button', 'gm-btn' + (d.pausable ? '' : ' pri'), esc(T('gm_new', 'New game'))); n.dataset.act = 'new'; bt.appendChild(n);
     g.side.addEventListener('click', function (e) {
       var b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.mode) { return g.setMode(b.dataset.mode); }
       if (b.dataset.lv != null) { g.setLevel(Number(b.dataset.lv)); return; }
       if (b.dataset.open) { return g.openPage(b.dataset.open); }
       if (b.dataset.act === 'new') { g.sound('click'); return d.newGame(g); }
@@ -287,6 +289,101 @@
     });
   };
 
+
+  // ---- player matches (chess, Connect 4, Tic-tac-toe) ---------------------------------------------------------------------
+  // The server (server/games_pvp.lua) keeps the lobby, relays moves and records results; the games only supply their rules:
+  //   def.onNetStart(g, info)   info = { first: bool, side: 'X'|'O', opp: name, clock: minutes|0 }
+  //   def.onNetMove(g, move)    the opponent moved (the same small object the other side passed to g.pvp.send)
+  //   def.onNetEnd(g, reason)   'left' = opponent left or lost connection (you win by forfeit)
+  // and they call g.pvp.send(move) after each of their own moves and g.pvp.finish(1|0|2) when the game ends.
+  function pvpSend(msg) { return post('gamesPvpSend', msg); }
+  window.addEventListener('message', function (e) {
+    var d = e.data || {};
+    if (d.action !== 'gamesPvp' || !d.msg) return;
+    var m = d.msg, g = KITS[m.game];
+    if (g && g.mode === 'player') g.pvpOnMsg(m);
+  });
+
+  Kit.prototype.setMode = function (mode) {
+    var g = this, d = g.def; if (!d.pvp || g.mode === mode) return;
+    config().then(function (c) {
+      if (mode === 'player' && c.pvp === false) { g.dialog('<h3>' + esc(T('gm_pvp_off', 'Player matches are off')) + '</h3>', [{ label: T('gm_close', 'Close') }]); return; }
+      g.mode = mode;
+      g.side.querySelectorAll('[data-mode]').forEach(function (b) { if (b.tagName === 'BUTTON') b.classList.toggle('on', b.dataset.mode === mode); });
+      if (mode === 'player') { g.pvpJoin(); }
+      else { g.pvpLeave(); g.hideLobby(); g.pvp = null; d.newGame(g); }
+    });
+  };
+  Kit.prototype.pvpJoin = function () {
+    var g = this; g.pvp = null; g.invites = {};
+    pvpSend({ a: 'join', game: g.id }); g.showLobby();
+    clearInterval(g._lt); g._lt = setInterval(function () { if (g.mode === 'player' && !(g.pvp && g.pvp.active)) pvpSend({ a: 'list', game: g.id }); }, 3000);
+    pvpSend({ a: 'list', game: g.id });
+  };
+  Kit.prototype.pvpLeave = function () { var g = this; clearInterval(g._lt); if (g.pvp) g.pvp.active = false; pvpSend({ a: 'leave', game: g.id }); };
+  Kit.prototype.showLobby = function () {
+    var g = this; if (!g.lobby) { g.lobby = el('div', 'gm-dlg'); g.lobby.style.cssText = 'position:absolute;inset:0;width:auto;max-height:none;border-radius:10px;z-index:10;border:1px solid var(--g-line);box-shadow:none'; g.main.style.position = 'relative'; g.main.appendChild(g.lobby); }
+    g.lobby.style.display = 'flex'; g.drawLobby(g._players || []);
+  };
+  Kit.prototype.hideLobby = function () { if (this.lobby) this.lobby.style.display = 'none'; };
+  Kit.prototype.drawLobby = function (players) {
+    var g = this; if (!g.lobby || g.lobby.style.display === 'none') return;
+    g._players = players;
+    var h = '<h3>' + esc(T('gm_players_online', 'Players online')) + '</h3><div class="sub" style="text-align:left">' + esc(T('gm_lobby_note', 'Only people with this game open are listed. Wins and losses count on the leaderboard.')) + '</div>';
+    if (g.id === 'chess') h += '<label class="gm-slide"><span>' + esc(T('gm_clock', 'Clock')) + '</span><select data-clock style="flex:1"><option value="0">' + esc(T('gm_off', 'Off')) + '</option></select></label>';
+    h += '<div data-plist style="display:flex;flex-direction:column;gap:6px;overflow:auto;flex:1;min-height:0">';
+    if (!players.length) h += '<div class="gm-empty">' + esc(T('gm_nobody_online', 'Nobody else has this game open right now.')) + '</div>';
+    players.forEach(function (p) { h += '<div class="gm-card" style="display:flex;align-items:center;gap:10px"><div style="flex:1"><b>' + esc(p.name) + '</b><div class="sub" style="text-align:left">' + p.w + ' ' + esc(T('gm_wins', 'Wins').toLowerCase()) + ', ' + p.l + ' ' + esc(T('gm_losses', 'Losses').toLowerCase()) + '</div></div>' +
+      (p.busy ? '<span class="gm-tag" style="background:var(--g-bg);color:var(--g-sub)">' + esc(T('gm_in_match', 'In a match')) + '</span>' : '<button class="gm-btn pri" style="flex:none" data-ch="' + p.src + '">' + esc(T('gm_challenge', 'Challenge')) + '</button>') + '</div>'; });
+    h += '</div><div data-pending class="sub"></div>';
+    g.lobby.innerHTML = h;
+    if (g.id === 'chess') config().then(function (c) { var sel = g.lobby.querySelector('[data-clock]'); if (!sel) return; (c.chessClock || []).forEach(function (m) { var o = el('option', '', m + ' min'); o.value = m; sel.appendChild(o); }); if (g._clock) sel.value = g._clock; sel.addEventListener('change', function () { g._clock = sel.value; }); });
+    g.lobby.querySelectorAll('[data-ch]').forEach(function (b) { b.addEventListener('click', function () {
+      var sel = g.lobby.querySelector('[data-clock]'); g.sound('click');
+      pvpSend({ a: 'challenge', game: g.id, target: Number(b.dataset.ch), clock: sel ? Number(sel.value) : 0 });
+      g.lobby.querySelector('[data-pending]').textContent = T('gm_waiting', 'Waiting for an answer...');
+    }); });
+  };
+  Kit.prototype.pvpOnMsg = function (m) {
+    var g = this, d = g.def;
+    if (m.t === 'list') { g.drawLobby(m.players || []); return; }
+    if (m.t === 'declined') { var pe = g.lobby && g.lobby.querySelector('[data-pending]'); if (pe) pe.textContent = T('gm_declined', 'They said no.'); return; }
+    if (m.t === 'error') { var pe2 = g.lobby && g.lobby.querySelector('[data-pending]'); if (pe2) pe2.textContent = T('gm_pvp_err', 'That did not work. Try again.'); return; }
+    if (m.t === 'invite') {
+      g.sound('bonus');
+      var node = g.dialog('<h3>' + esc(m.from) + ' ' + esc(T('gm_challenges_you', 'challenges you')) + '</h3><div class="sub">' + esc(d.name) + (m.clock ? ' - ' + m.clock + ' min' : '') + '</div>', [
+        { label: T('gm_decline', 'Decline'), run: function () { pvpSend({ a: 'respond', game: g.id, id: m.id, accept: false }); } },
+        { label: T('gm_accept', 'Accept'), pri: true, close: false, run: null }
+      ], false);
+      var btns = node.querySelectorAll('.gm-btn'); btns[1].addEventListener('click', function () { g.closeModal(); pvpSend({ a: 'respond', game: g.id, id: m.id, accept: true }); });
+      g._inviteId = m.id; return;
+    }
+    if (m.t === 'invite_cancel') { if (g._inviteId === m.id) { g.closeModal(); g._inviteId = null; } return; }
+    if (m.t === 'start') {
+      g.closeModal(); g.hideLobby(); clearInterval(g._lt);
+      g.pvp = { active: true, id: m.match, opp: m.opp, first: !!m.first, side: m.first ? 'X' : 'O', clock: m.clock || 0,
+        send: function (mv) { pvpSend({ a: 'move', game: g.id, match: m.match, move: mv }); },
+        finish: function (res) { if (g.pvp && !g.pvp.finished) { g.pvp.finished = true; pvpSend({ a: 'result', game: g.id, match: m.match, res: res }); } } };
+      g.startMusic(); d.onNetStart(g, g.pvp); return;
+    }
+    if (m.t === 'move') { if (g.pvp && g.pvp.active && d.onNetMove) d.onNetMove(g, m.move); return; }
+    if (m.t === 'end') { if (g.pvp && g.pvp.active) { g.pvp.finished = true; if (d.onNetEnd) d.onNetEnd(g, m.reason); g.later(900, function () { g.pvpEnded(1, true); }); } return; }
+    if (m.t === 'rematch') { var pe3 = g.over.querySelector('[data-rm]'); if (pe3) pe3.textContent = T('gm_rematch_asked', 'They want a rematch.'); return; }
+  };
+  Kit.prototype.pvpRematch = function () { var g = this; if (!g.pvp) return; pvpSend({ a: 'rematch', game: g.id, match: g.pvp.id }); };
+  /* Called by a game when a player match is over: shows the result with Rematch and Back to lobby. */
+  Kit.prototype.pvpEnded = function (res, forfeit) {
+    var g = this; if (!g.pvp || g._ending) return; g._ending = true; g.pvp.active = false;
+    var title = forfeit ? T('gm_opp_left', 'Your opponent left. You win') : res === 1 ? T('gm_you_won', 'You won!') : res === 2 ? T('gm_draw', 'Draw') : T('gm_you_lost', 'You lost');
+    g.sound(res === 1 ? 'win' : res === 2 ? 'click' : 'lose');
+    var node = g.dialog('<h3 style="text-align:center">' + esc(title) + '</h3><div class="sub" data-rm>' + esc(T('gm_pvp_saved', 'Counted on the leaderboard.')) + '</div>', [
+      { label: T('gm_rematch', 'Rematch'), pri: true, close: false, run: null },
+      { label: T('gm_back_lobby', 'Back to lobby'), run: function () { g._ending = false; g.pvpBackToLobby(); } }
+    ], false);
+    var rb = node.querySelectorAll('.gm-btn')[0]; rb.addEventListener('click', function () { if (forfeit) return; rb.disabled = true; rb.textContent = T('gm_waiting', 'Waiting...'); g._ending = false; pvpSend({ a: 'rematch', game: g.id, match: g.pvp.id }); });
+  };
+  Kit.prototype.pvpBackToLobby = function () { var g = this; pvpSend({ a: 'leave', game: g.id }); g.pvp = null; g.pvpJoin(); };
+
   // ---- registration ---------------------------------------------------------------------------------------------------
   function register(def) {
     var root = S.registerApp({
@@ -298,8 +395,8 @@
         if (!g) { g = KITS[def.id] = new Kit(def, host); }
         else { g.refreshMini(); if (g.def.onOpen) g.def.onOpen(g); }
       },
-      onClose: function () { var g = KITS[def.id]; if (g) { g.stopMusic(); if (def.onClose) def.onClose(g); } },
-      onReset: function () { var g = KITS[def.id]; if (g) { g.stopMusic(); if (def.onClose) def.onClose(g); } },
+      onClose: function () { var g = KITS[def.id]; if (g) { g.stopMusic(); if (g.mode === 'player') { g.pvpLeave(); g.hideLobby(); g.mode = 'cpu'; g.pvp = null; g.side.querySelectorAll('button[data-mode]').forEach(function (b) { b.classList.toggle('on', b.dataset.mode === 'cpu'); }); def.newGame(g); } if (def.onClose) def.onClose(g); } },
+      onReset: function () { var g = KITS[def.id]; if (g) { g.stopMusic(); if (g.mode === 'player') { g.pvpLeave(); } if (def.onClose) def.onClose(g); } },
       onLocale: function () {}
     });
     return root;
