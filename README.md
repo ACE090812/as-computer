@@ -529,3 +529,18 @@ exports['as-computer']:ComputerKeyOf(src) -- the computer a player last opened
 
 - **Notepad** is plain text now: several notes open in tabs, a File/Edit/View menu bar, Find and Replace, an Open dialog and a status bar (line, column, characters). Notes still save by themselves and follow the character. Older rich-text notes are turned into plain text when opened (the stored copy changes only when you edit it).
 - **Command Prompt** (`cmd`) is built in: a terminal on the player's real File Explorer folders (Documents, Downloads, the job's shared folder, legal/court when they have them) with `dir`, `cd`, `type`, `mkdir`, `touch`, `ren`, `rm` (to the Recycle Bin) and `echo text > file`. It uses the same server calls and rules as File Explorer, and its changes show up in the Event Viewer. `LSOS` and `Program Files` are read-only decoration. It also has `ping` / `ipconfig`, and `hack list` / `hack play <program> [1-5]` to practise the ten minigames. Turn it off with `Config.EnabledApps.cmd = false`.
+
+### Hacking minigames for your own scripts
+
+Ten minigames (`ui/hack.js`). Set up your own targets in `config/apps/hack.lua` (`Config.Hack.targets`): a player types `targets` then `hack <id>` in the Command Prompt, the server hands out a timed challenge and, on a win, fires your server event. Other scripts can also call:
+
+```lua
+-- client: blocks until the player finishes, returns true/false
+local ok = exports['as-computer']:StartHack('cipher', 3, 'Vault door')   -- game id or 'random', level 1-5
+-- server: no client code needed
+exports['as-computer']:RequestHack(src, { game = 'maze', level = 2, title = 'Alarm panel' }, function(success) end)
+-- every finished Command Prompt hack
+AddEventHandler('as-computer:server:hackResult', function(src, targetId, success, game) end)
+```
+
+A win reported faster than `Config.Hack.minSeconds` counts as failed. Not tested in game.

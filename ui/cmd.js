@@ -169,7 +169,7 @@
       var c = CMDS[a[0].toLowerCase()];
       return out(c ? a[0].toLowerCase() + ' - ' + c.help : T('cm_nohelp', 'No help for') + ' ' + a[0], c ? '' : 'err');
     }
-    [['Basics', 'help cls echo whoami hostname date time ver history exit'], ['Files', 'dir cd pwd type mkdir touch ren rm echo>'], ['Network', 'ipconfig ping'], ['Games', 'hack']].forEach(function (g) {
+    [['Basics', 'help cls echo whoami hostname date time ver history exit'], ['Files', 'dir cd pwd type mkdir touch ren rm echo>'], ['Network', 'ipconfig ping'], ['Games', 'hack targets']].forEach(function (g) {
       out(g[0] + ':', 'hi'); out('  ' + g[1]);
     });
     out('\nAliases: ls = dir, cat = type, md = mkdir, del = rm, clear = cls.', 'dim');
@@ -312,20 +312,46 @@
     });
   });
 
-  // ---- practice minigames ----------------------------------------------------------------------------------------
+  // ---- minigames -------------------------------------------------------------------------------------------------
   function games() { return (window.LSOS_HACK && window.LSOS_HACK.games) || []; }
-  cmd('hack', 'Practice the hacking programs. hack list | hack play <program> [1-5]', function (a) {
+  function cmdApi(name, data) {
+    return fetch('https://' + (window.GetParentResourceName ? window.GetParentResourceName() : 'as-computer') + '/cmdApi', {
+      method: 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8' }, body: JSON.stringify({ name: name, data: data || {} })
+    }).then(function (r) { return r.json(); }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false }; })
+      .catch(function () { return { ok: false, reason: 'network' }; });
+  }
+  var HERR = { unknown: 'No such target. Try "targets".', far: 'Out of range. Get closer.', not_authorised: 'Access is denied.', network: 'Could not reach the server.', invalid: 'That did not work.', error: 'Something went wrong.' };
+
+  cmd('targets', 'Lists the targets you can hack from here.', async function () {
+    var r = await cmdApi('targets');
+    if (!r.ok) return out(HERR[r.reason] || HERR.error, 'err');
+    var list = r.data.targets || [];
+    if (!list.length) return out('No targets in range.', 'dim');
+    list.forEach(function (t) { out('  ' + t.id.padEnd(16) + t.label + (t.dist != null ? '  (' + t.dist + ' m)' : '')); });
+    out('\nhack <target>', 'dim');
+  });
+  cmd('hack', 'Hacking programs. hack list | hack play <program> [1-5] | hack <target>', async function (a) {
     var sub = (a[0] || '').toLowerCase();
     if (!sub || sub === 'list') {
       out('Programs:', 'hi');
       games().forEach(function (g) { out('  ' + g.id.padEnd(10) + g.name + ' - ' + g.desc); });
-      return out('\nhack play <program> [1-5]   (1 = easy, 5 = hard; "random" picks one). Practice only: nothing is changed.', 'dim');
+      return out('\nhack play <program> [1-5]   practice only (1 = easy, 5 = hard; "random" picks one)\nhack <target>               run a target (see "targets")', 'dim');
     }
-    if (sub !== 'play') return out('Usage: hack list | hack play <program> [1-5]', 'warn');
-    var id = (a[1] || 'random').toLowerCase(), level = Math.max(1, Math.min(5, parseInt(a[2], 10) || 2));
-    if (id !== 'random' && !games().some(function (g) { return g.id === id; })) return out('Unknown program "' + a[1] + '". Try: hack list', 'err');
-    out('Launching ' + id + ' (level ' + level + ')...');
-    return window.LSOS_HACK.start(id, level, null).then(function (ok) { out(ok ? 'Program completed.' : 'Program failed.', ok ? 'ok' : 'err'); });
+    if (sub === 'play') {
+      var id = (a[1] || 'random').toLowerCase(), level = Math.max(1, Math.min(5, parseInt(a[2], 10) || 2));
+      if (id !== 'random' && !games().some(function (g) { return g.id === id; })) return out('Unknown program "' + a[1] + '". Try: hack list', 'err');
+      out('Launching ' + id + ' (level ' + level + ')...');
+      var ok = await window.LSOS_HACK.start(id, level, null);
+      return out(ok ? 'Program completed.' : 'Program failed.', ok ? 'ok' : 'err');
+    }
+    // a target defined in Config.Hack.targets: the server hands out the challenge and decides the result
+    var b = await cmdApi('begin', { id: a[0] });
+    if (!b.ok) return out(HERR[b.reason] || HERR.error, 'err');
+    out('Connecting to ' + b.data.label + '...');
+    var won = await window.LSOS_HACK.start(b.data.game, b.data.level, b.data.label);
+    var f = await cmdApi('finish', { token: b.data.token, success: won });
+    if (!f.ok) return out(HERR[f.reason] || HERR.error, 'err');
+    out(f.data.success ? 'Access granted.' : 'Access denied.', f.data.success ? 'ok' : 'err');
   });
 
   // ---- input -----------------------------------------------------------------------------------------------------

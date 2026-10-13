@@ -24,6 +24,7 @@ client_scripts {
   'client/placement.lua',   -- /placeprops: placed computers and TVs, Presento on TVs
   'client/boss.lua',
   'client/logs.lua',
+  'client/hack.lua',
   'client/admin.lua',        -- /pcadmin panel (needs PlacementApi from client/placement.lua at call time)
   'client/mirror.lua',      -- live monitor view for players nearby
   'client/mechanic.lua',
@@ -52,6 +53,7 @@ server_scripts {
   'server/printing.lua',
   'server/evidence_reports.lua',
   'server/logs.lua',    -- Event Viewer: defines ComputerLog() used by session/boss/admin/hacking
+  'server/hack.lua',    -- minigame targets + RequestHack export (needs Apps, Bridge above)
   'server/boss.lua',    -- Business Manager (needs Apps, Bank, Bridge above)
   'server/admin.lua',   -- /pcadmin: needs Accounts + MotCallback above; defines AdminProps/AdminLog for placement.lua
   'server/placement.lua',
