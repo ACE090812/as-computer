@@ -94,6 +94,8 @@ files {
   'ui/games/snake.js',
   'ui/games/tictactoe.js',
   'ui/games/connect4.js',
+  'ui/games/blocks.js',
+  'ui/games/solitaire.js',
   'ui/boss.js',
   'ui/logs.js',
   'ui/logs.css',

@@ -63,3 +63,4 @@ html.dark .gm-tabs{background:#333}
 .gm-slide input[type=range]{flex:1}
 .gm-slide output{width:38px;text-align:right}
 .gm-empty{color:var(--g-sub);text-align:center;padding:24px 0}
+.gm-dlg [data-tag]{display:flex;justify-content:center}
