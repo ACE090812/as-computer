@@ -509,3 +509,18 @@ If your `sd-phone` fork doesn't use the `server/stocks` module layout above (a h
 **Pickup.** A tower, monitor or rig's owner (whoever placed it) can pick it back up from the same target menu it was placed with ("Pick up"), returning the item to their inventory. Picking up a monitor force-closes any active session on it, hands back everything its linked tower held plus every GPU on any linked rig (the rigs are auto-unlinked, not deleted — they stay placed, idle, ready to link to another monitor), and wipes its account/owner record entirely, since the machine stops existing. Picking up a tower or rig on its own just hands back what it was holding and unlinks it. A full inventory refuses the whole pickup up front rather than stranding a half-unwound prop.
 
 Not done yet: the app's "add rig" picker still lists every unlinked rig server-wide rather than scoping to rigs on the same owned property; that's an accepted v1 simplification given the no-property-gate, item-based design chosen for this feature.
+## Admin panel, Business Manager and Event Viewer
+
+| Piece | Config | What it does |
+|---|---|---|
+| `/pcadmin` | `config/apps/admin.lua` | NUI panel for admins: Overview, Computers (teleport, move, edit, job lock, lock/kick the user, reset accounts, delete), Place, Props (custom decorative models) and an admin Log. Open to the ace `command.pcadmin` or the framework's admin permission (QBCore/QBox `admin`/`god`, ESX `admin`/`superadmin`). `/placeprops` still works. |
+| Business Manager | `config/apps/boss.lua` | Built in, shown only to a job's boss grade. Overview, Employees (promote, demote, fire below your own grade), Hiring (nearby players or an ID) and a view-only Finances chart. Uses the Store's society bank settings. Jobs only, no gangs. |
+| Event Viewer | `config/apps/logs.lua` | Built in. Each computer keeps Application, Security, System and Boss logs (30 day retention). Readable by the machine's owner while signed in, and by admins. Grid with level/source/find filters, details pane, Clear Log (itself logged as event 1102). Records sign-ins (Audit Success/Failure), lock/unlock/shutdown, admin actions, boss actions, app starts and File Explorer actions. |
+| Hacking minigames | `ui/hack.js` | Ten minigames (maze, capture, cipher, snake, firewall, evasion, typing, signal, pipe, breakout). Not yet reachable from the desktop. |
+
+Other scripts can write to a computer's log:
+
+```lua
+exports['as-computer']:LogEvent('p3', { source = 'my-heist', eventId = 9100, level = 'warning', message = 'Vault alarm tripped', data = { door = 2 } }, src)
+exports['as-computer']:ComputerKeyOf(src) -- the computer a player last opened
+```

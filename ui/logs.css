@@ -1,0 +1,28 @@
+/* Event Viewer (Logs app): extra layout on top of ui/kit.css. Scoped under #lg. */
+#lg .lg-center{flex:1;min-width:0;display:flex;flex-direction:column}
+#lg .lg-grid{flex:1;overflow:auto;min-height:0}
+#lg .lg-grid table{border:0;border-radius:0}
+#lg .lg-grid tbody tr{cursor:default}
+#lg .lg-grid tbody tr:hover{background:var(--k-hover)}
+#lg .lg-grid tbody tr.sel{background:color-mix(in srgb,var(--k-acc) 22%,transparent)}
+#lg .lg-grid th{position:sticky;top:0;z-index:1}
+#lg .lg-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:baseline;background:#3b82f6}
+#lg .lg-dot.warning{background:#f59e0b}
+#lg .lg-dot.error,#lg .lg-dot.failure{background:#ef4444}
+#lg .lg-dot.success{background:#22c55e}
+#lg .lg-msg{max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#lg .lg-more{display:block;margin:10px auto}
+#lg .lg-detail{flex:none;height:210px;border-top:1px solid var(--k-line);background:var(--k-top);display:flex;flex-direction:column}
+#lg .lg-dh{display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid var(--k-line);font-weight:600;gap:8px}
+#lg .lg-dh span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#lg .lg-db{flex:1;overflow:auto;padding:10px 12px;user-select:text;-webkit-user-select:text}
+#lg .lg-kv{display:grid;grid-template-columns:130px 1fr;gap:3px 12px;font-size:13px}
+#lg .lg-kv b{font-weight:400;color:var(--k-sub)}
+#lg .lg-actions{width:178px;flex:none;border-left:1px solid var(--k-line);background:var(--k-rail);padding:10px 8px;display:flex;flex-direction:column;gap:4px}
+#lg .lg-actions h3{margin:4px 6px 6px}
+#lg .lg-actions button{border:0;background:none;text-align:left;padding:7px 10px;border-radius:6px}
+#lg .lg-actions button:hover{background:var(--k-hover)}
+#lg .lg-actions button[disabled]{opacity:.4;cursor:default}
+#lg .lg-status{padding:4px 12px;font-size:12px;color:var(--k-sub);border-top:1px solid var(--k-line)}
+#lg .lg-grid td,#lg .lg-grid th{white-space:nowrap}
+#lg .lg-grid td:last-child{white-space:normal}

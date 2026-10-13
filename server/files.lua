@@ -1008,6 +1008,22 @@ MotCallback.Register('filesApi', function(src, respond, name, data)
   data = type(data) == 'table' and data or {}
   local function bad(reason) return respond({ ok = false, reason = reason or 'invalid' }) end
   local cname = cut(tostring(Bridge.GetName(src) or ''), 90)
+  -- Event Viewer: record changes (server/logs.lua) once they have succeeded.
+  local FILE_EVENTS = { save = 'file_save', folder = 'file_folder', link = 'file_link', rename = 'file_rename', delete = 'file_delete',
+                        copy = 'file_copy', move = 'file_move', restore = 'file_restore' }
+  local FILE_VERB = { save = 'Saved', folder = 'Created folder', link = 'Added link', rename = 'Renamed', delete = 'Deleted',
+                      copy = 'Copied', move = 'Moved', restore = 'Restored' }
+  if FILE_EVENTS[name] and LogFileAction then
+    local realRespond = respond
+    respond = function(res, ...)
+      if type(res) == 'table' and res.ok then
+        local f = type(res.data) == 'table' and res.data.file or nil
+        local what = (f and f.name) or (type(data.name) == 'string' and data.name) or ('item #' .. tostring(math.floor(tonumber(data.id) or 0)))
+        LogFileAction(src, FILE_EVENTS[name], FILE_VERB[name] .. ': ' .. tostring(what))
+      end
+      return realRespond(res, ...)
+    end
+  end
   local pid = math.floor(tonumber(data.parent) or 0)
   if pid < 0 then pid = 0 end
 

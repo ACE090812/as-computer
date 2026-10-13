@@ -65,7 +65,7 @@ MotCallback.Register('session:setup', function(src, respond, key, username, pass
   sessions[key] = { cid = cid, accountId = account.id, state = 'active', at = os.time() }
   if ComputerLog then
     ComputerLog(key, 'system', 'setup', ('First-time setup completed, owner account "%s"'):format(account.username), src)
-    ComputerLog(key, 'security', 'login', ('Signed in as "%s"'):format(account.username), src)
+    ComputerLog(key, 'security', 'login', ('Signed in as "%s"'):format(account.username), src, 'success')
   end
   respond({ success = true, accountName = account.username })
 end)
@@ -91,14 +91,14 @@ MotCallback.Register('session:login', function(src, respond, key, username, pass
 
   local account = Accounts.verifyLogin(username, password)
   if not account then
-    if ComputerLog then ComputerLog(key, 'security', 'login_failed', ('Failed sign-in as "%s"'):format(tostring(username):sub(1, 20)), src, 'warning') end
+    if ComputerLog then ComputerLog(key, 'security', 'login_failed', ('Failed sign-in as "%s"'):format(tostring(username):sub(1, 20)), src, 'failure') end
     return respond({ success = false, error = 'bad_credentials' })
   end
 
   local granted = Accounts.isGranted(key, account.id)
   if not granted then
     if Accounts.hasAnyGrants(key) then
-      if ComputerLog then ComputerLog(key, 'security', 'login_denied', ('"%s" has no access to this computer'):format(account.username), src, 'warning') end
+      if ComputerLog then ComputerLog(key, 'security', 'login_denied', ('"%s" has no access to this computer'):format(account.username), src, 'failure') end
       return respond({ success = false, error = 'not_granted' })
     end
     -- Fresh machine, nobody's claimed it yet - this login claims it instead of failing.
@@ -107,7 +107,7 @@ MotCallback.Register('session:login', function(src, respond, key, username, pass
   end
 
   sessions[key] = { cid = cid, accountId = account.id, state = 'active', at = os.time() }
-  if ComputerLog then ComputerLog(key, 'security', 'login', ('Signed in as "%s"'):format(account.username), src) end
+  if ComputerLog then ComputerLog(key, 'security', 'login', ('Signed in as "%s"'):format(account.username), src, 'success') end
   respond({ success = true, accountName = account.username })
 end)
 

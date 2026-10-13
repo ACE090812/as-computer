@@ -310,6 +310,7 @@
     w.el.classList.remove('minimised');
     if (fresh) { w.max = false; w.el.classList.remove('max'); syncMaxIcon(w); placeWin(w); }
     if (fresh && w.onOpen) w.onOpen();
+    if (fresh && !isDui) postToClient('appOpened', { id: id });   // Event Viewer: "Application started"
     focusWin(id);
   }
 

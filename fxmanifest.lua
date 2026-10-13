@@ -85,6 +85,7 @@ files {
   'ui/kit.css',
   'ui/boss.js',
   'ui/logs.js',
+  'ui/logs.css',
   'ui/hack.js',
   'ui/hack.css',
   'ui/admin.js',
