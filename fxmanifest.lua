@@ -96,6 +96,7 @@ files {
   'ui/games/connect4.js',
   'ui/games/blocks.js',
   'ui/games/solitaire.js',
+  'ui/games/chess.js',
   'ui/boss.js',
   'ui/logs.js',
   'ui/logs.css',
