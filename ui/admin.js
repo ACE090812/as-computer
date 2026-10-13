@@ -6,7 +6,7 @@
   if (/[?&]dui=1/.test(location.search)) return;
 
   var strings = {};
-  var root = null, panel = null, tab = 'overview', data = null, timer = null, refreshMs = 5000, search = '', open = false;
+  var gdata = null, cdata = null, cq = '', bets = null, root = null, panel = null, tab = 'overview', data = null, timer = null, refreshMs = 5000, search = '', open = false;
 
   function T(key, def) { return strings[key] || def; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -18,7 +18,7 @@
   function api(name, d) { return post('adminApi', { name: name, data: d }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false }; }); }
 
   var TABS = [['overview', 'adm_tab_overview', 'Overview'], ['computers', 'adm_tab_computers', 'Computers'], ['place', 'adm_tab_place', 'Place'],
-    ['props', 'adm_tab_props', 'Props'], ['log', 'adm_tab_log', 'Log']];
+    ['props', 'adm_tab_props', 'Props'], ['games', 'adm_tab_games', 'Games'], ['casino', 'adm_tab_casino', 'Casino'], ['log', 'adm_tab_log', 'Log']];
   var KIND = { computer: ['adm_kind_computer', 'Computer'], tv: ['adm_kind_tv', 'TV'], printer: ['adm_kind_printer', 'Printer'], prop: ['adm_kind_prop', 'Prop'] };
 
   function build() {
@@ -70,7 +70,42 @@
       if (!r.ok) return fail(r);
       data = r.data;
       draw(true);
+      loadExtra();
     });
+  }
+  function money(n) { n = Math.round(Number(n) || 0); return (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('en-GB'); }
+  function loadExtra() {
+    if (tab === 'games') api('games').then(function (r) { if (open && r.ok) { gdata = r.games; if (tab === 'games') draw(true); } });
+    if (tab === 'casino') {
+      api('casino', { action: 'overview' }).then(function (r) { if (!open) return; cdata = r.ok ? r : { off: true }; if (tab === 'casino') draw(true); });
+      api('casino', { action: 'accounts', data: { query: cq } }).then(function (r) { if (open && r.ok) { cdata = cdata || {}; cdata.rows = r.rows; if (tab === 'casino') draw(true); } });
+    }
+  }
+  function viewGames() {
+    if (!gdata) return '<div class="empty">' + esc(T('adm_loading', 'Loading...')) + '</div>';
+    var h = '<table><tr><th>' + esc(T('adm_game', 'Game')) + '</th><th>' + esc(T('adm_installs', 'Installed')) + '</th><th>' + esc(T('adm_players', 'Players')) + '</th><th>' + esc(T('adm_plays', 'Plays')) + '</th><th>' + esc(T('adm_plays24', 'Last 24h')) + '</th><th>' + esc(T('adm_status', 'Status')) + '</th><th></th></tr>';
+    gdata.forEach(function (g, i) {
+      h += '<tr><td>' + esc(g.name) + '</td><td>' + g.installs + '</td><td>' + g.players + '</td><td>' + g.plays + '</td><td>' + g.recent + '</td><td><span class="tag ' + (g.enabled ? 'good' : 'warn') + '">' + esc(g.enabled ? T('adm_on', 'On') : T('adm_off', 'Off')) + '</span></td>' +
+        '<td><button class="btn sm" data-a="gtoggle" data-i="' + i + '">' + esc(g.enabled ? T('adm_turn_off', 'Turn off') : T('adm_turn_on', 'Turn on')) + '</button><button class="btn sm bad" data-a="greset" data-i="' + i + '">' + esc(T('adm_reset_board', 'Reset leaderboard')) + '</button></td></tr>';
+    });
+    return h + '</table><div class="mute" style="margin-top:10px">' + esc(T('adm_games_note', 'Turning a game off stops it opening and hides it from players. Resetting clears its leaderboard and stats; saved games stay.')) + '</div>';
+  }
+  function viewCasino() {
+    if (!cdata) return '<div class="empty">' + esc(T('adm_loading', 'Loading...')) + '</div>';
+    if (cdata.off) return '<div class="empty">' + esc(T('adm_no_casino', 'The Diamond Online casino (as-browser) is not running.')) + '</div>';
+    var h = '<div class="bar"><b style="flex:1">' + esc(T('adm_casino_betting', 'Betting')) + ': <span class="tag ' + (cdata.open ? 'good' : 'warn') + '">' + esc(cdata.open ? T('adm_on', 'On') : T('adm_off', 'Off')) + '</span></b>' +
+      '<button class="btn sm" data-a="cswitch">' + esc(cdata.open ? T('adm_casino_stop', 'Emergency stop') : T('adm_casino_start', 'Open betting')) + '</button></div>';
+    h += '<div class="cards"><div class="card"><b>' + (cdata.accounts || 0) + '</b><span>' + esc(T('adm_c_accounts', 'Accounts')) + '</span></div><div class="card"><b>' + money(cdata.held) + '</b><span>' + esc(T('adm_c_held', 'Held in site balances')) + '</span></div>' +
+      '<div class="card"><b>' + money(cdata.houseToday) + '</b><span>' + esc(T('adm_c_house', 'House result today')) + '</span></div><div class="card"><b>' + money(cdata.jackpot) + '</b><span>' + esc(T('adm_c_jackpot', 'Slots jackpot pool')) + '</span></div></div>';
+    h += '<h3>' + esc(T('adm_c_bygame', 'Today by game')) + '</h3><table><tr><th>' + esc(T('adm_game', 'Game')) + '</th><th>' + esc(T('adm_c_bets', 'Bets')) + '</th><th>' + esc(T('adm_c_wagered', 'Wagered')) + '</th><th>' + esc(T('adm_c_paid', 'Paid out')) + '</th><th>' + esc(T('adm_c_hr', 'House')) + '</th></tr>';
+    (cdata.games || []).forEach(function (g) { var hr = (g.wagered || 0) - (g.paid || 0); h += '<tr><td>' + esc(g.game) + '</td><td>' + g.bets + '</td><td>' + money(g.wagered) + '</td><td>' + money(g.paid) + '</td><td style="color:' + (hr < 0 ? 'var(--bad,#c42b1c)' : 'inherit') + '">' + money(hr) + '</td></tr>'; });
+    if (!(cdata.games || []).length) h += '<tr><td colspan="5" class="mute">' + esc(T('adm_nolog', 'Nothing logged yet.')) + '</td></tr>';
+    h += '</table><h3 style="margin-top:16px">' + esc(T('adm_c_accts', 'Accounts')) + '</h3><div class="bar"><input id="adm-cq" placeholder="' + esc(T('adm_search', 'Search')) + '" value="' + esc(cq) + '" style="flex:1"></div><table><tr><th>' + esc(T('adm_c_user', 'Username')) + '</th><th>' + esc(T('adm_c_char', 'Character')) + '</th><th>' + esc(T('adm_c_bal', 'Balance')) + '</th><th>' + esc(T('adm_status', 'Status')) + '</th><th></th></tr>';
+    (cdata.rows || []).forEach(function (a, i) {
+      h += '<tr><td>' + esc(a.username) + '</td><td>' + esc(a.name) + '</td><td>' + money(a.balance) + '</td><td><span class="tag ' + (a.status === 'active' ? 'good' : 'warn') + '">' + esc(a.status) + '</span></td><td>' +
+        (a.status === 'closed' ? '' : '<button class="btn sm ' + (a.status === 'frozen' ? '' : 'bad') + '" data-a="cfreeze" data-i="' + i + '">' + esc(a.status === 'frozen' ? T('adm_c_unfreeze', 'Unfreeze') : T('adm_c_freeze', 'Freeze')) + '</button>') + '</td></tr>';
+    });
+    return h + '</table><div class="mute" style="margin-top:10px">' + esc(T('adm_c_note', 'A frozen account cannot bet or deposit but can still withdraw. Every bet and payout is stored in the casino_bets table.')) + '</div>';
   }
   function act(name, d, okMsg) {
     return api(name, d).then(function (r) { if (r.ok) { toast(okMsg || T('adm_done', 'Done.')); refresh(); } else fail(r); return r; });
@@ -178,7 +213,7 @@
     var q = keepFocus && document.activeElement && document.activeElement.id === 'adm-q';
     drawChrome();
     if (!data) { body.innerHTML = '<div class="empty">' + esc(T('adm_loading', 'Loading...')) + '</div>'; return; }
-    body.innerHTML = tab === 'overview' ? viewOverview() : tab === 'computers' ? viewComputers() : tab === 'place' ? viewPlace() : tab === 'props' ? viewProps() : logTable(data.log);
+    body.innerHTML = tab === 'overview' ? viewOverview() : tab === 'computers' ? viewComputers() : tab === 'place' ? viewPlace() : tab === 'props' ? viewProps() : tab === 'games' ? viewGames() : tab === 'casino' ? viewCasino() : logTable(data.log);
     body.scrollTop = scroll;
     if (q) { var inp = $q(); if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } }
   }
@@ -188,7 +223,7 @@
   function onClick(e) {
     var el = e.target.closest ? e.target.closest('button') : null;
     if (!el || !root.contains(el)) return;
-    if (el.dataset.tab) { tab = el.dataset.tab; return draw(); }
+    if (el.dataset.tab) { tab = el.dataset.tab; draw(); return loadExtra(); }
     if (el.dataset.close) return close();
     if (el.dataset.refresh) return refresh();
     if (el.dataset.place) {
@@ -197,6 +232,19 @@
       return;
     }
     var a = el.dataset.a; if (!a) return;
+    if (a === 'gtoggle' || a === 'greset') {
+      var g = gdata[Number(el.dataset.i)];
+      if (a === 'gtoggle') return act('gamesToggle', { game: g.id, enabled: !g.enabled }, T('adm_done', 'Done.')).then(loadExtra);
+      return dialog(T('adm_reset_board', 'Reset leaderboard'), [{ text: T('adm_reset_board_q', 'Clear every score and stat for this game?') + ' ' + g.name }], T('adm_reset_board', 'Reset leaderboard'), function () { act('gamesReset', { game: g.id }, T('adm_done', 'Done.')).then(loadExtra); }, true);
+    }
+    if (a === 'cswitch') {
+      var want = !cdata.open;
+      return dialog(want ? T('adm_casino_start', 'Open betting') : T('adm_casino_stop', 'Emergency stop'), [{ text: want ? T('adm_casino_start_q', 'Let players bet again?') : T('adm_casino_stop_q', 'Stop all betting now? Players can still withdraw and finish a game in progress.') }], want ? T('adm_casino_start', 'Open betting') : T('adm_casino_stop', 'Emergency stop'), function () { api('casino', { action: 'setOpen', data: { open: want } }).then(function (r) { if (r.ok) { toast(T('adm_done', 'Done.')); loadExtra(); } else fail(r); }); }, !want);
+    }
+    if (a === 'cfreeze') {
+      var acc = cdata.rows[Number(el.dataset.i)];
+      return api('casino', { action: 'freeze', data: { cid: acc.cid, frozen: acc.status !== 'frozen' } }).then(function (r) { if (r.ok) { toast(T('adm_done', 'Done.')); loadExtra(); } else fail(r); });
+    }
     var ent = el.dataset.i != null ? (a === 'propdel' ? data.props[Number(el.dataset.i)] : data.entries[Number(el.dataset.i)]) : null;
     if (a === 'tp') return post('adminTeleport', { x: ent.x, y: ent.y, z: ent.z });
     if (a === 'move') return post('adminMove', { id: ent.id });
@@ -228,10 +276,10 @@
     if (!root) build();
     strings = msg.strings || {};
     refreshMs = Math.max(2000, Number(msg.refreshMs) || 5000);
-    open = true; data = null; tab = 'overview'; search = '';
+    open = true; data = null; gdata = null; cdata = null; tab = 'overview'; search = '';
     root.classList.add('open');
     root.onclick = onClick;
-    root.oninput = function (e) { if (e.target.id === 'adm-q') { search = e.target.value; draw(true); } };
+    root.oninput = function (e) { if (e.target.id === 'adm-q') { search = e.target.value; draw(true); } else if (e.target.id === 'adm-cq') { cq = e.target.value; clearTimeout(window.__cqt); window.__cqt = setTimeout(loadExtra, 350); } };
     draw();
     refresh();
     clearInterval(timer);

@@ -7,5 +7,7 @@ LocaleExtra('en', {
   adm_tab_computers = 'Computers',
   adm_tab_place    = 'Place',
   adm_tab_props    = 'Props',
+  adm_tab_games    = 'Games',
+  adm_tab_casino   = 'Casino',
   adm_tab_log      = 'Log',
 })

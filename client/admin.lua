@@ -34,6 +34,7 @@ RegisterNUICallback('adminClose', function(_, cb) hide() cb('ok') end)
 local ALLOWED = {
   snapshot = 'admin:snapshot', lock = 'admin:lock', kick = 'admin:kick', reset = 'admin:reset',
   propAdd = 'admin:propAdd', propRemove = 'admin:propRemove',
+  games = 'admin:games', gamesToggle = 'admin:gamesToggle', gamesReset = 'admin:gamesReset', casino = 'admin:casino',
   delete = 'placement:delete', edit = 'placement:edit',
 }
 

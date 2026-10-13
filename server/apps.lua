@@ -158,6 +158,7 @@ local function bossGate(src, id)
 end
 
 function Apps.allowed(src, id)
+  if GamesDisabled and GamesDisabled[id] then return false end
   if not bossGate(src, id) then return false end
   if Apps.isPublic(id) then return true end
   if isPersonalApp(id) then

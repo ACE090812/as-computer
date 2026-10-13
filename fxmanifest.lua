@@ -56,9 +56,10 @@ server_scripts {
   'server/logs.lua',    -- Event Viewer: defines ComputerLog() used by session/boss/admin/hacking
   'server/hack.lua',    -- minigame targets + RequestHack export (needs Apps, Bridge above)
   'server/games.lua',
-  'server/games_pvp.lua',   -- player matches (needs GamesRecordPvp from games.lua)   -- game leaderboards, stats, saves (needs Apps above)
+  'server/games_pvp.lua',   -- player matches (needs GamesRecordPvp from games.lua)
   'server/boss.lua',    -- Business Manager (needs Apps, Bank, Bridge above)
   'server/admin.lua',   -- /pcadmin: needs Accounts + MotCallback above; defines AdminProps/AdminLog for placement.lua
+  'server/admin_games.lua',   -- /pcadmin Games and Casino tabs
   'server/placement.lua',
   'server/session.lua',
   'server/mirror.lua',
