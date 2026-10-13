@@ -47,7 +47,7 @@
   function dir(children) { return { d: true, c: children || {} }; }
   function file(text) { return { d: false, t: text }; }
   var SYS = dir({
-    Windows: dir({ System32: dir({ hosts: file('127.0.0.1  localhost\r\n10.0.0.1   gateway.local\r\n'), drivers: dir({}) }), 'notepad.exe': file('MZ... (binary)') }),
+    LSOS: dir({ System32: dir({ hosts: file('127.0.0.1  localhost\r\n10.0.0.1   gateway.local\r\n'), drivers: dir({}) }), 'notepad.exe': file('MZ... (binary)') }),
     'Program Files': dir({ 'Los Santos OS': dir({ 'version.txt': file('Los Santos OS 1.0\r\n') }) })
   });
   function sysNode(names) {
@@ -72,7 +72,7 @@
       if (d.legal) places.push({ key: 'legal', name: safe(d.legal) || 'Legal' });
       if (d.court) places.push({ key: 'court', name: safe(d.court) || 'Court' });
     }
-    places.push({ key: 'sys', name: 'Windows', sys: true }, { key: 'sys', name: 'Program Files', sys: true });
+    places.push({ key: 'sys', name: 'LSOS', sys: true }, { key: 'sys', name: 'Program Files', sys: true });
   }
 
   /* The entries inside a location: [{ name, folder: bool, id, size, updated, kind, manage, place }] */
