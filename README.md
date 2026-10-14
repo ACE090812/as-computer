@@ -572,3 +572,12 @@ Every computer has its own accounts. The first person to start a computer sets i
 
 - **Task Manager** (desktop icon, taskbar right-click menu, or Ctrl+Shift+Esc): Processes (open apps, End task, apps that do not fit in memory show Not responding), Performance (CPU, memory, disk, GPU and network graphs worked out from the parts in the tower and what is open), Startup apps (apps that open by themselves, saved per character) and Details and services. Other files add background rows with `LSOS.registerProcess(fn)`.
 - **Notification centre**: a bell in the taskbar opens the panel. Toasts appear bottom right for 5 seconds with a chime. Do not disturb silences everything, and each app can be muted. Other scripts send notifications with `exports['as-computer']:notifyComputer(target, { title, text, app, icon, priority, action = { app = 'mail' } })`, where `target` is a computer key (`'c1'`, `'p3'`, `'m7'`) or a character id.
+
+## Desktop: start-up, power and shortcuts
+
+- **Start-up screen.** A computer that is not resuming shows a start-up screen first. It lasts as long as the CPU and the player's startup apps make it (`Config.Hardware.Boot`, server/session.lua).
+- **Power menu:** Lock, Sleep (screen off, wake with a click and sign in again), Restart (session ends, start-up screen, sign-in) and Shut down.
+- **Weekly update:** about once a week a pretend update asks to restart. It can be postponed three times, then it installs by itself.
+- **Power cut:** `exports['as-computer']:setPowerOut(true)` switches every computer off at once (unsaved work is lost, nothing starts); `setPowerOut(false)` restores it. Staff can use `/pcpower off` and `/pcpower on`.
+- **Window snapping:** drag a window to the left or right edge for a half screen, or to the top to maximise.
+- **Shortcuts:** Ctrl+Alt+Delete (security screen: Lock, Switch user, Task Manager), Ctrl+Shift+Esc (Task Manager), Win+D (show desktop), Win+L (lock), Win+E (File Explorer), Alt+Tab (switch window). Which of these reach the page depends on what the game lets through.

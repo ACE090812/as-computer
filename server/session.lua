@@ -30,8 +30,23 @@ local function loginList(key, cid)
   return out, mine and mine.username or nil
 end
 
+-- ---- Power. A power cut (exports.setPowerOut, /pcpower) switches every computer off at once: sessions end, unsaved work is lost
+-- ---- and nothing starts until the power is back. Other scripts (a blackout script) call exports['as-computer']:setPowerOut(true|false).
+local powerOut = false
+
+--- How long this computer takes to start for this player: the CPU sets the base, every startup app adds time.
+local function bootSeconds(src, key)
+  local B = (Config.Hardware and Config.Hardware.Boot) or { baseSeconds = 14, minSeconds = 5, perStartupApp = 1.5 }
+  local perf = 1
+  if Hardware then local st = Hardware.Status(key); if st.perf and st.perf > 0 then perf = st.perf end end
+  local n = 0
+  if Settings and Settings.get then local sa = Settings.get(src).startupApps; n = type(sa) == 'table' and #sa or 0 end
+  return math.max(B.minSeconds or 5, math.floor((B.baseSeconds or 14) / math.max(perf, 0.3) + n * (B.perStartupApp or 1.5)))
+end
+
 MotCallback.Register('session:open', function(src, respond, key)
   if not validKey(key) then return respond({ needsLogin = true }) end
+  if powerOut then return respond({ noPower = true }) end
 
   -- A computer only starts when its tower holds the required parts (server/hardware.lua).
   if Hardware and not Hardware.Bootable(key) then
@@ -39,7 +54,7 @@ MotCallback.Register('session:open', function(src, respond, key)
   end
 
   if not Accounts.hasAnyGrants(key) then
-    return respond({ needsSetup = true })
+    return respond({ needsSetup = true, boot = bootSeconds(src, key) })
   end
 
   local cid = Bridge.GetIdentifier(src)
@@ -59,7 +74,7 @@ MotCallback.Register('session:open', function(src, respond, key)
 
   -- No resumable session (or the account that had one lost access since): show the login screen.
   local list, mine = loginList(key, cid)
-  return respond({ needsLogin = true, accounts = list, myAccount = mine })
+  return respond({ needsLogin = true, accounts = list, myAccount = mine, boot = bootSeconds(src, key) })
 end)
 
 --- A guest's files do not outlast the guest session.
@@ -257,3 +272,37 @@ function ComputerSessionForceLock(key)
   rec.state, rec.at = 'locked', os.time()
   return rec.cid
 end
+
+
+--- Power cut on or off. Off -> every session ends (guests' files are wiped), every open computer shuts down.
+function SetPowerOut(on)
+  on = on == true
+  if on == powerOut then return end
+  powerOut = on
+  if on then
+    for key, rec in pairs(sessions) do
+      if rec.state ~= 'off' then
+        if rec.guest and rec.accountId and FilesWipeOwner then FilesWipeOwner('pc:' .. key .. ':' .. rec.accountId) end
+        rec.state = 'off'
+        if ComputerLog then ComputerLog(key, 'system', 'power_cut', 'Power cut: the computer shut down', nil, 'warning') end
+        if MirrorClear then MirrorClear(key) end
+      end
+    end
+  end
+  TriggerClientEvent('as-computer:client:powerCut', -1, on)
+end
+function IsPowerOut() return powerOut end
+exports('setPowerOut', SetPowerOut)
+exports('isPowerOut', IsPowerOut)
+
+RegisterCommand('pcpower', function(src, args)
+  if src ~= 0 and not Bridge.IsAdmin(src) then return end
+  local on = args[1] == 'off'
+  if args[1] ~= 'on' and args[1] ~= 'off' then
+    local msg = 'Usage: /pcpower <on|off>  (off = power cut). Power is currently ' .. (powerOut and 'OUT' or 'on')
+    if src == 0 then print(msg) else TriggerClientEvent('chat:addMessage', src, { args = { '^3[power]', msg } }) end
+    return
+  end
+  SetPowerOut(on)
+  if AdminLog then AdminLog(src, on and 'power_cut' or 'power_on', 'all computers') end
+end, false)

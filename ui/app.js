@@ -619,6 +619,49 @@
     tick();
     if (state.lockPassword && pw) setTimeout(function () { pw.focus(); }, 30);
   }
+  // ---------------------------------------------------------------- start-up, restart, sleep, power cut, updates
+  var BOOT = { t: null };
+  function showBoot(seconds, text, done) {
+    var el = $('boot'), fill = $('bt-fill');
+    $('bt-txt').textContent = text || '';
+    el.classList.remove('hidden');
+    fill.style.transition = 'none'; fill.style.width = '0%'; void fill.offsetWidth;
+    fill.style.transition = 'width ' + seconds + 's linear'; fill.style.width = '100%';
+    clearTimeout(BOOT.t);
+    BOOT.t = setTimeout(function () { el.classList.add('hidden'); if (done) done(); }, Math.max(1, seconds) * 1000);
+  }
+  function showPowerScreen(text) { $('ps-txt').textContent = text || ''; $('powerscreen').classList.remove('hidden'); }
+  function hidePowerScreen() { $('powerscreen').classList.add('hidden'); }
+  // Restart: the session ends, the start-up screen runs for as long as this computer takes, then the sign-in screen shows again.
+  function restartPc(text) {
+    setMenu(false);
+    if (!isDui) postToClient('sessionState', { state: 'off' });
+    resetSession();
+    showBoot(state.bootSeconds || 10, text || t('ui_restarting', 'Restarting...'), function () { showGateLogin(false, state.gateAccounts, state.myAccount); });
+  }
+  function sleepPc() {
+    setMenu(false);
+    if (!isDui) postToClient('sessionState', { state: 'locked' });
+    showPowerScreen(t('ui_sleeping', 'Asleep. Click to wake.'));
+    var wake = function () { $('powerscreen').removeEventListener('click', wake); hidePowerScreen(); showLock(); };
+    $('powerscreen').addEventListener('click', wake);
+  }
+  // A weekly (pretend) update: restart prompt that can be postponed three times, then it installs by itself.
+  function checkUpdate() {
+    var p = P(), now = Math.floor(Date.now() / 1000);
+    if (!p.updAt) { S_setPrefsQuiet({ updAt: now }); return; }
+    if (now - p.updAt < 7 * 86400) return;
+    var skips = p.updSkips || 0;
+    var install = function () {
+      S_setPrefsQuiet({ updAt: Math.floor(Date.now() / 1000), updSkips: 0 });
+      restartPc(t('ui_upd_forced', 'Installing updates. Do not turn off your computer.'));
+    };
+    if (skips >= 3) { install(); return; }
+    showDlg({ title: t('ui_upd_title', 'Updates are ready'), html: '<div>' + esc(fmt(t('ui_upd_body', 'Your computer needs to restart to finish installing updates. You can postpone this %s more time(s).'), 3 - skips)) + '</div>',
+      buttons: [{ label: t('ui_upd_now', 'Restart now'), primary: true, run: install }, { label: t('ui_upd_later', 'Postpone'), run: function () { S_setPrefsQuiet({ updSkips: skips + 1 }); } }] });
+  }
+  function S_setPrefsQuiet(o) { seSet(o); }
+
   // Task Manager > Startup: the apps the player chose open by themselves once per start (not when unlocking or resuming).
   function runStartupApps() {
     var list = P().startupApps;
@@ -627,7 +670,7 @@
   }
   function signIn() {
     $('lock').classList.add('hidden');
-    if (!state.startupDone) { state.startupDone = true; setTimeout(runStartupApps, 400); }
+    if (!state.startupDone) { state.startupDone = true; setTimeout(runStartupApps, 400); if (!isDui) setTimeout(checkUpdate, 1500); }
     if (!isDui) postToClient('sessionState', { state: 'active' });
     if (state.certsState === 'idle') refreshCerts();
     if (FS.bin.state === 'idle') fsBinLoad(true);
@@ -2573,6 +2616,8 @@
     var p = e.target.closest('[data-power]');
     if (!p) return;
     if (p.dataset.power === 'lock') showLock();
+    else if (p.dataset.power === 'sleep') sleepPc();
+    else if (p.dataset.power === 'restart') restartPc();
     else postToClient('close', { off: true });   // Shut down: ends the session, next time starts fresh
   });
 
@@ -4892,24 +4937,39 @@
       if (d.mirror && !isDui) mirrorStart(d.mirror); else mirrorStop();
       // Phase 0.5: a machine nobody has ever set up, or one with no resumable session for this player,
       // shows the setup wizard / login screen instead of the desktop - checked before any resume/lock logic.
-      if (d.noBoot) {
-        resetSession();
-        showNoBoot(d.missing);
-      } else if (d.needsSetup) {
-        resetSession();
-        showGateSetup();
-      } else if (d.needsLogin) {
-        resetSession();
-        showGateLogin(false, d.accounts, d.myAccount);
-      } else if (d.resume) {
-        applyPrefs();
-        applyApps();
-        if (d.locked) showLock(); else { $('lock').classList.add('hidden'); postToClient('sessionState', { state: 'active' }); }
-      } else {
-        resetSession();
-        applyPrefs();
-        applyApps();
-        if (state.lockEnabled) showLock(); else { $('lock').classList.add('hidden'); signIn(); }
+      state.gateAccounts = d.accounts || state.gateAccounts; state.myAccount = d.myAccount || state.myAccount;
+      if (d.boot) state.bootSeconds = d.boot;
+      var gateStep = function () {
+        if (d.noBoot) {
+          resetSession();
+          showNoBoot(d.missing);
+        } else if (d.needsSetup) {
+          resetSession();
+          showGateSetup();
+        } else if (d.needsLogin) {
+          resetSession();
+          showGateLogin(false, d.accounts, d.myAccount);
+        } else if (d.resume) {
+          applyPrefs();
+          applyApps();
+          if (d.locked) showLock(); else { $('lock').classList.add('hidden'); postToClient('sessionState', { state: 'active' }); }
+        } else {
+          resetSession();
+          applyPrefs();
+          applyApps();
+          if (state.lockEnabled) showLock(); else { $('lock').classList.add('hidden'); signIn(); }
+        }
+      };
+      if (d.noPower) { resetSession(); showPowerScreen(''); }
+      else if (d.boot && !d.noBoot && !d.resume) showBoot(d.boot, t('ui_starting', 'Starting...'), gateStep);
+      else gateStep();
+    }
+
+    if (d.action === 'powerCut') {
+      if (d.on) { resetSession(); showPowerScreen(''); }
+      else if (!$('powerscreen').classList.contains('hidden')) {
+        showPowerScreen(t('ui_power_back', 'Power restored.'));
+        setTimeout(function () { hidePowerScreen(); postToClient('close', {}); }, 2200);
       }
     }
 
@@ -4950,6 +5010,58 @@
       if (menuOpen) renderStart();
     }
   });
+
+  // ---------------------------------------------------------------- keyboard shortcuts and the security screen
+  function secShow(v) { $('secscreen').classList.toggle('hidden', !v); }
+  $('secscreen').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-sec]'); if (!b) { if (e.target === $('secscreen')) secShow(false); return; }
+    secShow(false);
+    var a = b.dataset.sec;
+    if (a === 'lock') showLock();
+    else if (a === 'switch') { resetSession(); showGateLogin(false, state.gateAccounts, state.myAccount); }
+    else if (a === 'taskmgr') { if (wins.taskmgr) LSOS.openApp('taskmgr'); }
+  });
+  function desktopReady() { return root.classList.contains('open') && $('lock').classList.contains('hidden') && $('gate-login').classList.contains('hidden') && $('gate-setup').classList.contains('hidden') && $('gate-noboot').classList.contains('hidden') && $('boot').classList.contains('hidden') && $('powerscreen').classList.contains('hidden'); }
+  document.addEventListener('keydown', function (e) {
+    if (isDui || !desktopReady()) return;
+    var k = (e.key || '').toLowerCase();
+    if (e.ctrlKey && e.altKey && (k === 'delete' || k === 'end')) { e.preventDefault(); secShow($('secscreen').classList.contains('hidden')); return; }
+    if (e.metaKey && k === 'd') { e.preventDefault(); Object.keys(wins).forEach(function (id) { if (wins[id].open && !wins[id].min) minWin(id); }); return; }
+    if (e.metaKey && k === 'l') { e.preventDefault(); showLock(); return; }
+    if (e.metaKey && k === 'e') { e.preventDefault(); openWin('explorer'); return; }
+    if (e.altKey && k === 'tab') {
+      e.preventDefault();
+      var open = Object.keys(wins).filter(function (id) { return wins[id].open; }).sort(function (a, b) { return (+wins[b].el.style.zIndex || 0) - (+wins[a].el.style.zIndex || 0); });
+      if (open.length > 1) { var id = open[open.length - 1]; if (wins[id].min) openWin(id); else focusWin(id); }
+      return;
+    }
+    if (e.key === 'Escape' && !$('secscreen').classList.contains('hidden')) secShow(false);
+  });
+
+  // ---------------------------------------------------------------- window snapping: drag to the left or right edge for a half screen, to the top to maximise
+  var snapPrev = document.createElement('div'); snapPrev.id = 'snap-prev'; snapPrev.className = 'hidden'; $('windows').appendChild(snapPrev);
+  var snapMode = null;
+  function snapRect(mode) {
+    var a = areaSize();
+    if (mode === 'left') return { x: 0, y: 0, w: Math.floor(a.w / 2), h: a.h };
+    if (mode === 'right') return { x: Math.floor(a.w / 2), y: 0, w: Math.ceil(a.w / 2), h: a.h };
+    return { x: 0, y: 0, w: a.w, h: a.h };
+  }
+  document.addEventListener('pointermove', function (e) {
+    if (!drag || drag.mode !== 'move') { if (snapMode) { snapMode = null; snapPrev.classList.add('hidden'); } return; }
+    var a = areaSize(), rect = $('windows').getBoundingClientRect();
+    var px = (e.clientX - rect.left) / drag.sc, py = (e.clientY - rect.top) / drag.sc;
+    snapMode = px <= 6 ? 'left' : px >= a.w - 6 ? 'right' : py <= 4 ? 'max' : null;
+    if (snapMode) { var r = snapRect(snapMode); snapPrev.style.cssText = 'left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px'; snapPrev.classList.remove('hidden'); }
+    else snapPrev.classList.add('hidden');
+  });
+  document.addEventListener('pointerup', function () {
+    if (!snapMode || !drag || drag.mode !== 'move') { snapMode = null; snapPrev.classList.add('hidden'); return; }
+    var w = drag.w, mode = snapMode; snapMode = null; snapPrev.classList.add('hidden');
+    if (mode === 'max') { if (!w.max) toggleMax(w.id); return; }
+    var r = snapRect(mode);
+    w.x = r.x; w.y = r.y; w.w = r.w; w.h = r.h; applyGeom(w);
+  }, true);
 
   // ================================================================ app hook for other files
   // ui/mechanic.js (and any later app) registers itself here instead of being wired into this file.

@@ -89,6 +89,8 @@ local SPEC = {
   scoutTextSize = enum('small', 'normal', 'large'),
   -- notification centre: Do not disturb, sounds, and the apps whose toasts are muted (ui/notify.js)
   dnd           = bool,
+  updAt         = int(0, 4102444800),   -- when the last (fake) Windows update was installed
+  updSkips      = int(0, 10),          -- how many times this one was postponed
   notifSound    = bool,
   notifMute     = function(v)
     if type(v) ~= 'table' then return nil end

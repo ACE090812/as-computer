@@ -318,6 +318,8 @@ local function OpenMessage(loc, rect, user, info, session)
     action = 'open',
     resume = session and session.resume or false,  -- same player, same computer, nobody else since: keep the open apps
     needsSetup = session and session.needsSetup or false, -- first boot: nobody's ever set this machine up (client/dui.lua's boot flow)
+    noPower = session and session.noPower or false,        -- a power cut: nothing starts
+    boot = session and session.boot or nil,                -- seconds the start-up screen runs (CPU and startup apps)
     noBoot = session and session.noBoot or false,         -- the tower is missing required parts: show the 'cannot start' screen
     accounts = session and session.accounts or nil,        -- the lock screen's account list on this computer
     myAccount = session and session.myAccount or nil,      -- this character's own account here, to preselect
@@ -390,7 +392,7 @@ function OpenTerminal(loc)
     -- Resume only if the apps still in this client's page are from this very computer. Losing resume this
     -- way must NOT lose a needsSetup/needsLogin flag - the login/setup screen still has to show.
     if session and not (session.resume and nuiSessionKey == loc.key) then
-      session = { resume = false, needsSetup = session.needsSetup, needsLogin = session.needsLogin, noBoot = session.noBoot, missing = session.missing, accounts = session.accounts, myAccount = session.myAccount }
+      session = { resume = false, needsSetup = session.needsSetup, needsLogin = session.needsLogin, noBoot = session.noBoot, noPower = session.noPower, boot = session.boot, missing = session.missing, accounts = session.accounts, myAccount = session.myAccount }
     end
     nuiSessionKey = loc.key
 
@@ -790,4 +792,11 @@ end)
 RegisterNUICallback('hardwareApi', function(data, cb)
   if not currentTerminal or not currentTerminal.key then return cb({ success = false }) end
   MotCallback.Trigger('hardware:info', function(r) cb(r or { success = false }) end, currentTerminal.key)
+end)
+
+
+-- A power cut switches the computer being used off; when the power returns the screen says so and the computer closes.
+RegisterNetEvent('as-computer:client:powerCut', function(on)
+  if not currentTerminal then return end
+  SendNuiMessage(json.encode({ action = 'powerCut', on = on == true }))
 end)

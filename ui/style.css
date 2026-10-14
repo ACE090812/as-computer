@@ -968,3 +968,21 @@ html.dark #br-menu.on{background:#3a3a3a}
 .ov-booking{margin:8px 0 0;font-size:18px;font-weight:700;color:#1d70b8}
 .cal-form.ro .dots{pointer-events:none;opacity:.6}
 .cal-form.ro .cf-box textarea{resize:none}
+
+/* start-up screen, sleep / power cut screens, security screen, snap preview */
+#boot{position:absolute;inset:0;z-index:150;background:#000;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px}
+#boot.hidden,#powerscreen.hidden,#secscreen.hidden{display:none}
+.bt-logo{font-size:30px;font-weight:300;letter-spacing:.06em}
+.bt-bar{width:220px;height:4px;border-radius:2px;background:rgba(255,255,255,.18);overflow:hidden}
+.bt-bar i{display:block;height:100%;width:0;background:#4cc2ff}
+.bt-txt{font-size:13px;opacity:.7;min-height:18px}
+#powerscreen{position:absolute;inset:0;z-index:160;background:#000;color:#aaa;display:flex;align-items:center;justify-content:center;cursor:default}
+.ps-txt{font-size:14px;opacity:.7}
+#secscreen{position:absolute;inset:0;z-index:155;background:rgba(0,40,90,.92);display:flex;align-items:center;justify-content:center}
+.sec-card{width:300px;display:flex;flex-direction:column;gap:6px}
+.sec-title{color:#fff;font-size:20px;margin-bottom:10px;text-align:center}
+.sec-card button{background:rgba(255,255,255,.1);border:0;color:#fff;font-size:16px;padding:11px;cursor:pointer}
+.sec-card button:hover{background:rgba(255,255,255,.2)}
+#snap-prev{position:absolute;z-index:5;border:2px solid rgba(76,194,255,.9);background:rgba(76,194,255,.18);border-radius:8px;pointer-events:none;transition:all .08s}
+#snap-prev.hidden{display:none}
+html.dui #boot,html.dui #powerscreen,html.dui #secscreen,html.dui #snap-prev{display:none!important}

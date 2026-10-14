@@ -281,6 +281,8 @@
       <button id="sm-power"><span class="ic" data-ic="power"></span></button>
       <div id="power-menu" class="hidden">
         <div data-power="lock"><span class="ic" data-ic="lock"></span><span data-i18n="ui_power_lock">Lock</span></div>
+        <div data-power="sleep"><span class="ic" data-ic="power"></span><span data-i18n="ui_power_sleep">Sleep</span></div>
+        <div data-power="restart"><span class="ic" data-ic="power"></span><span data-i18n="ui_power_restart">Restart</span></div>
         <div data-power="off"><span class="ic" data-ic="power"></span><span data-i18n="ui_power_off">Shut down</span></div>
       </div>
     </div>
@@ -300,6 +302,17 @@
       <div class="tray-clock" id="tray-clock"><div id="tb-time">--:--</div><div id="tb-date">--/--/----</div></div>
     </div>
   </div>
+
+  <!-- start-up / restart screen, sleep and power cut screens, Ctrl+Alt+Del screen -->
+  <div id="boot" class="hidden"><div class="bt-logo" data-i18n="ui_os_name">Los Santos OS</div><div class="bt-bar"><i id="bt-fill"></i></div><div class="bt-txt" id="bt-txt"></div></div>
+  <div id="powerscreen" class="hidden"><div class="ps-txt" id="ps-txt"></div></div>
+  <div id="secscreen" class="hidden"><div class="sec-card">
+    <div class="sec-title" data-i18n="ui_sec_title">Los Santos OS Security</div>
+    <button data-sec="lock" data-i18n="ui_power_lock">Lock</button>
+    <button data-sec="switch" data-i18n="ui_sec_switch">Switch user</button>
+    <button data-sec="taskmgr" data-i18n="app_taskmgr">Task Manager</button>
+    <button data-sec="cancel" data-i18n="ui_cancel">Cancel</button>
+  </div></div>
 
   <div id="night"></div>
   <div id="dim"></div>
