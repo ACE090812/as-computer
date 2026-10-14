@@ -29,7 +29,7 @@
       var f = [660, 880, 520][(kind || 1) - 1] || 660;
       [0, 0.25, 0.5].forEach(function (d) {
         var o = actx.createOscillator(), g = actx.createGain(); o.type = kind === 3 ? 'square' : 'sine'; o.frequency.value = f;
-        g.gain.setValueAtTime(0.0001, actx.currentTime + d); g.gain.exponentialRampToValueAtTime(0.25, actx.currentTime + d + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d + 0.2);
+        g.gain.setValueAtTime(0.0001, actx.currentTime + d); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, 0.25 * S.sysVol()), actx.currentTime + d + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + d + 0.2);
         o.connect(g); g.connect(actx.destination); o.start(actx.currentTime + d); o.stop(actx.currentTime + d + 0.22);
       });
     } catch (e) { /* no audio */ }

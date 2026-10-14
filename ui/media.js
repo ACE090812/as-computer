@@ -47,7 +47,7 @@
     applyVol();
     return media;
   }
-  function applyVol() { if (media) { media.volume = st.vol / 100; media.muted = st.mute; } }
+  function applyVol() { if (media) { media.volume = st.vol / 100 * S.sysVol(); media.muted = st.mute || S.sysVol() === 0; } }
   function ensureEq() {
     if (filters || !media) return !!filters;
     try {
@@ -197,7 +197,7 @@
     id: 'media', icon: ICON, titleKey: 'app_media', titleDef: 'Media Player', w: 940, h: 600,
     html: '<div class="mp" id="mp-root"></div>',
     onOpen: function () {
-      var p = prefs(); if (typeof p.mpVol === 'number') st.vol = p.mpVol; if (Array.isArray(p.mpEq)) st.eq = p.mpEq.slice();
+      var p = prefs(); applyVol(); if (typeof p.mpVol === 'number') st.vol = p.mpVol; if (Array.isArray(p.mpEq)) st.eq = p.mpEq.slice();
       draw();
     },
     onClose: function () { /* keeps playing in the background */ },

@@ -138,6 +138,9 @@
     se_clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 7v5.3l3.4 2"/></svg>',
     se_globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><ellipse cx="12" cy="12" rx="3.6" ry="8.6"/><path d="M3.6 12h16.8"/></svg>',
     se_display: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="1.6"/><path d="M8.5 20h7M12 16.5V20"/></svg>',
+    se_sound: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>',
+    se_storage: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="13" width="17" height="6.5" rx="1.6"/><path d="M5.5 13l2-7.5h9l2 7.5M16.5 16.3h.01M13.5 16.3h.01"/></svg>',
+    se_hardware: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.8"/><rect x="9.5" y="9.5" width="5" height="5" rx=".6"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></svg>',
     se_about: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v5.4"/><circle cx="12" cy="7.9" r=".6" fill="currentColor"/></svg>',
     se_image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17.5l4.6-4.4 3.4 3 3-2.6 5 4"/></svg>',
     se_palette: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.3 0 1.9-.9 1.6-1.9-.4-1.2.4-2.1 1.6-2.1H17a3.5 3.5 0 0 0 3.5-3.5C20.5 7 16.7 3.5 12 3.5z"/><circle cx="7.6" cy="11" r="1" fill="currentColor"/><circle cx="10.4" cy="7.4" r="1" fill="currentColor"/><circle cx="14.8" cy="7.6" r="1" fill="currentColor"/></svg>',
@@ -3764,7 +3767,7 @@
     '#0099bc', '#2d7d9a', '#00b7c3', '#038387', '#00b294', '#018574', '#00cc6a', '#10893e',
     '#7a7574', '#5d5a58', '#68768a', '#515c6b', '#567c73', '#486860', '#498205', '#107c10'];
   var DEFAULT_PREFS = { wallpaper: 'bloom', fit: 'fill', mode: 'light', accent: '#0f6cbd', accentBars: false, taskbarAlign: 'center',
-    search: 'box', lockShow: true, brightness: 100, night: false, nightStrength: 40, clock24: true, dateFormat: 'dmy', weekStart: 1,
+    search: 'box', lockShow: true, brightness: 100, night: false, nightStrength: 40, clock24: true, dateFormat: 'dmy', weekStart: 1, sysVol: 100, sysMute: false,
     pinnedApps: null,  // null = use the factory PINNED_BASE set; once the player pins/unpins anything it becomes an explicit array
     iconPos: null,     // null = use the default top-to-bottom, wrap-to-next-column layout; { appId: {c,r} } once dragged
     avatar: '' };      // '' = the default person icon; otherwise an https picture address (Settings > Accounts)
@@ -3884,7 +3887,7 @@
     { id: 'time', ic: 'se_clock', key: 'se_time', def: 'Time & language' }
   ];
   var SUB = {
-    'system/display': ['system', 'se_display', 'Display'], 'system/about': ['system', 'se_about', 'About'],
+    'system/display': ['system', 'se_display', 'Display'], 'system/sound': ['system', 'se_sound', 'Sound'], 'system/storage': ['system', 'se_storage', 'Storage'], 'system/hardware': ['system', 'se_hardware', 'Hardware'], 'system/about': ['system', 'se_about', 'About'],
     'network/wifi': ['network', 'se_wifi', 'Wi-Fi'],
     'personal/background': ['personal', 'se_background', 'Background'], 'personal/colors': ['personal', 'se_colors', 'Colours'],
     'personal/themes': ['personal', 'se_themes', 'Themes'], 'personal/lock': ['personal', 'se_lockscreen', 'Lock screen'],
@@ -3896,6 +3899,7 @@
   // settings you can search for: [page, locale key, default text, extra words]
   var INDEX = [
     ['system/display', 'se_brightness', 'Brightness', 'screen dim'], ['system/display', 'se_night', 'Night light', 'warm blue light colour'],
+    ['system/sound', 'se_sound', 'Sound', 'volume mute speaker audio notification'], ['system/storage', 'se_storage', 'Storage', 'disk drive space hdd free'], ['system/hardware', 'se_hardware', 'Hardware', 'parts cpu gpu ram psu temperature wear'],
     ['system/about', 'se_devspec', 'Device specifications', 'processor ram computer name pc'], ['system/about', 'se_winspec', 'Windows specifications', 'edition version build os'],
     ['personal/background', 'se_bg_choose', 'Choose a picture', 'wallpaper image photo desktop background url'], ['personal/background', 'se_bg_fit', 'Choose a fit for your desktop image', 'fill stretch tile center'],
     ['personal/colors', 'se_mode', 'Choose your mode', 'dark light theme'], ['personal/colors', 'se_accent', 'Accent colour', 'colour color'],
@@ -3981,6 +3985,9 @@
     return '<div class="se-hero"><span class="ic big" data-ic="se_pc"></span><div><div class="hn">' + esc(d.name || '—') + '</div><div class="hs">' + esc([d.manufacturer, d.model].filter(Boolean).join(' ')) + '</div></div></div>' +
       card([
         row({ ic: 'se_display', title: t('se_display', 'Display'), desc: t('se_display_d', 'Brightness, night light'), go: 'system/display' }),
+        row({ ic: 'se_sound', title: t('se_sound', 'Sound'), desc: t('se_sound_d', 'Volume, notification sounds'), go: 'system/sound' }),
+        row({ ic: 'se_storage', title: t('se_storage', 'Storage'), desc: t('se_storage_d', 'Disk space and what uses it'), go: 'system/storage' }),
+        row({ ic: 'se_hardware', title: t('se_hardware', 'Hardware'), desc: t('se_hardware_d', 'Parts in this computer and their condition'), go: 'system/hardware' }),
         row({ ic: 'se_about', title: t('se_about', 'About'), desc: t('se_about_d', 'Device specifications, Windows specifications'), go: 'system/about' })
       ]);
   };
@@ -3994,8 +4001,59 @@
     return out + '<div class="se-gap"></div>' + card(rows);
   };
 
+  // ---- Sound, Storage and Hardware (the hardware numbers come from the tower, see server/hardware.lua)
+  function fmtMB(mb) { mb = Math.max(0, mb || 0); return mb >= 1024 ? (Math.round(mb / 102.4) / 10) + ' GB' : Math.round(mb) + ' MB'; }
+  PAGE['system/sound'] = function () {
+    var p = P(), vol = typeof p.sysVol === 'number' ? p.sysVol : 100;
+    return card([
+      row({ ic: 'se_sound', title: t('se_volume', 'Volume'), desc: t('se_volume_d', 'Notifications, alarms, timers and the Media Player'),
+        right: '<input type="range" class="se-range" data-range="sysVol" min="0" max="100" value="' + vol + '"><span class="se-volv">' + vol + '</span>' }),
+      row({ title: t('se_mute', 'Mute'), desc: t('se_mute_d', 'Turn all sound from this computer off'), right: tg('sysMute', !!p.sysMute) })
+    ]) + '<div class="se-gap"></div>' + card([
+      row({ title: t('se_notifsound', 'Notification sounds'), desc: t('se_notifsound_d', 'Play a sound when a notification arrives'), right: tg('notifSound', p.notifSound !== false) }),
+      row({ title: t('se_testsound', 'Test sound'), desc: t('se_testsound_d', 'Plays a notification now'), right: '<button class="se-btn" data-act="sndtest">' + esc(t('se_testsound_btn', 'Play')) + '</button>' })
+    ]);
+  };
+  var KIND_ROWS = [['text', 'se_st_docs', 'Documents', '#3b8dea'], ['image', 'se_st_pics', 'Pictures', '#16a34a'], ['audio', 'se_st_music', 'Music', '#d97706'], ['video', 'se_st_video', 'Videos', '#9333ea'], ['file', 'se_st_other', 'Other files', '#64748b']];
+  PAGE['system/storage'] = function () {
+    var h = SE.hw;
+    if (!h) return '<div class="se-empty">' + esc(t('se_hw_loading', 'Reading the hardware...')) + '</div>';
+    var total = h.storageMB || 0, br = h.diskBreak || {}, SYS = 1200, used = SYS + (h.diskUsedMB || 0), free = Math.max(0, total - used), pct = total ? Math.min(100, used / total * 100) : 100;
+    var rows = [row({ title: t('se_st_system', 'System and apps'), desc: fmtMB(SYS) })];
+    KIND_ROWS.forEach(function (k) { if (br[k[0]]) rows.push(row({ title: t(k[1], k[2]), desc: fmtMB(br[k[0]]) })); });
+    var bar = '<div class="se-stbar">' + [['sys', SYS, '#94a3b8']].concat(KIND_ROWS.map(function (k) { return [k[0], br[k[0]] || 0, k[3]]; })).map(function (x) { return '<i style="width:' + (total ? Math.min(100, x[1] / total * 100) : 0) + '%;background:' + x[2] + '"></i>'; }).join('') + '</div>';
+    var warn = free < total * 0.08 ? '<div class="se-note err">' + esc(t('se_st_low', 'Your drive is almost full. Delete files or fit a bigger drive.')) + '</div>' : '';
+    return card(['<div class="se-cardhead"><div class="ch">' + esc(t('se_st_drive', 'Local disk')) + '</div><span class="se-tag ' + (pct > 90 ? 'warn' : 'ok') + '">' + esc(fmtMB(free) + ' ' + t('se_st_free', 'free')) + '</span></div>',
+      '<div class="se-stwrap">' + bar + '<div class="se-rd">' + esc(fmtMB(used) + ' ' + t('se_st_of', 'used of') + ' ' + fmtMB(total)) + '</div></div>']) + warn + '<div class="se-gap"></div>' +
+      '<div class="se-sec">' + esc(t('se_st_usage', 'Storage usage')) + '</div>' + card(rows);
+  };
+  PAGE['system/hardware'] = function () {
+    var h = SE.hw;
+    if (!h) return '<div class="se-empty">' + esc(t('se_hw_loading', 'Reading the hardware...')) + '</div>';
+    var slots = Object.keys(h.slots || {}).sort(), rows = [];
+    slots.forEach(function (k) {
+      var s = h.slots[k], w = Math.max(0, Math.min(100, Math.round(s.wear)));
+      rows.push(row({ title: t('hw_slot_' + k, k.toUpperCase()), desc: s.name || s.tier, right: '<span class="se-wear"><i class="' + (w < 25 ? 'low' : w < 55 ? 'mid' : '') + '" style="width:' + w + '%"></i></span><span class="se-volv">' + w + '%</span>' }));
+    });
+    (h.missing || []).forEach(function (k) { rows.push(row({ title: t('hw_slot_' + k, k.toUpperCase()), desc: t('se_hw_missing', 'Not fitted'), right: '<span class="se-tag warn">' + esc(t('se_hw_required', 'Required')) + '</span>' })); });
+    var hot = h.temp >= (h.hot || 85);
+    var top = card([
+      row({ ic: 'se_hardware', title: t('hw_temp', 'Temperature'), desc: t('se_hw_temp_d', 'Hotter under load, with worn parts and without cooling'), right: '<span class="se-tag ' + (hot ? 'warn' : 'ok') + '">' + Math.round(h.temp || 0) + ' °C</span>' }),
+      row({ title: t('se_hw_perf', 'Performance'), desc: t('se_hw_perf_d', 'Speed of the processor compared with a standard one'), right: '<b>' + (Math.round((h.perf || 0) * 100) / 100) + 'x</b>' }),
+      row({ title: t('se_hw_net', 'Network card'), desc: h.network ? String(h.network) : t('se_hw_none', 'None') })
+    ]);
+    var diag = appVisible('diag') ? '<div class="se-gap"></div>' + card([row({ title: t('app_diag', 'Diagnostics'), desc: t('se_hw_diag_d', 'Fault codes and recent blue screens'), right: '<button class="se-btn" data-act="opendiag">' + esc(t('se_open', 'Open')) + '</button>' })]) : '';
+    return top + '<div class="se-gap"></div><div class="se-sec">' + esc(t('se_hw_parts', 'Parts and condition')) + '</div>' + card(rows) + diag;
+  };
+
   PAGE['system/about'] = function () {
-    var d = (SE.info || {}).device || {}, j = (SE.info || {}).account || {};
+    var d = Object.assign({}, (SE.info || {}).device || {}), j = (SE.info || {}).account || {}, hw = SE.hw;
+    if (hw) {
+      var sl = hw.slots || {};
+      if (sl.cpu) d.processor = sl.cpu.name;
+      d.ram = fmtMB(hw.ramMB || 0);
+      d.graphics = sl.gpu ? sl.gpu.name : t('se_hw_nogpu', 'No dedicated graphics card');
+    }
     var spec = card([
       '<div class="se-cardhead"><div class="ch">' + esc(t('se_devspec', 'Device specifications')) + '</div><button class="se-btn" data-act="copy">' + esc(t('se_copy', 'Copy')) + '</button></div>',
       kv(t('se_dev_name', 'Device name'), d.name), kv(t('se_dev_maker', 'Manufacturer'), d.manufacturer), kv(t('se_dev_model', 'Model'), d.model),
@@ -4328,6 +4386,7 @@
       } else { SE.state = 'error'; }
       seRender();
     });
+    if (!isDui) seApi('hardwareApi', {}).then(function (h) { if (h && h.success) { SE.hw = h; seRender(); } });
   }
   function seStart() { SE.page = SE.want || 'home'; SE.want = null; SE.notice = null; SE.q = ''; $('se-q').value = ''; $('se-results').classList.add('hidden'); seLoad(); }
 
@@ -4516,6 +4575,8 @@
         var pw = $('se-wifi-pass'); wifiConnect(act.dataset.net, pw ? pw.value : '');
       }
       else if (a === 'ava-change') { avaChangeDlg(); }
+      else if (a === 'sndtest') { if (LSOS.notify) LSOS.notify({ app: 'settings', title: t('se_testsound', 'Test sound'), text: t('se_testsound_d', 'Plays a notification now') }); }
+      else if (a === 'opendiag') { LSOS.openApp('diag'); }
       else if (a === 'ava-remove') { avaRemove(); }
       else if (a === 'pw-open') { SE.pwOpen = true; SE.pwErr = ''; seRender(); setTimeout(function () { var i = $('se-pw-current') || $('se-pw-new'); if (i) i.focus(); }, 30); }
       else if (a === 'pw-cancel') { SE.pwOpen = false; SE.pwErr = ''; seRender(); }
@@ -4545,7 +4606,7 @@
   });
   seWin.addEventListener('input', function (e) {
     var r = e.target.closest('[data-range]');
-    if (r) { var o = {}; o[r.dataset.range] = +r.value; state.prefs = Object.assign({}, P(), o); SE.pending[r.dataset.range] = +r.value; applyPrefs(); clearTimeout(SE.timer); SE.timer = setTimeout(seFlush, 500); return; }
+    if (r) { var vl = r.parentNode.querySelector('.se-volv'); if (vl) vl.textContent = r.value; var o = {}; o[r.dataset.range] = +r.value; state.prefs = Object.assign({}, P(), o); SE.pending[r.dataset.range] = +r.value; applyPrefs(); clearTimeout(SE.timer); SE.timer = setTimeout(seFlush, 500); return; }
     if (e.target.id === 'se-q') seSearch(e.target.value);
   });
   seWin.addEventListener('keydown', function (e) {
@@ -4842,7 +4903,7 @@
     brReset();
     calCloseForm();
     setMenu(false);
-    SE.info = null; SE.state = 'idle'; SE.notice = null;
+    SE.info = null; SE.hw = null; SE.state = 'idle'; SE.notice = null;
     state.certs = null;
     state.certsState = 'idle';
     state.lastLookup = null;
@@ -5134,6 +5195,7 @@
       return out;
     },
     prefs: function () { return P(); },
+    sysVol: function () { var p = P(); return p.sysMute ? 0 : (typeof p.sysVol === 'number' ? p.sysVol : 100) / 100; },
     setPrefs: function (o) { seSet(o); },
     api: seApi,
     registerApp: function (o) {

@@ -160,6 +160,8 @@ local SPEC = {
     return out
   end,
   mpVol         = int(0, 100),
+  sysVol        = int(0, 100),   -- Settings > Sound: master volume for notification, alarm and media sound
+  sysMute       = bool,
   mpEq          = function(v)
     if type(v) ~= 'table' then return nil end
     local out = {}

@@ -999,3 +999,9 @@ html.dui #bsod,html.dui #boot,html.dui #powerscreen,html.dui #secscreen,html.dui
 .cal-scope button{flex:1;border:0;border-radius:6px;padding:6px 4px;background:rgba(128,128,128,.15);cursor:pointer;color:inherit;font-size:12px}
 .cal-scope button.on{background:#0f6cbd;color:#fff}
 .cal-scope button.hidden{display:none}
+
+.se-volv{display:inline-block;min-width:34px;text-align:right;margin-left:10px;font-variant-numeric:tabular-nums}
+.se-stwrap{padding:4px 16px 14px}.se-stbar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--se-btn-l);margin-bottom:8px}
+.se-stbar i{display:block;height:100%}
+.se-wear{display:inline-block;width:140px;height:6px;border-radius:3px;background:var(--se-btn-l);overflow:hidden;vertical-align:middle}
+.se-wear i{display:block;height:100%;background:#22c55e}.se-wear i.mid{background:#f59e0b}.se-wear i.low{background:#ef4444}

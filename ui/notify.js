@@ -33,7 +33,7 @@
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
       var o = ac.createOscillator(), g = ac.createGain(), t0 = ac.currentTime + (at || 0);
       o.type = type || 'sine'; o.frequency.value = f;
-      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol * S.sysVol()), t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
       o.connect(g); g.connect(ac.destination); o.start(t0); o.stop(t0 + d + 0.03);
     } catch (e) { /* no audio */ }
   }
@@ -45,7 +45,7 @@
     normal: [[740, .12, 'sine', .07, 0], [988, .16, 'sine', .07, .1]]
   };
   function chime(n) {
-    if (prefs().notifSound === false) return;
+    if (prefs().notifSound === false || S.sysVol() === 0) return;
     var kind = /^(clock|calendar)$/.test(n.app) ? 'alarm' : /^(antivirus|security|logs)$/.test(n.app) ? 'security' : SOUNDS[n.app] ? n.app : 'normal';
     (SOUNDS[kind] || SOUNDS.normal).forEach(function (a) { tone(a[0], a[1], a[2], a[3], a[4]); });
   }

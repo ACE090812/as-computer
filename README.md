@@ -603,3 +603,10 @@ Built-in drawing app laid out like Windows 11 Paint: File and View menus, quick 
 
 ## Media Player
 Built-in player (`config/apps/media.lua`) styled like the Windows 11 Media Player: dark, a search box and navigation with an accent bar on the left, an art card with an Up next table on Now playing, playlist pages with a hero header, and a bottom bar with the track, centred transport and seek bar, and volume. The accent follows the computer's accent colour. Features: transport (seek, previous, play or pause, next, shuffle, repeat off/all/one, volume, equaliser).
+
+## Settings: Sound, Storage and Hardware
+Three new pages under Settings > System, searchable from "Find a setting".
+- **Sound:** a master volume and Mute (`sysVol`, `sysMute`) that scale notification sounds, alarms, timers and the Media Player, the notification sounds switch, and a test button.
+- **Storage:** the drive's used and free space, a coloured bar, and what uses it (System and apps, Documents, Pictures, Music, Videos, Other files, estimated from the files saved on this computer). A warning shows when the drive is nearly full.
+- **Hardware:** temperature, performance, the network card, and every fitted part with its name and condition bar, plus any missing required part. An Open button goes to Diagnostics.
+- **About** now shows the real processor, RAM and graphics card fitted in the tower instead of the config text.

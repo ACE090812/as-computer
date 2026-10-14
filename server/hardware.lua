@@ -187,12 +187,25 @@ end, false)
 
 --- Rough size of what is stored on a computer, in MB, from its files: a text file is tiny, pictures, sound and video are not.
 local KIND_MB = { text = 0.02, folder = 0, image = 3, audio = 5, video = 40, file = 1 }
-function Hardware.DiskUsedMB(key)
+--- "Zancudo Core Standard": the shop's product name for a part and its tier label.
+function Hardware.PartName(part, tier)
+  local name, tl = tostring(part or ''), tostring(tier or '')
+  for _, d in ipairs(Config.Mining and Config.Mining.Parts or {}) do if d.key == part then name = d.productName or d.label or name end end
+  for _, d in ipairs(Config.Mining and Config.Mining.Tiers or {}) do if d.key == tier then tl = d.label or tl end end
+  return ((name .. ' ' .. tl):gsub('%s+$', ''))
+end
+
+function Hardware.DiskBreak(key)
   local rows = MySQL.query.await(
     "SELECT kind, COUNT(*) AS n FROM computer_files WHERE deleted_at = 0 AND ((scope = 'personal' AND owner LIKE ?) OR (scope = 'pcshared' AND owner = ?)) GROUP BY kind",
     { 'pc:' .. key .. ':%', key }) or {}
+  local out = {}
+  for _, r in ipairs(rows) do out[r.kind] = (out[r.kind] or 0) + (KIND_MB[r.kind] or 1) * (tonumber(r.n) or 0) end
+  return out
+end
+function Hardware.DiskUsedMB(key)
   local mb = 0
-  for _, r in ipairs(rows) do mb = mb + (KIND_MB[r.kind] or 1) * (tonumber(r.n) or 0) end
+  for _, v in pairs(Hardware.DiskBreak(key)) do mb = mb + v end
   return mb
 end
 
@@ -201,8 +214,8 @@ MotCallback.Register('hardware:info', function(src, respond, key)
   if type(key) ~= 'string' or not key:match('^[cpm]%d+$') then return respond({ success = false }) end
   local st = Hardware.Status(key)
   local slots = {}
-  for slot, p in pairs(st.slots) do slots[slot] = { tier = p.tier, wear = p.wear, part = p.part } end
-  respond({ success = true, temp = Hardware.Temp(key, st), hot = H.Temp.hot, faults = Hardware.Faults(key), bootable = st.bootable, perf = st.perf, ramMB = st.ramMB, storageMB = st.storageMB, diskUsedMB = Hardware.DiskUsedMB(key),
+  for slot, p in pairs(st.slots) do slots[slot] = { tier = p.tier, wear = p.wear, part = p.part, name = Hardware.PartName(p.part, p.tier) } end
+  respond({ success = true, diskBreak = Hardware.DiskBreak(key), missing = st.missing, temp = Hardware.Temp(key, st), hot = H.Temp.hot, faults = Hardware.Faults(key), bootable = st.bootable, perf = st.perf, ramMB = st.ramMB, storageMB = st.storageMB, diskUsedMB = Hardware.DiskUsedMB(key),
     hasGpu = st.hasGpu, gpuPerf = st.gpuPerf, network = st.network, networkSpeed = st.networkSpeed, slots = slots })
 end)
 
