@@ -591,3 +591,6 @@ Every computer has its own accounts. The first person to start a computer sets i
 
 ## Clock
 Built-in app (`config/apps/clock.lua`). Alarms (label, days, three sounds, snooze 5 minutes) are saved per character in Settings (`alarms`, up to 20) and ring while the computer is on, with a notification and sound. Also a timer, a stopwatch with laps, and world clocks (real time zones, `worldClocks`, up to 8).
+
+## Calendar (one app)
+The Calendar app has two calendars in one window: **My calendar** (the character's own, table `computer_personal_calendar`) and **Team calendar** (the job's shared one, as before). My calendar events can have a reminder (at the time, 5/15/60 minutes or 1 day before) that arrives as a notification on the computer the player is using, and can be **shared** with another online player by server ID: they get a copy straight away and a notification. Linking to the phone calendar is not done yet.

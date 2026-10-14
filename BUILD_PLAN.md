@@ -33,7 +33,7 @@ Work one feature at a time, test, commit and push straight to `main`. Strings go
 ## 4. New apps
 - Paint (up to 1920x1080, layers, undo, select, zoom, saves PNG to Pictures), Photo viewer (slideshow, zoom, rotate, set as wallpaper, print, PNG/JPG/GIF/WebP/phone photos/screenshots) with crop, rotate, brightness, contrast, filters, undo and overwrite option.
 - Media player: playlists (10 of 100 tracks), shuffle, repeat, volume, equaliser, background play, files from Explorer, any direct audio or video URL, the phone Music app, nearby players hear it within 10 metres, cast to a placed TV, only the owner mutes it.
-- Calendar: personal calendar, reminders as notifications, share an event (added automatically), link to the phone calendar.
+- Calendar (kept inside the one existing Calendar app, My calendar + Team calendar): personal calendar, reminders as notifications, share an event (added automatically), link to the phone calendar (not yet).
 - Clock: labelled alarms with snooze and sound choice, timer, stopwatch, world clocks (real world time).
 - Settings additions: Sound page, Storage page, Hardware page.
 - Antivirus: 3 day trial then 150 per 30 days, scan and quarantine, real-time protection, needs updates, scans disabled when the trial ends, quick scan 20s and full scan 90s using CPU.

@@ -1,4 +1,4 @@
--- Calendar app: one shared team calendar (bookings, reminders).
+-- Calendar app: one app with "My calendar" (personal, reminders, sharing) and the job's shared team calendar (bookings).
 
 Config.Calendar = {
   enabled = true,

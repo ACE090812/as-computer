@@ -3419,7 +3419,7 @@
   // ================================================================ Calendar (shared team calendar)
   // Month / Week / Day views. Events live in the mot_calendar table and are shared by every tester.
   // "Today" is the real date of the PC (same as the taskbar clock).
-  var CAL = { on: false, weekStart: 1, view: 'month', cur: null, events: [], state: 'idle', key: '', editing: null, tok: 0, miniCur: null };
+  var CAL = { scope: 'me', team: false, on: false, weekStart: 1, view: 'month', cur: null, events: [], state: 'idle', key: '', editing: null, tok: 0, miniCur: null };
   var CAL_COLORS = ['blue', 'green', 'red', 'orange', 'purple', 'grey'];
   var CAL_HOUR = 52; // px per hour in the day/week grid
   var calWin = $('win-calendar');
@@ -3439,7 +3439,7 @@
     return fetch('https://' + (window.GetParentResourceName ? window.GetParentResourceName() : 'as-computer') + '/calendarApi', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-      body: JSON.stringify({ name: name, data: data || {} })
+      body: JSON.stringify({ name: name, data: Object.assign({ scope: CAL.scope }, data || {}) })
     }).then(function (r) { return r.json(); }).catch(function () { return undefined; });
   }
 
@@ -3608,9 +3608,13 @@
     f.dataset.curColor = ev ? calColor(ev.color) : 'blue';
     $('cf-err').textContent = '';
     $('cf-by').textContent = ev && ev.createdBy ? fmt(t('ui_cal_by', 'Added by %s'), ev.createdBy) : '';
+    var me = CAL.scope === 'me';
+    $('cf-remind-row').classList.toggle('hidden', !me);
+    $('cf-remind').value = ev && ev.remind != null ? String(ev.remind) : '-1';
+    $('cf-share').classList.toggle('hidden', !(me && ev && ev.id)); $('cf-share-row').classList.add('hidden');
     var ro = !!(ev && ev.booking);   // website MOT bookings are view-only
     f.classList.toggle('ro', ro);
-    ['cf-title', 'cf-date', 'cf-allday', 'cf-start', 'cf-end', 'cf-notes'].forEach(function (id) { $(id).disabled = ro; });
+    ['cf-title', 'cf-date', 'cf-allday', 'cf-start', 'cf-end', 'cf-notes', 'cf-remind'].forEach(function (id) { $(id).disabled = ro; });
     $('cf-save').classList.toggle('hidden', ro);
     if (ro) { $('cf-heading').textContent = t('ui_cal_booking', 'MOT booking'); $('cf-by').textContent = t('ui_cal_booking_note', ''); }
     $('cf-delete').classList.toggle('hidden', !ev || ro);
@@ -3634,7 +3638,7 @@
     else if (!all && !/^\d{2}:\d{2}$/.test(st || '')) err = t('ui_cal_err_time', 'Enter a start time, or tick All day.');
     else if (!all && en && en < st) err = t('ui_cal_err_end', 'The end time must be after the start time.');
     if (err) { $('cf-err').textContent = err; return; }
-    var payload = { id: CAL.editing, title: title, date: date, startTime: st, endTime: en || null, color: $('cal-form').dataset.curColor, notes: $('cf-notes').value };
+    var payload = { id: CAL.editing, title: title, date: date, startTime: st, endTime: en || null, color: $('cal-form').dataset.curColor, notes: $('cf-notes').value, remind: +$('cf-remind').value };
     $('cf-save').disabled = true;
     calApi('save', payload).then(function (res) {
       $('cf-save').disabled = false;
@@ -3654,11 +3658,26 @@
   }
   function calEventById(id) { var ev = null; CAL.events.forEach(function (e) { if (String(e.id) === String(id)) ev = e; }); return ev; }
 
+  function calSetScope(sc, quiet) {
+    CAL.scope = sc;
+    document.querySelectorAll('#cal-scope button').forEach(function (b) { b.classList.toggle('on', b.dataset.scope === sc); });
+    if (!quiet) { CAL.events = []; calCloseForm(); calLoad(); } else calLoad();
+  }
+  function calShare(id) {
+    var target = parseInt($('cf-share-id').value, 10);
+    if (!target) return;
+    calApi('share', { id: id, target: target }).then(function (r) {
+      var ok = r && r.ok;
+      $('cf-share-row').classList.add('hidden'); $('cf-share-id').value = '';
+      if (LSOS.notify) LSOS.notify({ app: 'calendar', title: ok ? t('ui_cal_shared_ok', 'Event shared.') : t('ui_cal_shared_fail', 'Could not share: player not found.') });
+    });
+  }
   function calStart() {
     var n = calToday();
     CAL.cur = n; CAL.view = 'month'; CAL.miniCur = null; CAL.events = []; CAL.state = 'idle';
     calCloseForm();
-    calLoad();
+    calApi('scopes', {}).then(function (r) { CAL.team = !!(r && r.team); $('cal-scope-team').classList.toggle('hidden', !CAL.team); });
+    calSetScope('me', true);
   }
   function calIconSvg() {
     var d = new Date().getDate();
@@ -3700,6 +3719,7 @@
     else if (ad) calOpenForm(null, ad.dataset.date, null);
   });
   $('cf-allday').addEventListener('change', calFormSync);
+  $('cal-scope').addEventListener('click', function (e) { var b = e.target.closest('[data-scope]'); if (b && b.dataset.scope !== CAL.scope) calSetScope(b.dataset.scope); });
   $('cal-form').addEventListener('click', function (e) {
     var c = e.target.closest('[data-color]');
     if (c) { $('cal-form').dataset.curColor = c.dataset.color; calFormSync(); return; }
@@ -3708,6 +3728,8 @@
     if (b.dataset.cf === 'save') calSave();
     else if (b.dataset.cf === 'cancel') calCloseForm();
     else if (b.dataset.cf === 'delete' && CAL.editing) calDeleteEvent(CAL.editing);
+    else if (b.dataset.cf === 'share') $('cf-share-row').classList.toggle('hidden');
+    else if (b.dataset.cf === 'sharego' && CAL.editing) calShare(CAL.editing);
   });
   $('cal-form').addEventListener('keydown', function (e) {
     if (e.key === 'Escape') { e.stopPropagation(); calCloseForm(); }

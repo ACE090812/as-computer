@@ -179,6 +179,7 @@
     <div class="win" id="win-calendar" data-title-key="ui_app_calendar">
       <div class="win-body"><div class="cal">
         <div class="cal-side">
+          <div class="cal-scope" id="cal-scope"><button data-scope="me" class="on" data-i18n="ui_cal_mine">My calendar</button><button data-scope="team" id="cal-scope-team" class="hidden" data-i18n="ui_cal_team">Team calendar</button></div>
           <button class="cal-new" data-cal="new"><span class="ic" data-ic="brplus"></span><span data-i18n="ui_cal_new_event">New event</span></button>
           <div class="cal-mini" id="cal-mini"></div>
         </div>
@@ -206,9 +207,12 @@
             <div class="cf-row" id="cf-times"><label data-i18n="ui_cal_time">Time</label><span class="tt"><input type="time" id="cf-start"><i>–</i><input type="time" id="cf-end"></span></div>
             <div class="cf-row"><label data-i18n="ui_cal_colour">Colour</label><span class="dots">
               <button data-color="blue" class="c-blue"></button><button data-color="green" class="c-green"></button><button data-color="red" class="c-red"></button><button data-color="orange" class="c-orange"></button><button data-color="purple" class="c-purple"></button><button data-color="grey" class="c-grey"></button></span></div>
+            <div class="cf-row" id="cf-remind-row"><label data-i18n="ui_cal_remind">Reminder</label><select id="cf-remind"><option value="-1" data-i18n="ui_cal_r_none">None</option><option value="0" data-i18n="ui_cal_r_0">At the time</option><option value="5" data-i18n="ui_cal_r_5">5 minutes before</option><option value="15" data-i18n="ui_cal_r_15">15 minutes before</option><option value="60" data-i18n="ui_cal_r_60">1 hour before</option><option value="1440" data-i18n="ui_cal_r_1440">1 day before</option></select></div>
             <textarea id="cf-notes" maxlength="300" placeholder="Add details" data-i18n-placeholder="ui_cal_notes_ph"></textarea>
+            <div class="cf-row hidden" id="cf-share-row"><label data-i18n="ui_cal_share_id">Player ID</label><span class="tt"><input type="number" id="cf-share-id" min="1" style="width:90px"><button class="btn primary" data-cf="sharego" data-i18n="ui_cal_share_send">Send</button></span></div>
             <div class="cf-err" id="cf-err"></div>
             <div class="cf-foot"><span class="by" id="cf-by"></span>
+              <button class="btn hidden" id="cf-share" data-cf="share" data-i18n="ui_cal_share">Share</button>
               <button class="btn danger hidden" id="cf-delete" data-cf="delete" data-i18n="ui_cal_delete">Delete</button>
               <button class="btn" data-cf="cancel" data-i18n="ui_cal_cancel">Cancel</button>
               <button class="btn primary" id="cf-save" data-cf="save" data-i18n="ui_cal_save">Save</button></div>

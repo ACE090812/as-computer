@@ -994,3 +994,8 @@ html.dui #bsod,html.dui #boot,html.dui #powerscreen,html.dui #secscreen,html.dui
 #bsod .bs-row{display:flex;gap:16px;align-items:center;font-size:13px}
 #bsod canvas{background:#fff;padding:4px;image-rendering:pixelated;width:84px;height:84px}
 #bsod .bs-i>div{margin:3px 0}
+
+.cal-scope{display:flex;gap:4px;margin-bottom:10px}
+.cal-scope button{flex:1;border:0;border-radius:6px;padding:6px 4px;background:rgba(128,128,128,.15);cursor:pointer;color:inherit;font-size:12px}
+.cal-scope button.on{background:#0f6cbd;color:#fff}
+.cal-scope button.hidden{display:none}

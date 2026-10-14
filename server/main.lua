@@ -427,12 +427,129 @@ local function CalendarEnabled()
   return not (Config.Calendar and Config.Calendar.enabled == false)
 end
 
+-- ---- Personal calendar: the same Calendar app, "My calendar". Events belong to the character (every computer and, later, the phone),
+-- can have a reminder (a notification at the right time) and can be shared with another player, who gets a copy.
+MySQL.ready(function()
+  MySQL.query.await([[
+    CREATE TABLE IF NOT EXISTS `computer_personal_calendar` (
+      `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      `citizenid` VARCHAR(64) NOT NULL,
+      `title` VARCHAR(80) NOT NULL,
+      `notes` VARCHAR(300) DEFAULT NULL,
+      `color` VARCHAR(12) NOT NULL DEFAULT 'blue',
+      `event_date` DATE NOT NULL,
+      `start_time` VARCHAR(5) DEFAULT NULL,
+      `end_time` VARCHAR(5) DEFAULT NULL,
+      `remind` INT DEFAULT NULL,
+      `reminded` TINYINT NOT NULL DEFAULT 0,
+      `shared_by` VARCHAR(80) DEFAULT NULL,
+      INDEX `idx_cid_date` (`citizenid`, `event_date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  ]])
+end)
+
+local REMIND_OK = { [0] = true, [5] = true, [15] = true, [60] = true, [1440] = true }
+
+function PersonalCalendar(src, me, name, data, respond)
+  if not me then return respond({ ok = false, reason = 'not_authorised' }) end
+  if name == 'list' then
+    local from, to = ValidDate(data.from), ValidDate(data.to)
+    if not from or not to or from > to then return respond({ ok = false, reason = 'invalid' }) end
+    local rows = MySQL.query.await(
+      [[SELECT id, title, notes, color, DATE_FORMAT(event_date, '%Y-%m-%d') AS date, start_time AS startTime, end_time AS endTime,
+               remind, shared_by AS createdBy FROM computer_personal_calendar
+        WHERE citizenid = ? AND event_date BETWEEN ? AND ? ORDER BY event_date, (start_time IS NULL) DESC, start_time, id LIMIT 600]],
+      { me, from, to }) or {}
+    for _, r in ipairs(rows) do r.mine = true; r.allDay = r.startTime == nil end
+    return respond({ ok = true, items = rows })
+  end
+
+  if name == 'save' then
+    local title, date = CleanText(data.title, 80), ValidDate(data.date)
+    if title == '' or not date then return respond({ ok = false, reason = 'invalid' }) end
+    local notes = CleanText(data.notes, 300)
+    local color = CAL_COLORS[data.color] and data.color or 'blue'
+    local startT, endT = ValidTime(data.startTime), ValidTime(data.endTime)
+    if not startT then endT = nil end
+    if startT and endT and endT < startT then return respond({ ok = false, reason = 'invalid' }) end
+    local remind = tonumber(data.remind)
+    if not startT or not remind or not REMIND_OK[remind] then remind = -1 end   -- -1 = none (no NULL inside the parameter list)
+    local id = tonumber(data.id)
+    if id then
+      local n = MySQL.update.await(
+        'UPDATE computer_personal_calendar SET title = ?, notes = ?, color = ?, event_date = ?, start_time = ?, end_time = ?, remind = IF(? < 0, NULL, ?), reminded = 0 WHERE id = ? AND citizenid = ?',
+        { title, notes, color, date, startT or '', endT or '', remind, remind, id, me })
+      MySQL.update.await("UPDATE computer_personal_calendar SET notes = NULLIF(notes, ''), start_time = NULLIF(start_time, ''), end_time = NULLIF(end_time, '') WHERE id = ?", { id })
+      local exists = MySQL.scalar.await('SELECT COUNT(*) FROM computer_personal_calendar WHERE id = ? AND citizenid = ?', { id, me })
+      if (tonumber(exists) or 0) == 0 then return respond({ ok = false, reason = 'not_found' }) end
+      return respond({ ok = true, id = id })
+    end
+    local count = MySQL.scalar.await('SELECT COUNT(*) FROM computer_personal_calendar WHERE citizenid = ? AND event_date = ?', { me, date })
+    if (tonumber(count) or 0) >= 40 then return respond({ ok = false, reason = 'invalid' }) end
+    local newId = MySQL.insert.await(
+      'INSERT INTO computer_personal_calendar (citizenid, title, notes, color, event_date, start_time, end_time, remind) VALUES (?, ?, NULLIF(?, \'\'), ?, ?, NULLIF(?, \'\'), NULLIF(?, \'\'), IF(? < 0, NULL, ?))',
+      { me, title, notes, color, date, startT or '', endT or '', remind, remind })
+    return respond({ ok = true, id = newId })
+  end
+
+  if name == 'delete' then
+    local id = tonumber(data.id)
+    if not id then return respond({ ok = false, reason = 'invalid' }) end
+    MySQL.update.await('DELETE FROM computer_personal_calendar WHERE id = ? AND citizenid = ?', { id, me })
+    return respond({ ok = true })
+  end
+
+  -- share a copy with another player (by their server id); it lands in their calendar straight away
+  if name == 'share' then
+    local id, target = tonumber(data.id), tonumber(data.target)
+    if not id or not target or target == src then return respond({ ok = false, reason = 'invalid' }) end
+    local tcid = GetPlayerName(target) and Bridge.GetIdentifier(target)
+    if not tcid then return respond({ ok = false, reason = 'no_player' }) end
+    local r = MySQL.single.await('SELECT title, notes, color, event_date, start_time, end_time FROM computer_personal_calendar WHERE id = ? AND citizenid = ?', { id, me })
+    if not r then return respond({ ok = false, reason = 'not_found' }) end
+    local date = tostring(r.event_date):sub(1, 10)
+    MySQL.insert.await(
+      'INSERT INTO computer_personal_calendar (citizenid, title, notes, color, event_date, start_time, end_time, shared_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      { tcid, r.title, r.notes or '', r.color, date, r.start_time or '', r.end_time or '', Bridge.GetName(src) })
+    MySQL.update.await("UPDATE computer_personal_calendar SET notes = NULLIF(notes, ''), start_time = NULLIF(start_time, ''), end_time = NULLIF(end_time, '') WHERE citizenid = ? AND shared_by IS NOT NULL", { tcid })
+    if Notify then Notify.Send(tcid, { app = 'calendar', icon = 'calendar', title = L('cal_shared_title'), text = ('%s: %s'):format(Bridge.GetName(src) or '', r.title), action = { app = 'calendar' } }) end
+    return respond({ ok = true })
+  end
+
+  respond({ ok = false, reason = 'invalid' })
+end
+
+-- Reminders: every 30 seconds, events whose reminder time has come notify their owner (on the computer they are using).
+CreateThread(function()
+  while true do
+    Wait(30000)
+    local now = os.time()
+    local rows = MySQL.query.await(
+      [[SELECT id, citizenid, title, DATE_FORMAT(event_date, '%Y-%m-%d') AS d, start_time AS st, remind FROM computer_personal_calendar
+        WHERE remind IS NOT NULL AND reminded = 0 AND start_time IS NOT NULL AND event_date BETWEEN ? AND ?]],
+      { os.date('%Y-%m-%d', now - 86400), os.date('%Y-%m-%d', now + 2 * 86400) }) or {}
+    for _, r in ipairs(rows) do
+      local y, mo, d = r.d:match('(%d+)-(%d+)-(%d+)')
+      local h, mi = tostring(r.st):match('(%d+):(%d+)')
+      local at = os.time({ year = tonumber(y), month = tonumber(mo), day = tonumber(d), hour = tonumber(h), min = tonumber(mi) })
+      if at - (tonumber(r.remind) or 0) * 60 <= now then
+        MySQL.update.await('UPDATE computer_personal_calendar SET reminded = 1 WHERE id = ?', { r.id })
+        if at > now - 3600 and Notify then
+          Notify.Send(r.citizenid, { app = 'calendar', icon = 'calendar', priority = 'high', title = r.title, text = tostring(r.st), action = { app = 'calendar' } })
+        end
+      end
+    end
+  end
+end)
+
 MotCallback.Register('calendarApi', function(src, respond, name, data)
   if not Apps.allowed(src, 'calendar') then return respond({ ok = false, reason = 'not_authorised' }) end
   if not CalendarEnabled() or type(data) ~= 'table' then return respond({ ok = false, reason = 'invalid' }) end
   local me = Bridge.GetIdentifier(src)
   local jobInfo = Bridge.GetJob(src)
   local job = jobInfo and jobInfo.name
+  if name == 'scopes' then return respond({ ok = true, team = job ~= nil }) end
+  if data.scope == 'me' then return PersonalCalendar(src, me, name, data, respond) end
   if not job then return respond({ ok = false, reason = 'not_authorised' }) end
 
   if name == 'list' then
