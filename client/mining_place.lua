@@ -209,15 +209,21 @@ local function partsMenu(e)
   MotCallback.Trigger('miningApi', function(r)
     if not (r and r.success) then return notify(L('mp_no_data'), 'error') end
     local parts = r.data.parts or {}
+    local slotDefs = r.data.slots or { { slot = 'cpu', part = 'cpu', label = 'CPU', required = true }, { slot = 'gpu', part = 'gpu', label = 'GPU' },
+      { slot = 'ram', part = 'ram', label = 'RAM', required = true }, { slot = 'psu', part = 'psu', label = 'PSU', required = true }, { slot = 'hdd', part = 'hdd', label = 'HDD', required = true } }
     local options = {}
-    for _, slot in ipairs({ 'cpu', 'gpu', 'ram', 'psu', 'hdd' }) do
+    for _, def in ipairs(slotDefs) do
+      local slot = def.slot
+      local title = L('hw_slot_' .. slot)
+      if title == 'hw_slot_' .. slot then title = def.label or slot:upper() end
       local p = parts[slot]
+      local kind = p and (p.item or ''):match('^mining_(%a+)_%a+$') or nil
       options[#options + 1] = {
-        title = slot:upper(), description = p and (('%s · %d%% worn'):format(p.tier, math.floor(p.wear or 0))) or L('mp_empty_slot'),
+        title = title, description = p and (('%s · %d%% worn'):format(p.tier, math.floor(p.wear or 0))) or (L('mp_empty_slot') .. (def.required and (' · ' .. L('hw_required')) or '')),
         icon = 'microchip', arrow = true,
         onSelect = function()
           if p then
-            lib.registerContext({ id = 'asc_mp_slot', title = slot:upper(), menu = 'asc_mp_parts', options = {
+            lib.registerContext({ id = 'asc_mp_slot', title = title, menu = 'asc_mp_parts', options = {
               { title = L('mp_remove_part'), icon = 'arrow-up-from-bracket', onSelect = function()
                 MotCallback.Trigger('mining:removePart', function(rr)
                   if rr and rr.success then notify(L('mp_removed'), 'success') else notify(L('mp_failed'), 'error') end
@@ -226,18 +232,29 @@ local function partsMenu(e)
             } })
             lib.showContext('asc_mp_slot')
           else
-            local tierOpts = {}
-            for _, t in ipairs(TIER_OPTIONS) do
-              tierOpts[#tierOpts + 1] = { title = t.label, icon = 'plus', onSelect = function()
-                MotCallback.Trigger('mining:installPart', function(rr)
-                  if rr and rr.success then notify(L('mp_installed'), 'success')
-                  elseif rr and rr.error == 'missing_item' then notify(L('mp_missing_item'), 'error')
-                  else notify(L('mp_failed'), 'error') end
-                end, e.computerKey, slot, t.key)
-              end }
+            local function tierMenu(partKey)
+              local tierOpts = {}
+              for _, t in ipairs(TIER_OPTIONS) do
+                tierOpts[#tierOpts + 1] = { title = t.label, icon = 'plus', onSelect = function()
+                  MotCallback.Trigger('mining:installPart', function(rr)
+                    if rr and rr.success then notify(L('mp_installed'), 'success')
+                    elseif rr and rr.error == 'missing_item' then notify(L('mp_missing_item'), 'error')
+                    else notify(L('mp_failed'), 'error') end
+                  end, e.computerKey, slot, t.key, partKey)
+                end }
+              end
+              lib.registerContext({ id = 'asc_mp_slot_tier', title = title, menu = 'asc_mp_parts', options = tierOpts })
+              lib.showContext('asc_mp_slot_tier')
             end
-            lib.registerContext({ id = 'asc_mp_slot', title = slot:upper(), menu = 'asc_mp_parts', options = tierOpts })
-            lib.showContext('asc_mp_slot')
+            if def.parts and #def.parts > 1 then
+              local kinds = {}
+              local names = { wifi = 'Wi-Fi', eth = 'Ethernet' }
+              for _, k in ipairs(def.parts) do kinds[#kinds + 1] = { title = names[k] or k, icon = 'network-wired', arrow = true, onSelect = function() tierMenu(k) end } end
+              lib.registerContext({ id = 'asc_mp_slot', title = L('hw_pick_kind'), menu = 'asc_mp_parts', options = kinds })
+              lib.showContext('asc_mp_slot')
+            else
+              tierMenu(def.part)
+            end
           end
         end,
       }

@@ -24,6 +24,11 @@ local function validKey(k) return type(k) == 'string' and #k <= 24 and k:match('
 MotCallback.Register('session:open', function(src, respond, key)
   if not validKey(key) then return respond({ needsLogin = true }) end
 
+  -- A computer only starts when its tower holds the required parts (server/hardware.lua).
+  if Hardware and not Hardware.Bootable(key) then
+    return respond({ noBoot = true, missing = Hardware.Status(key).missing })
+  end
+
   if not Accounts.hasAnyGrants(key) then
     return respond({ needsSetup = true })
   end
@@ -54,6 +59,7 @@ end)
 ---@param password string plaintext, hashed server-side before storage
 MotCallback.Register('session:setup', function(src, respond, key, username, password)
   if not validKey(key) then return respond({ success = false }) end
+  if Hardware and not Hardware.Bootable(key) then return respond({ success = false, error = 'no_boot' }) end
   local cid = Bridge.GetIdentifier(src)
   if not cid then return respond({ success = false, message = 'Not loaded' }) end
 
@@ -86,6 +92,7 @@ end)
 --- the very first login a fresh machine ever sees.
 MotCallback.Register('session:login', function(src, respond, key, username, password)
   if not validKey(key) then return respond({ success = false }) end
+  if Hardware and not Hardware.Bootable(key) then return respond({ success = false, error = 'no_boot' }) end
   local cid = Bridge.GetIdentifier(src)
   if not cid then return respond({ success = false, message = 'Not loaded' }) end
 

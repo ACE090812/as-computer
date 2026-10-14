@@ -154,6 +154,13 @@ input{user-select:text;-webkit-user-select:text}
 .g-err{min-height:32px;font-size:13px;color:#ffb4a8;text-shadow:0 1px 4px rgba(0,0,0,.4);margin-top:8px;line-height:1.3}
 .g-btn{margin-top:6px;padding:10px 0;border-radius:6px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);font-size:15.5px;text-align:center;cursor:pointer}
 .g-btn:hover{background:rgba(255,255,255,.3)}
+/* Missing required parts: a plain black 'no bootable device' screen. */
+#gate-noboot{position:absolute;inset:0;z-index:102;background:#000;color:#e6e6e6;display:flex;align-items:center;justify-content:center;font-family:Consolas,'Courier New',monospace}
+.nb-wrap{max-width:520px;padding:24px}
+.nb-title{font-size:22px;margin-bottom:10px;color:#fff}
+.nb-sub{font-size:14px;opacity:.85;margin-bottom:14px;line-height:1.5}
+.nb-list{margin:0 0 16px 18px;padding:0;font-size:14px;line-height:1.7;color:#ffb4a8}
+.nb-hint{font-size:12.5px;opacity:.6}
 /* Phase 0.5 follow-up: switches between the setup wizard and the login screen (a fresh machine's
    login can now claim it for an existing account - server/session.lua's session:login). */
 .g-link{align-self:center;margin-top:14px;font-size:13px;opacity:.8;text-align:center;cursor:pointer}
@@ -257,7 +264,7 @@ html.overlay.open .app{display:block}
 html.overlay.onmonitor .app{transform-origin:0 0;box-shadow:none}
 html.debug .app{outline:6px solid magenta;outline-offset:-6px}
 /* DUI = ambient world texture: idle desktop, no input, no windows */
-html.dui #startmenu,html.dui #lock,html.dui #windows,html.dui #gate-setup,html.dui #gate-login{display:none!important}
+html.dui #startmenu,html.dui #lock,html.dui #windows,html.dui #gate-setup,html.dui #gate-login,html.dui #gate-noboot{display:none!important}
 
 /* ---- MOT window: original GOV.UK rules, prefixed ---- */
 #win-mot .gov-header{background:var(--black);color:var(--white);border-bottom:10px solid var(--blue)}

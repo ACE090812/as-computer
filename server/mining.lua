@@ -108,7 +108,10 @@ end
 -- sd-phone alongside this. NOT included here: the actual slot-insertion UI (Phase 4 - the functions
 -- below are what that UI will call), the Mining Rig app's dashboard (Phase 3).
 
-local SLOTS = { 'cpu', 'gpu', 'ram', 'psu', 'hdd' }
+-- The tower's slots come from config/hardware.lua (cpu, ram, ram2, psu, hdd, hdd2, gpu, nic). Mining itself only uses the
+-- GPUs on linked mining rigs: the tower's parts run the desktop (server/hardware.lua) and never slow or speed up mining.
+local SLOTS = Config.Hardware and Config.Hardware.SlotKeys() or { 'cpu', 'gpu', 'ram', 'psu', 'hdd' }
+Mining.SLOTS = SLOTS
 local function validSlot(s) for _, v in ipairs(SLOTS) do if v == s then return true end end return false end
 -- 'm' = a player-placed mining tower (server/mining_place.lua, Phase 4), matching accounts.lua/session.lua.
 local function validKey(k) return type(k) == 'string' and #k <= 24 and k:match('^[cpm]%d+$') ~= nil end
@@ -133,6 +136,12 @@ MySQL.ready(function()
   -- Migration for a table created before started_at existed (idempotent - see accounts.lua's own
   -- citizenid migration for the same pattern).
   pcall(function() MySQL.query.await('ALTER TABLE `computer_mining_towers` ADD COLUMN `started_at` BIGINT NULL') end)
+  -- Hardware slots added after the first release: a second RAM stick, a second drive and a network card.
+  for _, s in ipairs({ 'ram2', 'hdd2', 'nic' }) do
+    pcall(function()
+      MySQL.query.await(('ALTER TABLE `computer_mining_towers` ADD COLUMN `%s_item` VARCHAR(32) NULL, ADD COLUMN `%s_tier` VARCHAR(8) NULL, ADD COLUMN `%s_wear` DECIMAL(5,2) NULL'):format(s, s, s))
+    end)
+  end
   MySQL.query.await([[
     CREATE TABLE IF NOT EXISTS `computer_mining_rigs` (
       `rig_key`      VARCHAR(24)  NOT NULL,
@@ -179,11 +188,20 @@ local function isRunning(row)
   return row and (row.running == 1 or row.running == true) or false
 end
 
-local function allPartsInstalled(row)
-  if not row then return false end
-  for _, s in ipairs(SLOTS) do if not row[s .. '_item'] then return false end end
-  return true
+--- How many GPUs sit in the mining rigs linked to a computer. Mining needs at least one; the tower's own parts
+--- are for the desktop and play no part in it.
+---@param computerKey string
+---@return integer
+local function rigGpuCount(computerKey)
+  local n = 0
+  local rigs = MySQL.query.await('SELECT gpus FROM `computer_mining_rigs` WHERE computer_key = ?', { computerKey }) or {}
+  for _, r in ipairs(rigs) do
+    local ok, gpus = pcall(json.decode, r.gpus or '{}')
+    if ok and type(gpus) == 'table' then for _ in pairs(gpus) do n = n + 1 end end
+  end
+  return n
 end
+Mining.RigGpuCount = rigGpuCount
 
 --- Installs a part into one of a tower's 5 slots, OVERWRITING whatever was there (call
 --- Mining.RemovePart first and give the old part back to the player if it shouldn't be destroyed -
@@ -218,7 +236,7 @@ function Mining.RemovePart(computerKey, slot)
   if not row or not row[slot .. '_item'] then return nil end
   local removed = { item = row[slot .. '_item'], tier = row[slot .. '_tier'], wear = tonumber(row[slot .. '_wear']) or 0 }
   MySQL.update.await(
-    ('UPDATE `computer_mining_towers` SET %s_item = NULL, %s_tier = NULL, %s_wear = NULL, running = 0 WHERE computer_key = ?'):format(slot, slot, slot),
+    ('UPDATE `computer_mining_towers` SET %s_item = NULL, %s_tier = NULL, %s_wear = NULL WHERE computer_key = ?'):format(slot, slot, slot),
     { computerKey })
   return removed
 end
@@ -239,7 +257,7 @@ end
 ---@return boolean ok, string|nil error 'not_ready' when a slot is missing
 function Mining.Start(computerKey)
   local row = Mining.EnsureTower(computerKey)
-  local ready = allPartsInstalled(row)
+  local ready = rigGpuCount(computerKey) > 0
   if Config.Debug then
     print(('^5[as-computer:mining]^0 Start(%s): ready=%s running=%s cpu=%s gpu=%s ram=%s psu=%s hdd=%s'):format(
       tostring(computerKey), tostring(ready), tostring(row.running),
@@ -358,11 +376,7 @@ end
 ---@param computerKey string
 ---@return number rate
 function Mining.HashRate(computerKey)
-  local row = Mining.GetTower(computerKey)
-  if not allPartsInstalled(row) then return 0 end
-
   local rate = 0
-  for _, s in ipairs(SLOTS) do rate = rate + partRate(row[s .. '_tier'], row[s .. '_wear']) end
 
   local rigs = MySQL.query.await('SELECT gpus FROM `computer_mining_rigs` WHERE computer_key = ?', { computerKey }) or {}
   for _, r in ipairs(rigs) do
@@ -425,11 +439,17 @@ local function tickTower(row)
   -- this tick so the owner (if online) can get a single combined notification below, rather than one
   -- popup per slot.
   local failedSlots = {}
-  for _, s in ipairs(SLOTS) do
-    if row[s .. '_item'] then
-      local newWear, failed = wearAfter(row[s .. '_wear'], ticksElapsed)
-      MySQL.update.await(('UPDATE `computer_mining_towers` SET %s_wear = ? WHERE computer_key = ?'):format(s), { newWear, key })
-      if failed then failedSlots[#failedSlots + 1] = s end
+  local rigRows = MySQL.query.await('SELECT rig_key, gpus FROM `computer_mining_rigs` WHERE computer_key = ?', { key }) or {}
+  for _, rr in ipairs(rigRows) do
+    local okG, gpus = pcall(json.decode, rr.gpus or '{}')
+    if okG and type(gpus) == 'table' then
+      local changed = false
+      for idx, g in pairs(gpus) do
+        local newWear, failed = wearAfter(g.wear, ticksElapsed)
+        g.wear = newWear; changed = true
+        if failed then failedSlots[#failedSlots + 1] = 'gpu ' .. tostring(idx) end
+      end
+      if changed then MySQL.update.await('UPDATE `computer_mining_rigs` SET gpus = ? WHERE rig_key = ?', { json.encode(gpus), rr.rig_key }) end
     end
   end
   MySQL.update.await('UPDATE `computer_mining_towers` SET last_tick_at = ? WHERE computer_key = ?', { os.time(), key })
@@ -474,9 +494,11 @@ end)
 ---@param slot string one of 'cpu' | 'gpu' | 'ram' | 'psu' | 'hdd'
 ---@param tierKey string one of Config.Mining.Tiers[].key
 ---@return boolean ok, string|nil error 'invalid' | 'missing_item' | 'inventory_error'
-function Mining.InstallFromInventory(src, computerKey, slot, tierKey)
+function Mining.InstallFromInventory(src, computerKey, slot, tierKey, partKey)
   if not validKey(computerKey) or not validSlot(slot) then return false, 'invalid' end
-  local itemName = Config.Mining.ItemName(slot, tierKey)
+  partKey = (partKey and partKey ~= '') and partKey or (Config.Hardware and Config.Hardware.DefaultPart(slot)) or slot
+  if Config.Hardware and not Config.Hardware.SlotAccepts(slot, partKey) then return false, 'invalid' end
+  local itemName = Config.Mining.ItemName(partKey, tierKey)
   if not itemName then return false, 'invalid' end
 
   local found = exports.ox_inventory:Search(src, 'slots', itemName)
@@ -519,9 +541,9 @@ function Mining.RemoveToInventory(src, computerKey, slot)
   return true
 end
 
-MotCallback.Register('mining:installPart', function(src, respond, computerKey, slot, tierKey)
+MotCallback.Register('mining:installPart', function(src, respond, computerKey, slot, tierKey, partKey)
   if Mining.Throttled(Bridge.GetIdentifier(src)) then return respond({ success = false, error = 'throttled' }) end
-  local ok, err = Mining.InstallFromInventory(src, tostring(computerKey or ''), tostring(slot or ''), tostring(tierKey or ''))
+  local ok, err = Mining.InstallFromInventory(src, tostring(computerKey or ''), tostring(slot or ''), tostring(tierKey or ''), partKey and tostring(partKey) or nil)
   if ok then Mining.Audit('%s installed %s (%s) into %s', GetPlayerName(src) or 'console', slot, tierKey, computerKey) end
   respond({ success = ok, error = err })
 end)
@@ -699,7 +721,7 @@ local miningApp = {}
 function miningApp.info(src, computerKey)
   if not validKey(computerKey) then return { success = false } end
   local row = Mining.EnsureTower(computerKey)
-  local ready = allPartsInstalled(row)
+  local ready = rigGpuCount(computerKey) > 0
   local hashRate = Mining.HashRate(computerKey)
   local uptime = (isRunning(row) and row.started_at) and (os.time() - tonumber(row.started_at)) or 0
 
@@ -732,6 +754,7 @@ function miningApp.info(src, computerKey)
     balance   = balance,
     hasOwner  = ownerCid ~= nil,
     parts     = parts,
+    slots     = Config.Hardware and Config.Hardware.Slots or nil,
     rigs      = linkedRigs,
   } }
 end

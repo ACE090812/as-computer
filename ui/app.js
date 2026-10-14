@@ -637,6 +637,7 @@
   var GATE = { busy: false };
 
   function afterSignedIn() {
+    $('gate-noboot').classList.add('hidden');
     $('gate-setup').classList.add('hidden');
     $('gate-login').classList.add('hidden');
     applyPrefs();
@@ -644,7 +645,19 @@
     signIn();
   }
 
+  // The computer cannot start: its tower is missing required parts (server/hardware.lua). `missing` is the empty required slots.
+  function showNoBoot(missing) {
+    $('gate-setup').classList.add('hidden');
+    $('gate-login').classList.add('hidden');
+    var names = { cpu: 'CPU', ram: 'RAM', psu: 'PSU', hdd: 'HDD/SSD' };
+    $('nb-list').innerHTML = (missing || []).map(function (m) {
+      return '<li>' + esc(t('hw_missing', 'Missing: %s').replace('%s', t('hw_slot_' + m, names[m] || m))) + '</li>';
+    }).join('');
+    $('gate-noboot').classList.remove('hidden');
+  }
+
   function showGateSetup() {
+    $('gate-noboot').classList.add('hidden');
     $('gate-login').classList.add('hidden');
     $('gs-user').value = '';
     $('gs-pass').value = '';
@@ -661,6 +674,7 @@
   // in on it right now) that link would be actively wrong - Setup always fails once a machine has an
   // owner, so it's kept hidden for the normal `needsLogin` flow.
   function showGateLogin(fromFreshMachine) {
+    $('gate-noboot').classList.add('hidden');
     $('gate-setup').classList.add('hidden');
     $('gl-user').value = '';
     $('gl-pass').value = '';
@@ -4779,7 +4793,10 @@
       if (d.mirror && !isDui) mirrorStart(d.mirror); else mirrorStop();
       // Phase 0.5: a machine nobody has ever set up, or one with no resumable session for this player,
       // shows the setup wizard / login screen instead of the desktop - checked before any resume/lock logic.
-      if (d.needsSetup) {
+      if (d.noBoot) {
+        resetSession();
+        showNoBoot(d.missing);
+      } else if (d.needsSetup) {
         resetSession();
         showGateSetup();
       } else if (d.needsLogin) {

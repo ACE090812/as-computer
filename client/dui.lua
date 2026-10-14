@@ -318,6 +318,8 @@ local function OpenMessage(loc, rect, user, info, session)
     action = 'open',
     resume = session and session.resume or false,  -- same player, same computer, nobody else since: keep the open apps
     needsSetup = session and session.needsSetup or false, -- first boot: nobody's ever set this machine up (client/dui.lua's boot flow)
+    noBoot = session and session.noBoot or false,         -- the tower is missing required parts: show the 'cannot start' screen
+    missing = session and session.missing or nil,          -- which required slots are empty
     needsLogin = session and session.needsLogin or false, -- past setup, but no resumable session: show the login screen
     accountName = session and session.accountName or nil, -- who resumed / just signed in (Phase 0.5 machine account, not the character)
     mirror = (Config.Mirror and Config.Mirror.enabled ~= false and loc.screen and loc.mirror ~= false) and {
@@ -386,7 +388,7 @@ function OpenTerminal(loc)
     -- Resume only if the apps still in this client's page are from this very computer. Losing resume this
     -- way must NOT lose a needsSetup/needsLogin flag - the login/setup screen still has to show.
     if session and not (session.resume and nuiSessionKey == loc.key) then
-      session = { resume = false, needsSetup = session.needsSetup, needsLogin = session.needsLogin }
+      session = { resume = false, needsSetup = session.needsSetup, needsLogin = session.needsLogin, noBoot = session.noBoot, missing = session.missing }
     end
     nuiSessionKey = loc.key
 

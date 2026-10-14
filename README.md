@@ -544,3 +544,15 @@ AddEventHandler('as-computer:server:hackResult', function(src, targetId, success
 ```
 
 A win reported faster than `Config.Hack.minSeconds` counts as failed. Not tested in game.
+
+## Computer hardware (towers and parts)
+
+Every computer is a monitor plus a tower. A computer only starts when its tower holds a CPU, RAM, a PSU and a drive; otherwise it shows a "No bootable device" screen listing what is missing. Optional parts: a second RAM stick, a second drive, a GPU and a network card (Wi-Fi or Ethernet). Settings are in `config/hardware.lua`.
+
+- **Items.** The parts reuse the mining part items (`mining_cpu_std`, `mining_ram_adv` and so on, three tiers each). Network cards are new: add `mining_wifi_std/adv/elite` and `mining_eth_std/adv/elite` to ox_inventory `data/items.lua`. The Mining parts shop sells them.
+- **Fitting parts.** Use the tower prop (the same menu as before, now with the extra slots). Anyone nearby can fit or remove parts. The tower must be placed next to a monitor.
+- **Computers without a tower** (everything in `Config.Locations` and anything placed with `/placeprops`) need a build too. Staff fit one without items: `/pcbuild <key> [std|adv|elite] [all]` (for example `/pcbuild c1 std`). `all` also fits a GPU and a network card.
+- **Wear.** While a computer is on, each fitted part loses condition (`WearHours`, default 100 hours of use). A worn part keeps working but runs slower.
+- **Mining** no longer uses the tower. It runs only on mining rigs (GPUs) linked to the computer and does not slow the desktop.
+- **First start wipe.** The first time this version starts, every computer's accounts, grants, owners and files are wiped once (`computer_hardware_meta` records it, so it never repeats). Set `Config.Hardware.WipeOnFirstStart = false` before the first start to keep existing data.
+- **For other scripts:** `exports['as-computer']:computerHardware(key)` returns the fitted parts, memory, storage, performance and network of a computer.

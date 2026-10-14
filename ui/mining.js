@@ -178,7 +178,7 @@
     var iconStop = '<svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>';
     var iconStart = '<svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M7 5l12 7-12 7V5z"/></svg>';
     if (!d.ready) {
-      return '<button class="mn-cta-btn mn-cta-neutral" disabled title="' + esc(T('mn_not_ready', 'Install all 5 parts to start mining.')) + '">' + esc(T('mn_not_ready_short', 'Not ready')) + '</button>';
+      return '<button class="mn-cta-btn mn-cta-neutral" disabled title="' + esc(T('mn_not_ready', 'Fit a GPU in a linked mining rig to start mining.')) + '">' + esc(T('mn_not_ready_short', 'Not ready')) + '</button>';
     }
     if (M.busy) {
       return '<button class="mn-cta-btn mn-cta-neutral" disabled>' + esc(d.running ? T('mn_stopping', 'Stopping…') : T('mn_starting', 'Starting…')) + '</button>';
@@ -390,7 +390,7 @@
   // ui/mechanic.js already uses (mx-toast/toast()/fail()).
   var ERROR_TEXT = {
     throttled:  ['mn_err_throttled', 'Slow down a moment and try again.'],
-    not_ready:  ['mn_err_not_ready', 'Install all 5 parts before starting.'],
+    not_ready:  ['mn_err_not_ready', 'Fit a GPU in a linked mining rig before starting.'],
     not_owner:  ['mn_err_not_owner', "That's not yours to change."],
     not_your_rig: ['mn_err_not_your_rig', "That rig isn't yours to link."],
   };

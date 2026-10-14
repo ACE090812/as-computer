@@ -246,7 +246,7 @@ MotCallback.Register('miningPlace:pickup', function(src, respond, id)
 
     for towerId, tr in pairs(placed) do
       if tr.kind == 'tower' and tr.computer_key == monitorKey then
-        for _, slot in ipairs({ 'cpu', 'gpu', 'ram', 'psu', 'hdd' }) do
+        for _, slot in ipairs(Mining.SLOTS) do
           Mining.RemoveToInventory(src, monitorKey, slot)
         end
         tr.computer_key = nil
@@ -269,7 +269,7 @@ MotCallback.Register('miningPlace:pickup', function(src, respond, id)
 
   elseif r.kind == 'tower' then
     if r.computer_key then
-      for _, slot in ipairs({ 'cpu', 'gpu', 'ram', 'psu', 'hdd' }) do
+      for _, slot in ipairs(Mining.SLOTS) do
         Mining.RemoveToInventory(src, r.computer_key, slot)
       end
     end

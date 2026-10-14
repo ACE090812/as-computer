@@ -11,6 +11,7 @@ provide 'mot-dui'
 shared_scripts {
   'config/config.lua',
   'config/mining.lua',   -- Crypto Mining Rig, Phase 1: parts/tiers/prices
+  'config/hardware.lua', -- computer hardware: towers, slots, boot rules (extends the part list above)
   'config/apps/*.lua',
   'shared/locale.lua',
   'locales/*.lua',
@@ -64,6 +65,7 @@ server_scripts {
   'server/session.lua',
   'server/mirror.lua',
   'server/mining.lua',    -- Crypto Mining Rig, Phase 1: part purchase (needs Bridge + ox_inventory, both above)
+  'server/hardware.lua',   -- computer hardware: boot rule, wear, /pcbuild, first-start wipe (needs Mining from above)
   'server/mining_place.lua',   -- Crypto Mining Rig, Phase 4: player placement (needs Mining.EnsureRig from server/mining.lua, and Bridge.GetIdentifier, both above)
   'server/main.lua',
 }
