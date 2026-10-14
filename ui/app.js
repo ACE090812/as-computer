@@ -1677,7 +1677,7 @@
 
   // ---- viewer for images, video, audio and other linked files (one window per file)
   function openMediaViewer(f) {
-    if (f.kind === 'image' && LSOS.photoOpen && appVisible('photos') && safeUrl(f.url)) { LSOS.photoOpen(f); return; }
+    if (f.kind === 'image' && LSOS.photoOpen && appVisible('photos') && (safeUrl(f.url) || f.isLocal)) { LSOS.photoOpen(f); return; }
     var id = 'file:' + f.id;
     if (wins[id]) { openWin(id); return; }
     var url = safeUrl(f.url);

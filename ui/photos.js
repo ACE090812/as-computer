@@ -10,8 +10,8 @@
   function T(k, d) { return S.t(k, d); }
   function $(id) { return document.getElementById(id); }
   var ICON = '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5.4" fill="#0ea5e9"/><circle cx="8.6" cy="9" r="1.8" fill="#fff"/><path d="M4.5 17.5l4.2-4.4 3.2 2.8 3.2-3.4 4.4 5z" fill="#fff"/></svg>';
-  var SRC = [['docs', 'ph_docs', 'Documents'], ['dl', 'ph_dl', 'Downloads'], ['pcf', 'ph_pub', 'Public'], ['phone', 'ph_phone', 'Phone photos']];
-  var PLACE = { docs: 'docs', dl: 'dl', pcf: 'shared' };
+  var SRC = [['docs', 'ph_docs', 'Documents'], ['pics', 'ph_pics', 'Pictures'], ['dl', 'ph_dl', 'Downloads'], ['pcf', 'ph_pub', 'Public'], ['phone', 'ph_phone', 'Phone photos']];
+  var PLACE = { docs: 'docs', pics: 'docs', dl: 'dl', pcf: 'shared' };
   var st = { src: 'docs', lists: {}, idx: 0, zoom: 1, rot: 0, flip: 1, x: 0, y: 0, edit: false, fx: null, undo: [], show: null, opened: null };
 
   function blank() { return { b: 100, c: 100, s: 100, gray: 0, sepia: 0, blur: 0, invert: 0 }; }
@@ -19,16 +19,25 @@
   function list() { var l = st.lists[st.src] || []; return (st.opened && st.src === 'opened') ? [st.opened] : l; }
   function cur() { return list()[st.idx]; }
   function filter() { var f = st.fx; return 'brightness(' + f.b + '%) contrast(' + f.c + '%) saturate(' + f.s + '%) grayscale(' + f.gray + '%) sepia(' + f.sepia + '%) blur(' + f.blur + 'px) invert(' + f.invert + '%)'; }
-  function safe(u) { return /^https:\/\//i.test(String(u || '')) ? String(u) : ''; }
+  function safe(u) { u = String(u || ''); return /^https:\/\//i.test(u) || /^data:image\/(png|jpeg);base64,[A-Za-z0-9+\/=]+$/.test(u) ? u : ''; }
 
   function load(src) {
     if (st.lists[src] && src !== 'phone') return Promise.resolve();
     if (src === 'phone') return S.api('filesApi', { name: 'phoneList', data: {} }).then(function (r) {
       st.lists.phone = r && r.ok ? ((r.data && r.data.photos) || []).filter(function (p) { return !p.isVideo && safe(p.url); }).map(function (p) { return { id: 'ph' + p.id, name: T('ph_photo', 'Photo') + ' ' + new Date((p.timestamp || 0) * 1000).toLocaleDateString(), url: p.url, phone: true }; }) : [];
     });
-    return S.api('filesApi', { name: 'list', data: { folder: PLACE[src], parent: 0 } }).then(function (r) {
-      st.lists[src] = r && r.ok ? ((r.data && r.data.files) || []).filter(function (f) { return f.kind === 'image' && safe(f.url); }) : [];
-    });
+    var go = function (parent) {
+      return S.api('filesApi', { name: 'list', data: { folder: PLACE[src], parent: parent } }).then(function (r) {
+        var files = r && r.ok ? ((r.data && r.data.files) || []).filter(function (f) { return f.kind === 'image' && (f.isLocal || safe(f.url)); }) : [];
+        st.lists[src] = files;
+        // drawings made in Paint keep their picture on the server: fetch them one by one
+        files.filter(function (f) { return f.isLocal; }).slice(0, 40).forEach(function (f) {
+          S.api('filesApi', { name: 'getPicture', data: { id: f.id } }).then(function (g) { if (g && g.ok) { f.url = g.data.dataUrl; if (cur() === f || st.lists[st.src] === files) draw(); } });
+        });
+      });
+    };
+    if (src !== 'pics') return go(0);
+    return S.api('filesApi', { name: 'picturesId', data: {} }).then(function (r) { return r && r.ok ? go(r.data.id) : (st.lists.pics = []); });
   }
   function resetView() { st.zoom = 1; st.rot = 0; st.flip = 1; st.x = 0; st.y = 0; st.fx = blank(); st.undo = []; }
   function go(i) { var l = list(); if (!l.length) return; st.idx = (i + l.length) % l.length; resetView(); draw(); }
@@ -71,7 +80,7 @@
     var top = '<div class="ph-top"><select id="ph-src">' + opts + '</select><span class="ph-title">' + (f ? esc(f.name) + '<small>' + (st.idx + 1) + ' / ' + l.length + '</small>' : '') + '</span><span class="grow"></span>' +
       ib('show', st.show ? IC.stop : IC.show, st.show ? T('ph_stop', 'Stop slideshow') : T('ph_slide', 'Slideshow'), !!st.show) + ib('edit', IC.edit, T('ph_adjust', 'Adjust'), st.edit) +
       ib('rr', IC.rr, T('ph_rotate', 'Rotate')) + ib('flip', IC.flip, T('ph_flip', 'Flip')) +
-      (f ? ib('wall', IC.wall, T('ph_wall', 'Set as wallpaper')) + (S.state && S.state.printer ? ib('print', IC.print, T('pr_print', 'Print')) : '') + (!f.phone ? ib('tophone', IC.phone, T('fl_send_phone', 'Send to phone Photos')) : '') : '') +
+      (f ? ib('wall', IC.wall, T('ph_wall', 'Set as wallpaper')) + (S.state && S.state.printer ? ib('print', IC.print, T('pr_print', 'Print')) : '') + (!f.phone && !f.isLocal ? ib('tophone', IC.phone, T('fl_send_phone', 'Send to phone Photos')) : '') : '') +
       ib('strip', IC.strip, T('ph_strip', 'Filmstrip'), st.strip !== false) + '</div>';
     var stage = f ? '<img id="ph-img" alt="" referrerpolicy="no-referrer" draggable="false" src="' + esc(safe(f.url)) + '">' + (l.length > 1 ? '<button class="ph-nav l" data-a="prev">&#8249;</button><button class="ph-nav r" data-a="next">&#8250;</button>' : '') :
       '<div class="ph-msg">' + esc(st.lists[st.src] ? T('ph_none', 'No pictures here yet.') : T('ph_loading', 'Loading...')) + '</div>';
@@ -118,7 +127,8 @@
   });
   // Explorer hands images over here
   S.photoOpen = function (f) {
-    st.opened = { id: f.id, name: f.name, url: f.url }; st.src = 'opened'; st.idx = 0; resetView();
+    st.opened = { id: f.id, name: f.name, url: f.url, isLocal: !!f.isLocal };
+    if (f.isLocal && !f.url) S.api('filesApi', { name: 'getPicture', data: { id: f.id } }).then(function (g) { if (g && g.ok) { st.opened.url = g.data.dataUrl; draw(); } }); st.src = 'opened'; st.idx = 0; resetView();
     S.openApp('photos'); draw();
   };
 

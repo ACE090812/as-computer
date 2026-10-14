@@ -98,6 +98,8 @@ files {
   'ui/clock.css',
   'ui/photos.js',
   'ui/photos.css',
+  'ui/paint.js',
+  'ui/paint.css',
   'ui/hwmon.js',
   'ui/notepad.js',
   'ui/notepad.css',

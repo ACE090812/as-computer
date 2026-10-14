@@ -469,7 +469,7 @@ local function meta(row, cid, p)
     out.snippet = row.snip or (row.body and cut((plainText(row.body):gsub('%s+', ' ')), 160)) or ''
   else
     out.size = 0
-    out.url = row.url or ''
+    if row.url == 'local' then out.url = ''; out.isLocal = true else out.url = row.url or '' end
   end
   return out
 end
@@ -1232,6 +1232,52 @@ MotCallback.Register('filesApi', function(src, respond, name, data)
       end
     end
     return respond({ ok = true, data = { files = made, skipped = skipped } })
+  end
+
+  -- ---- Pictures drawn on the computer (Paint). The PNG is kept in the row itself (url = 'local', body = the data address), in a
+  -- "Pictures" folder at the top of Documents that is made on the first save.
+  local function picturesFolder(p)
+    local row = MySQL.single.await("SELECT id FROM computer_files WHERE deleted_at = 0 AND scope = ? AND owner = ? AND folder = ? AND parent_id = 0 AND kind = 'folder' AND name = 'Pictures' LIMIT 1", { p.scope, p.owner, p.folder })
+    if row then return row.id end
+    if countIn(p, 0) >= maxPer() or countAll(p) >= maxTotal() then return nil end
+    return insertRow(p, 0, 'folder', 'Pictures', '', '', cid, cname)
+  end
+
+  if name == 'picturesId' then
+    local p = place(src, cid, 'docs')
+    local id = p and picturesFolder(p)
+    if not id then return bad('too_many') end
+    return respond({ ok = true, data = { id = id } })
+  end
+
+  if name == 'savePicture' then
+    local p = place(src, cid, 'docs')
+    if not p then return bad() end
+    local d = data.dataUrl
+    local maxB = math.floor(tonumber(cfg().maxPictureBytes) or 1500000)
+    if type(d) ~= 'string' or #d > maxB or not d:match('^data:image/png;base64,[%w%+/=]+$') then return bad('too_long') end
+    local id = math.floor(tonumber(data.id) or 0)
+    if id > 0 then
+      local row = getLive(id)
+      if row and row.kind == 'image' and row.url == 'local' and placeOfRow(src, cid, row) then
+        MySQL.update.await('UPDATE computer_files SET body = ?, updated_at = ? WHERE id = ?', { d, os.time(), id })
+        return respond({ ok = true, data = { id = id, name = row.name } })
+      end
+    end
+    local pf = picturesFolder(p)
+    if not pf or countIn(p, pf) >= maxPer() or countAll(p) >= maxTotal() then return bad('too_many') end
+    local nm = cleanName(tostring(data.name or 'Drawing'), 'image') or 'Drawing'
+    nm = nm:gsub('%.[Pp][Nn][Gg]$', '') .. '.png'
+    nm = uniqueName(p, pf, nm)
+    if not nm then return bad('too_many') end
+    local newId = insertRow(p, pf, 'image', nm, d, 'local', cid, cname)
+    return respond({ ok = true, data = { id = newId, name = nm } })
+  end
+
+  if name == 'getPicture' then
+    local row = getLive(id)
+    if not row or row.kind ~= 'image' or row.url ~= 'local' or not placeOfRow(src, cid, row) then return bad() end
+    return respond({ ok = true, data = { dataUrl = row.body } })
   end
 
   if name == 'toPhone' then
