@@ -4965,6 +4965,25 @@
       else gateStep();
     }
 
+    if (d.action === 'bsod') {
+      var bi = d.info || {}, bs = $('bsod'), secs = bi.seconds || 10;
+      resetSession(); clearTimeout(BOOT.t); $('boot').classList.add('hidden');
+      $('bs-code').textContent = bi.code || ''; $('bs-hex').textContent = bi.hex ? '(' + bi.hex + ')' : '';
+      $('bs-part').textContent = String(bi.part || 'cpu').toUpperCase();
+      var cv = $('bs-qr').getContext('2d'), seed = 7; for (var ci = 0; ci < (bi.code || 'X').length; ci++) seed = (seed * 31 + (bi.code || 'X').charCodeAt(ci)) % 9973;
+      cv.fillStyle = '#fff'; cv.fillRect(0, 0, 84, 84); cv.fillStyle = '#000';
+      for (var qy = 0; qy < 21; qy++) for (var qx = 0; qx < 21; qx++) { seed = (seed * 1103 + 12345) % 65536; var fin = (qx < 7 && qy < 7) || (qx > 13 && qy < 7) || (qx < 7 && qy > 13); if (!fin && seed % 3 === 0) cv.fillRect(qx * 4, qy * 4, 4, 4); }
+      [[0, 0], [14, 0], [0, 14]].forEach(function (o) { cv.fillRect(o[0] * 4, o[1] * 4, 28, 28); cv.fillStyle = '#fff'; cv.fillRect(o[0] * 4 + 4, o[1] * 4 + 4, 20, 20); cv.fillStyle = '#000'; cv.fillRect(o[0] * 4 + 8, o[1] * 4 + 8, 12, 12); });
+      bs.classList.remove('hidden');
+      var left = secs, cd = $('bs-cd');
+      var step = function () {
+        cd.textContent = fmt(t('ui_bsod_restart', 'Restarting in %s'), left);
+        if (left-- <= 0) { bs.classList.add('hidden'); showBoot(state.bootSeconds || 10, t('ui_restarting', 'Restarting...'), function () { showGateLogin(false, state.gateAccounts, state.myAccount); }); return; }
+        setTimeout(step, 1000);
+      };
+      step();
+    }
+
     if (d.action === 'powerCut') {
       if (d.on) { resetSession(); showPowerScreen(''); }
       else if (!$('powerscreen').classList.contains('hidden')) {

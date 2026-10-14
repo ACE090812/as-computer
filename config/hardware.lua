@@ -6,6 +6,9 @@
 -- Item names (add each to ox_inventory data/items.lua, the same way as the mining parts):
 --   mining_wifi_std / _adv / _elite     Wi-Fi card
 --   mining_eth_std  / _adv / _elite     Ethernet card
+--   mining_fan_std  / _adv / _elite     Case fan
+--   mining_liquid_std / _adv / _elite   Liquid cooler
+--   thermal_paste                       the consumable an IT repair uses (Config.Hardware.RepairItem)
 
 Config.Hardware = {}
 local H = Config.Hardware
@@ -24,6 +27,7 @@ H.Slots = {
   { slot = 'hdd2', part = 'hdd',            label = 'HDD/SSD 2' },
   { slot = 'gpu',  part = 'gpu',            label = 'GPU' },
   { slot = 'nic',  parts = { 'wifi', 'eth' }, label = 'Network card' },
+  { slot = 'cool', parts = { 'fan', 'liquid' }, label = 'Cooling' },
 }
 
 -- Performance of one part by tier, before wear. Used for boot speed and (later) app limits.
@@ -48,6 +52,27 @@ H.Network = {
 -- Boot: seconds at the start, before the CPU and startup apps change it (the boot screen reads this later).
 H.Boot = { baseSeconds = 14, minSeconds = 5, perStartupApp = 1.5 }
 
+-- Temperature (degrees C): a quiet computer sits around 35, load and worn parts push it up, cooling pulls it down. Above `hot`
+-- the computer is overheating: it crashes far more often. A fan takes off `fan` degrees and a liquid cooler `liquid`, times the tier.
+H.Temp = { base = 32, perCpuPct = 0.45, perGpuPct = 0.30, perWornPct = 0.12, fan = 8, liquid = 16, hot = 85 }
+
+-- Blue screens. Every minute a computer is on, each one rolls a chance to crash: a small base, plus more for every worn part and for
+-- overheating. After a crash the part that failed takes `wearHit` extra wear. Lowest chance first, so tune these gently.
+H.Crash = { base = 0.0002, perWornPart = 0.002, overheat = 0.02, wearHit = 10, restartSeconds = 10 }
+
+-- Stop codes shown on the blue screen and in the Diagnostics app, by part.
+H.StopCodes = {
+  cpu = { code = 'CLOCK_WATCHDOG_TIMEOUT', hex = '0x00000101' }, ram = { code = 'MEMORY_MANAGEMENT', hex = '0x0000001A' },
+  psu = { code = 'POWER_STATE_FAILURE', hex = '0x0000009F' },     hdd = { code = 'INACCESSIBLE_BOOT_DEVICE', hex = '0x0000007B' },
+  gpu = { code = 'VIDEO_TDR_FAILURE', hex = '0x00000116' },        nic = { code = 'NDIS_DRIVER_FAULT', hex = '0x000000D1' },
+  cool = { code = 'THERMAL_EVENT', hex = '0x00000124' },
+}
+
+-- The IT job repairs computers: it restores a worn part to full condition and uses one `RepairItem` per part. IT also reads the
+-- fault codes on any computer it stands at (the tower menu).
+H.ITJob = 'it'
+H.RepairItem = 'thermal_paste'
+
 -- On the very first start with the hardware rule, wipe every computer's accounts and files once so all machines
 -- start clean. The wipe runs once (it records itself in computer_hardware_meta) and prints what it removed.
 H.WipeOnFirstStart = true
@@ -57,6 +82,10 @@ table.insert(Config.Mining.Parts, { key = 'wifi', label = 'Wi-Fi card',      pro
 table.insert(Config.Mining.Parts, { key = 'eth',  label = 'Ethernet card',   productName = 'WireRun' })
 Config.Mining.Prices.wifi = { std = 300, adv = 700, elite = 1500 }
 Config.Mining.Prices.eth  = { std = 250, adv = 600, elite = 1300 }
+table.insert(Config.Mining.Parts, { key = 'fan',    label = 'Case fan',      productName = 'BreezeCore' })
+table.insert(Config.Mining.Parts, { key = 'liquid', label = 'Liquid cooler', productName = 'FrostLoop' })
+Config.Mining.Prices.fan    = { std = 150, adv = 350, elite = 700 }
+Config.Mining.Prices.liquid = { std = 400, adv = 900, elite = 1800 }
 
 --- Slot keys in order, e.g. { 'cpu', 'ram', 'ram2', ... }.
 function H.SlotKeys()

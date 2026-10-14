@@ -52,8 +52,38 @@ function Hardware.Status(key)
     st.network = nic.part
     st.networkSpeed = ((H.Network[nic.part] or {}).speed or 1) * (H.Perf[nic.tier] or 1) * wearFactor(nic.wear)
   end
+  local cool = st.slots.cool
+  st.cooling = cool and ((H.Temp[cool.part] or 0) * (H.Perf[cool.tier] or 1) * wearFactor(cool.wear)) or 0
   return st
 end
+
+-- ---- Load and temperature. The page reports how busy the computer is every half minute (ui/hwmon.js); the temperature follows
+-- ---- from that, from how worn the parts are and from the cooling.
+local loadOf = {}   -- key -> { cpu, gpu, at }
+function Hardware.Telemetry(key, cpu, gpu)
+  cpu, gpu = tonumber(cpu), tonumber(gpu)
+  if not cpu or cpu ~= cpu then return end
+  loadOf[key] = { cpu = math.max(0, math.min(100, cpu)), gpu = math.max(0, math.min(100, gpu or 0)), at = os.time() }
+end
+--- Degrees C for a computer right now. `st` may be passed to save a lookup.
+function Hardware.Temp(key, st)
+  st = st or Hardware.Status(key)
+  local l = loadOf[key]
+  local cpu, gpu = (l and l.cpu) or 12, (l and l.gpu) or 0
+  local T = H.Temp
+  local t = T.base + cpu * T.perCpuPct + gpu * T.perGpuPct + (100 - (st.worstWear or 100)) * T.perWornPct - (st.cooling or 0)
+  return math.floor(math.max(T.base - 6, t) * 10 + 0.5) / 10
+end
+
+--- Recent fault codes for a computer (newest first).
+local faults = {}   -- key -> { { at, code, hex, part } ... }
+local function addFault(key, part, code, hex)
+  local list = faults[key] or {}
+  table.insert(list, 1, { at = os.time(), code = code, hex = hex, part = part })
+  while #list > 12 do table.remove(list) end
+  faults[key] = list
+end
+function Hardware.Faults(key) return faults[key] or {} end
 
 --- Can this computer start? Keys with no tower yet count as missing everything.
 function Hardware.Bootable(key)
@@ -62,7 +92,44 @@ function Hardware.Bootable(key)
 end
 
 -- ---- Wear: a minute of use takes 100 / (WearHours * 60) points off every fitted part of every computer that is on.
+-- ---- Then each computer that is on rolls its chance of a blue screen (worn parts and overheating make it likelier).
+
+--- A blue screen: the computer shuts down, the part that failed takes extra wear, the player sees the blue screen and the Event Viewer
+--- gets the stop code. `part` is the slot that failed ('cpu', 'ram', ... or 'cool' for overheating).
+function Hardware.Crash(key, part, reason)
+  local info = H.StopCodes[(part or ''):gsub('%d+$', '')] or H.StopCodes.cpu
+  addFault(key, part, info.code, info.hex)
+  local row = Mining.GetTower(key)
+  if row and part and row[part .. '_item'] then
+    local w = math.max(0, (tonumber(row[part .. '_wear']) or 0) - (H.Crash.wearHit or 10))
+    MySQL.update(('UPDATE `computer_mining_towers` SET %s_wear = ? WHERE computer_key = ?'):format(part), { w, key })
+  end
+  local cid = ComputerSessionCrash and ComputerSessionCrash(key)
+  if ComputerLog then ComputerLog(key, 'system', 'bluescreen', ('Blue screen: %s (%s)%s'):format(info.code, info.hex, reason and (' - ' .. reason) or ''), nil, 'error') end
+  local src = cid and Bridge.FindSource(cid)
+  if src then TriggerClientEvent('as-computer:client:bluescreen', src, key, { code = info.code, hex = info.hex, part = part, seconds = H.Crash.restartSeconds or 10 }) end
+end
+
+local function crashRoll(key, st)
+  local C = H.Crash
+  local p = C.base or 0
+  local worn = 0
+  for _, part in pairs(st.slots) do
+    local w = 1 - (part.wear / 100)
+    if w > 0.5 then worn = worn + 1; p = p + (C.perWornPart or 0) * (w * w) end
+  end
+  local temp = Hardware.Temp(key, st)
+  if temp > (H.Temp.hot or 85) then p = p + (C.overheat or 0) * math.min(2, (temp - H.Temp.hot) / 10 + 0.5) end
+  if math.random() >= p then return end
+  -- blame the most worn part, or the cooling when it is overheating
+  local blame, lowest = nil, 101
+  for slot, part in pairs(st.slots) do if part.wear < lowest and slot ~= 'cool' then blame, lowest = slot, part.wear end end
+  if temp > (H.Temp.hot or 85) then blame = 'cool' end
+  Hardware.Crash(key, blame or 'cpu', temp > (H.Temp.hot or 85) and ('overheating at ' .. temp .. ' C') or nil)
+end
+
 CreateThread(function()
+  math.randomseed(os.time() + GetGameTimer())
   while true do
     Wait(60000)
     local perMinute = 100 / ((H.WearHours or 100) * 60)
@@ -83,6 +150,8 @@ CreateThread(function()
             args[#args + 1] = key
             MySQL.update(('UPDATE `computer_mining_towers` SET %s WHERE computer_key = ?'):format(table.concat(sets, ', ')), args)
           end
+          local ok2, err = pcall(function() crashRoll(key, Hardware.Status(key)) end)
+          if not ok2 then print('^1[as-computer:hardware]^0 crash roll failed for ' .. key .. ': ' .. tostring(err)) end
         end
       end
     end
@@ -133,7 +202,7 @@ MotCallback.Register('hardware:info', function(src, respond, key)
   local st = Hardware.Status(key)
   local slots = {}
   for slot, p in pairs(st.slots) do slots[slot] = { tier = p.tier, wear = p.wear, part = p.part } end
-  respond({ success = true, bootable = st.bootable, perf = st.perf, ramMB = st.ramMB, storageMB = st.storageMB, diskUsedMB = Hardware.DiskUsedMB(key),
+  respond({ success = true, temp = Hardware.Temp(key, st), hot = H.Temp.hot, faults = Hardware.Faults(key), bootable = st.bootable, perf = st.perf, ramMB = st.ramMB, storageMB = st.storageMB, diskUsedMB = Hardware.DiskUsedMB(key),
     hasGpu = st.hasGpu, gpuPerf = st.gpuPerf, network = st.network, networkSpeed = st.networkSpeed, slots = slots })
 end)
 
@@ -166,3 +235,52 @@ MySQL.ready(function()
     end
   end)
 end)
+
+
+-- ---- Telemetry from the page, and IT service (repair a part, read fault codes). Telemetry only ever concerns the computer being used.
+MotCallback.Register('hardware:telemetry', function(src, respond, key, cpu, gpu)
+  if type(key) == 'string' and key:match('^[cpm]%d+$') and ComputerSessionIs and ComputerSessionIs(key, src) then Hardware.Telemetry(key, cpu, gpu) end
+  respond({ success = true })
+end)
+
+local function isIT(src)
+  local j = Bridge.GetJob(src)
+  return j ~= nil and j.name == (H.ITJob or 'it')
+end
+
+--- IT service on a computer: action 'faults' (read codes and part health) or 'repair' (restore one part to full, uses a repair item).
+MotCallback.Register('hardware:service', function(src, respond, key, action, slot)
+  if not isIT(src) then return respond({ success = false, error = 'not_it' }) end
+  if type(key) ~= 'string' or not key:match('^[cpm]%d+$') then return respond({ success = false }) end
+  local st = Hardware.Status(key)
+  if action == 'faults' then
+    local parts = {}
+    for sl, p in pairs(st.slots) do parts[#parts + 1] = { slot = sl, part = p.part, tier = p.tier, wear = math.floor(p.wear * 10) / 10 } end
+    table.sort(parts, function(a, b) return a.wear < b.wear end)
+    return respond({ success = true, temp = Hardware.Temp(key, st), parts = parts, faults = Hardware.Faults(key), missing = st.missing })
+  end
+  if action == 'repair' then
+    slot = tostring(slot or '')
+    local p = st.slots[slot]
+    if not p then return respond({ success = false, error = 'empty' }) end
+    if p.wear >= 99.5 then return respond({ success = false, error = 'fine' }) end
+    local item = H.RepairItem or 'thermal_paste'
+    local found = exports.ox_inventory:Search(src, 'count', item)
+    if not found or found < 1 then return respond({ success = false, error = 'no_item', item = item }) end
+    if not exports.ox_inventory:RemoveItem(src, item, 1) then return respond({ success = false, error = 'inventory_error' }) end
+    MySQL.update.await(('UPDATE `computer_mining_towers` SET %s_wear = ? WHERE computer_key = ?'):format(slot), { Config.Mining.StartingWear or 100, key })
+    if ComputerLog then ComputerLog(key, 'system', 'repair', ('IT repaired the %s'):format(slot:upper()), src, 'success') end
+    return respond({ success = true })
+  end
+  respond({ success = false })
+end)
+
+--- Staff: crash a computer now (events, testing).
+RegisterCommand('pccrash', function(src, args)
+  if src ~= 0 and not Bridge.IsAdmin(src) then return end
+  local key, part = args[1], args[2] or 'cpu'
+  if not key or not key:match('^[cpm]%d+$') then return say(src, 'Usage: /pccrash <computerKey> [cpu|ram|psu|hdd|gpu|nic|cool]') end
+  Hardware.Crash(key, part, 'staff')
+  say(src, 'Crashed ' .. key .. ' (' .. part .. ').')
+  if AdminLog then AdminLog(src, 'pccrash', key .. ' ' .. part) end
+end, false)

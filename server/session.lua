@@ -208,6 +208,16 @@ RegisterNetEvent('as-computer:server:session', function(key, st)
   end
 end)
 
+--- A blue screen ends the session at once (unsaved work is lost). Returns the character who was using it, if anyone.
+function ComputerSessionCrash(key)
+  local rec = sessions[key]
+  if not rec or rec.state == 'off' then return nil end
+  if rec.guest and rec.accountId and FilesWipeOwner then FilesWipeOwner('pc:' .. key .. ':' .. rec.accountId) end
+  rec.state, rec.at = 'off', os.time()
+  if MirrorClear then MirrorClear(key) end
+  return rec.cid
+end
+
 --- Is the account signed in on that computer the guest account? (guests cannot install apps or change Settings)
 function ComputerSessionIsGuest(key)
   local rec = sessions[key]

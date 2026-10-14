@@ -971,7 +971,7 @@ html.dark #br-menu.on{background:#3a3a3a}
 
 /* start-up screen, sleep / power cut screens, security screen, snap preview */
 #boot{position:absolute;inset:0;z-index:150;background:#000;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px}
-#boot.hidden,#powerscreen.hidden,#secscreen.hidden{display:none}
+#boot.hidden,#powerscreen.hidden,#secscreen.hidden,#bsod.hidden{display:none}
 .bt-logo{font-size:30px;font-weight:300;letter-spacing:.06em}
 .bt-bar{width:220px;height:4px;border-radius:2px;background:rgba(255,255,255,.18);overflow:hidden}
 .bt-bar i{display:block;height:100%;width:0;background:#4cc2ff}
@@ -985,4 +985,12 @@ html.dark #br-menu.on{background:#3a3a3a}
 .sec-card button:hover{background:rgba(255,255,255,.2)}
 #snap-prev{position:absolute;z-index:5;border:2px solid rgba(76,194,255,.9);background:rgba(76,194,255,.18);border-radius:8px;pointer-events:none;transition:all .08s}
 #snap-prev.hidden{display:none}
-html.dui #boot,html.dui #powerscreen,html.dui #secscreen,html.dui #snap-prev{display:none!important}
+html.dui #bsod,html.dui #boot,html.dui #powerscreen,html.dui #secscreen,html.dui #snap-prev{display:none!important}
+
+#bsod{position:absolute;inset:0;z-index:160;background:#0b5cad;color:#fff;display:flex;align-items:center;justify-content:center;font-family:"Segoe UI",sans-serif}
+#bsod .bs-in{max-width:620px;padding:30px}
+#bsod .bs-face{font-size:96px;line-height:1;margin-bottom:14px}
+#bsod .bs-t{font-size:24px;margin-bottom:10px}#bsod .bs-s{font-size:14px;opacity:.9;margin-bottom:22px}
+#bsod .bs-row{display:flex;gap:16px;align-items:center;font-size:13px}
+#bsod canvas{background:#fff;padding:4px;image-rendering:pixelated;width:84px;height:84px}
+#bsod .bs-i>div{margin:3px 0}

@@ -259,6 +259,35 @@ local function partsMenu(e)
         end,
       }
     end
+    -- IT service (the IT job only: the server checks): read the fault codes and repair worn parts
+    options[#options + 1] = { title = L('hw_it_service'), description = L('hw_it_service_d'), icon = 'screwdriver-wrench', onSelect = function()
+      MotCallback.Trigger('hardware:service', function(rr)
+        if not (rr and rr.success) then return notify(rr and rr.error == 'not_it' and L('hw_not_it') or L('mp_failed'), 'error') end
+        local lines = { ('**%s** %s C'):format(L('hw_temp'), tostring(rr.temp)) }
+        local repairOpts = {}
+        for _, p in ipairs(rr.parts or {}) do
+          lines[#lines + 1] = ('- %s (%s): %s%%'):format(p.slot:upper(), p.tier, tostring(p.wear))
+          if p.wear < 99 then
+            repairOpts[#repairOpts + 1] = { title = L('hw_repair') .. ' ' .. p.slot:upper(), description = tostring(p.wear) .. '%', icon = 'wrench', onSelect = function()
+              MotCallback.Trigger('hardware:service', function(r3)
+                if r3 and r3.success then notify(L('hw_repaired'), 'success')
+                elseif r3 and r3.error == 'no_item' then notify(L('hw_need_item'), 'error')
+                else notify(L('mp_failed'), 'error') end
+              end, e.computerKey, 'repair', p.slot)
+            end }
+          end
+        end
+        if #(rr.faults or {}) > 0 then lines[#lines + 1] = '**' .. L('hw_faults') .. '**' end
+        for _, f in ipairs(rr.faults or {}) do lines[#lines + 1] = ('- %s %s (%s)'):format(f.code, f.hex, (f.part or ''):upper()) end
+        if #(rr.missing or {}) > 0 then lines[#lines + 1] = '**' .. L('hw_missing_parts') .. '** ' .. table.concat(rr.missing, ', '):upper() end
+        lib.registerContext({ id = 'asc_mp_it', title = L('hw_it_service'), menu = 'asc_mp_parts', options = (function()
+          local o = { { title = L('hw_report'), description = table.concat(lines, '\n'), icon = 'clipboard-list', readOnly = true } }
+          for _, r in ipairs(repairOpts) do o[#o + 1] = r end
+          return o
+        end)() })
+        lib.showContext('asc_mp_it')
+      end, e.computerKey, 'faults')
+    end }
     lib.registerContext({ id = 'asc_mp_parts', title = L('mp_tower_title'), options = options })
     lib.showContext('asc_mp_parts')
   end, 'info', { computerKey = e.computerKey })

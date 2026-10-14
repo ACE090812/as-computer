@@ -791,7 +791,18 @@ end)
 -- Task Manager / Settings > Hardware: what is fitted in the computer being used and how it is doing.
 RegisterNUICallback('hardwareApi', function(data, cb)
   if not currentTerminal or not currentTerminal.key then return cb({ success = false }) end
+  data = data or {}
+  if data.name == 'telemetry' then
+    local d = data.data or {}
+    return MotCallback.Trigger('hardware:telemetry', function(r) cb(r or { success = false }) end, currentTerminal.key, d.cpu, d.gpu)
+  end
   MotCallback.Trigger('hardware:info', function(r) cb(r or { success = false }) end, currentTerminal.key)
+end)
+
+-- A blue screen on the computer being used (server/hardware.lua): the page shows it, counts down and restarts.
+RegisterNetEvent('as-computer:client:bluescreen', function(key, info)
+  if not currentTerminal or currentTerminal.key ~= key then return end
+  SendNuiMessage(json.encode({ action = 'bsod', info = info }))
 end)
 
 

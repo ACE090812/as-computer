@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="calculator.css">
 <link rel="stylesheet" href="notify.css">
 <link rel="stylesheet" href="taskmgr.css">
+<link rel="stylesheet" href="diag.css">
 <link rel="stylesheet" href="notepad.css">
 <link rel="stylesheet" href="files.css">
 <link rel="stylesheet" href="admin.css">
@@ -305,6 +306,7 @@
 
   <!-- start-up / restart screen, sleep and power cut screens, Ctrl+Alt+Del screen -->
   <div id="boot" class="hidden"><div class="bt-logo" data-i18n="ui_os_name">Los Santos OS</div><div class="bt-bar"><i id="bt-fill"></i></div><div class="bt-txt" id="bt-txt"></div></div>
+  <div id="bsod" class="hidden"><div class="bs-in"><div class="bs-face">:(</div><div class="bs-t" data-i18n="ui_bsod_title">Your PC ran into a problem and needs to restart.</div><div class="bs-s" data-i18n="ui_bsod_sub">We are just collecting some error info, and then we will restart for you.</div><div class="bs-row"><canvas id="bs-qr" width="84" height="84"></canvas><div class="bs-i"><div id="bs-cd"></div><div><span data-i18n="ui_bsod_stop">Stop code</span>: <b id="bs-code"></b> <span id="bs-hex"></span></div><div><span data-i18n="ui_bsod_part">What failed</span>: <b id="bs-part"></b></div></div></div></div></div>
   <div id="powerscreen" class="hidden"><div class="ps-txt" id="ps-txt"></div></div>
   <div id="secscreen" class="hidden"><div class="sec-card">
     <div class="sec-title" data-i18n="ui_sec_title">Los Santos OS Security</div>
@@ -396,6 +398,8 @@
 <script src="calculator.js"></script>
 <script src="notify.js"></script>
 <script src="taskmgr.js"></script>
+<script src="diag.js"></script>
+<script src="hwmon.js"></script>
 <script src="notepad.js"></script>
 <script src="evidences.js"></script>
 <script src="boss.js"></script>

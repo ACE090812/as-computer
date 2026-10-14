@@ -137,7 +137,7 @@ MySQL.ready(function()
   -- citizenid migration for the same pattern).
   pcall(function() MySQL.query.await('ALTER TABLE `computer_mining_towers` ADD COLUMN `started_at` BIGINT NULL') end)
   -- Hardware slots added after the first release: a second RAM stick, a second drive and a network card.
-  for _, s in ipairs({ 'ram2', 'hdd2', 'nic' }) do
+  for _, s in ipairs({ 'ram2', 'hdd2', 'nic', 'cool' }) do
     pcall(function()
       MySQL.query.await(('ALTER TABLE `computer_mining_towers` ADD COLUMN `%s_item` VARCHAR(32) NULL, ADD COLUMN `%s_tier` VARCHAR(8) NULL, ADD COLUMN `%s_wear` DECIMAL(5,2) NULL'):format(s, s, s))
     end)

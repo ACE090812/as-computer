@@ -110,6 +110,7 @@ Config.PublicApps = {
   calculator = true,
   settings   = true,
   taskmgr    = true,   -- Task Manager
+  diag       = true,   -- Diagnostics
   mining     = true,   -- Crypto Mining Rig, Phase 3: open to all players, no licence/job gate
 }
 

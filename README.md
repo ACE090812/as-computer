@@ -581,3 +581,10 @@ Every computer has its own accounts. The first person to start a computer sets i
 - **Power cut:** `exports['as-computer']:setPowerOut(true)` switches every computer off at once (unsaved work is lost, nothing starts); `setPowerOut(false)` restores it. Staff can use `/pcpower off` and `/pcpower on`.
 - **Window snapping:** drag a window to the left or right edge for a half screen, or to the top to maximise.
 - **Shortcuts:** Ctrl+Alt+Delete (security screen: Lock, Switch user, Task Manager), Ctrl+Shift+Esc (Task Manager), Win+D (show desktop), Win+L (lock), Win+E (File Explorer), Alt+Tab (switch window). Which of these reach the page depends on what the game lets through.
+
+## Diagnostics, blue screens and the IT job
+- **Diagnostics** app (built in, anyone, own PC only): temperature, condition of every fitted part, missing parts and recent fault codes.
+- Computers report their load every 30 seconds. Temperature comes from load, wear and cooling (`Config.Hardware.Temp`; fan and liquid cooling are tower parts in the `cool` slot).
+- **Blue screens**: worn or missing parts, overheating and a small random chance (`Config.Hardware.Crash`). The session ends, the failing part takes extra wear, the Event Viewer logs the stop code, and the player sees a blue screen, then the boot screen and sign-in. `/pccrash <key> [part]` (admin) tests it.
+- **IT job** (`Config.Hardware.ITJob`, default `it`): at a tower, "IT service" reads fault codes and repairs a part using `thermal_paste`.
+- Add these ox_inventory items: `mining_wifi_*`, `mining_eth_*`, `mining_fan_*`, `mining_liquid_*`, `thermal_paste`.
