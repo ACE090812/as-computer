@@ -100,6 +100,8 @@ files {
   'ui/photos.css',
   'ui/paint.js',
   'ui/paint.css',
+  'ui/media.js',
+  'ui/media.css',
   'ui/hwmon.js',
   'ui/notepad.js',
   'ui/notepad.css',

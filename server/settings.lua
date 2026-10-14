@@ -138,6 +138,38 @@ local SPEC = {
     end
     return out
   end,
+  -- Media Player: playlists (10, up to 100 tracks each; every track is a title and an https address), volume and equaliser
+  playlists     = function(v)
+    if type(v) ~= 'table' then return nil end
+    local out, n = {}, 0
+    for _, pl in ipairs(v) do
+      if type(pl) == 'table' and type(pl.n) == 'string' and pl.n ~= '' then
+        local tracks, m = {}, 0
+        for _, t in ipairs(type(pl.t) == 'table' and pl.t or {}) do
+          if type(t) == 'table' and type(t.u) == 'string' and #t.u <= 500 and t.u:match('^https://[%w%-%.]+[/%w%-%._~:%?#%[%]@!%$&%*%+,;=%%]*$') then
+            m = m + 1
+            tracks[m] = { t = tostring(t.t or ''):gsub('[%c<>]', ''):sub(1, 80), u = t.u, k = t.k == 'v' and 'v' or 'a' }
+          end
+          if m >= 100 then break end
+        end
+        n = n + 1
+        out[n] = { id = tostring(pl.id or n):gsub('[^%w_%-]', ''):sub(1, 12), n = pl.n:gsub('[%c<>]', ''):sub(1, 30), t = tracks }
+      end
+      if n >= 10 then break end
+    end
+    return out
+  end,
+  mpVol         = int(0, 100),
+  mpEq          = function(v)
+    if type(v) ~= 'table' then return nil end
+    local out = {}
+    for i = 1, 5 do
+      local g = tonumber(v[i])
+      if not g or g < -12 or g > 12 then return nil end
+      out[i] = math.floor(g)
+    end
+    return out
+  end,
   iconPos       = function(v)
     if type(v) ~= 'table' then return nil end
     local out, n = {}, 0
