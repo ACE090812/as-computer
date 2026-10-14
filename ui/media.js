@@ -20,7 +20,7 @@
   function ic(k, cls) { return '<svg class="mp-i ' + (cls || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + IC[k] + '</svg>'; }
   var EQF = [60, 230, 910, 3600, 14000], EQN = ['60 Hz', '230 Hz', '910 Hz', '3.6 kHz', '14 kHz'];
   var PRESETS = { flat: [0, 0, 0, 0, 0], bass: [8, 5, 0, 0, 0], treble: [0, 0, 0, 5, 8], vocal: [-3, 0, 5, 3, -2], rock: [5, 3, -2, 3, 5] };
-  var st = { view: 'now', queue: [], qi: -1, shuffle: false, rep: 0, vol: 80, mute: false, eqOn: false, eq: [0, 0, 0, 0, 0], eqOpen: false, order: [], playing: false, err: '' };
+  var st = { view: 'now', queue: [], qi: -1, shuffle: false, rep: 0, vol: 80, mute: false, eqOn: false, eq: [0, 0, 0, 0, 0], eqOpen: false, order: [], playing: false, err: '', q: '' };
   var media = null, actx = null, filters = null, srcNode = null, eqTried = false;
 
   function prefs() { return S.prefs() || {}; }
@@ -97,40 +97,47 @@
 
   // ---- drawing
   function nav() {
-    var h = '<button class="mp-n' + (st.view === 'now' ? ' on' : '') + '" data-v="now">' + ic('note') + '<span>' + esc(T('mp_now', 'Now playing')) + '</span></button><div class="mp-nh">' + esc(T('mp_playlists', 'Playlists')) + '<button data-a="newpl" title="' + esc(T('mp_newpl', 'New playlist')) + '">' + ic('plus') + '</button></div>';
+    var h = '<div class="mp-search"><input id="mp-q" placeholder="' + esc(T('mp_search', 'Search')) + '" value="' + esc(st.q) + '" maxlength="40"></div>' +
+      '<button class="mp-n' + (st.view === 'now' ? ' on' : '') + '" data-v="now">' + ic('note') + '<span>' + esc(T('mp_now', 'Now playing')) + '</span></button><div class="mp-nh"><span>' + esc(T('mp_playlists', 'Playlists')) + '</span><button data-a="newpl" title="' + esc(T('mp_newpl', 'New playlist')) + '">' + ic('plus') + '</button></div>';
     lists().forEach(function (p) { h += '<button class="mp-n' + (st.view === p.id ? ' on' : '') + '" data-v="' + esc(p.id) + '">' + ic('list') + '<span>' + esc(p.n) + '</span><em>' + p.t.length + '</em></button>'; });
     return h;
   }
-  function trackRows(tracks, isQueue, plid) {
-    if (!tracks.length) return '<div class="mp-empty">' + esc(T('mp_empty', 'Nothing here yet. Add a link or a file from Explorer.')) + '</div>';
-    return '<div class="mp-rows">' + tracks.map(function (t, i) {
+  function trackRows(tracks, isQueue) {
+    if (!tracks.length) return '<div class="mp-empty">' + ic('note') + '<div>' + esc(T('mp_empty', 'Nothing here yet. Add a link or a file from Explorer.')) + '</div></div>';
+    var q = st.q.toLowerCase(), rows = '';
+    tracks.forEach(function (t, i) {
+      var name = t.t || titleOf(t.u);
+      if (q && name.toLowerCase().indexOf(q) < 0) return;
       var on = isQueue && i === st.qi;
-      return '<div class="mp-r' + (on ? ' on' : '') + '" data-i="' + i + '"><span class="n">' + (on && st.playing ? '&#9654;' : i + 1) + '</span><span class="t">' + esc(t.t || titleOf(t.u)) + '</span><span class="k">' + esc(t.k === 'v' ? T('mp_video', 'Video') : T('mp_audio', 'Audio')) + '</span>' +
+      rows += '<div class="mp-r' + (on ? ' on' : '') + '" data-i="' + i + '"><span class="n">' + (on && st.playing ? '<i class="eqi"><b></b><b></b><b></b></i>' : i + 1) + '</span><span class="t">' + esc(name) + '</span><span class="k">' + esc(t.k === 'v' ? T('mp_video', 'Video') : T('mp_audio', 'Audio')) + '</span>' +
         '<button class="x" data-a="rm" data-i="' + i + '" title="' + esc(T('mp_remove', 'Remove')) + '">' + ic('x') + '</button></div>';
-    }).join('') + '</div>';
+    });
+    return '<div class="mp-th"><span class="n">#</span><span class="t">' + esc(T('mp_title', 'Title')) + '</span><span class="k">' + esc(T('mp_type', 'Type')) + '</span><span class="x"></span></div><div class="mp-rows">' + (rows || '<div class="mp-empty">' + esc(T('mp_no_match', 'No matches')) + '</div>') + '</div>';
   }
   function main() {
     var add = '<button class="mp-b" data-a="addurl">' + ic('plus') + esc(T('mp_add_url', 'Add link')) + '</button><button class="mp-b" data-a="addfile">' + ic('plus') + esc(T('mp_add_file', 'Add from files')) + '</button>';
     if (st.view === 'now') {
-      var t = cur(), video = t && t.k === 'v';
-      return '<div class="mp-hd"><h2>' + esc(T('mp_now', 'Now playing')) + '</h2><span class="grow"></span>' + add + (st.queue.length ? '<button class="mp-b" data-a="savepl">' + esc(T('mp_save_pl', 'Save as playlist')) + '</button><button class="mp-b" data-a="clear">' + esc(T('mp_clear', 'Clear')) + '</button>' : '') + '</div>' +
-        '<div class="mp-stage" id="mp-stage">' + (video ? '' : '<div class="mp-art' + (st.playing ? ' go' : '') + '">' + ic('note') + '<div class="bars"><i></i><i></i><i></i><i></i><i></i></div></div><div class="mp-np">' + esc(t ? (t.t || titleOf(t.u)) : T('mp_nothing', 'Nothing is playing')) + '</div>') + '</div>' +
-        (st.err ? '<div class="mp-err">' + esc(st.err) + '</div>' : '') + trackRows(st.queue, true);
+      var t = cur(), video = t && t.k === 'v', nm = t ? (t.t || titleOf(t.u)) : T('mp_nothing', 'Nothing is playing');
+      return '<div class="mp-now2"><div class="mp-left"><div class="mp-stage" id="mp-stage">' + (video ? '' : '<div class="mp-art' + (st.playing ? ' go' : '') + '">' + ic('note') + '</div>') + '</div><div class="mp-np">' + esc(nm) + '</div><div class="mp-sub">' + esc(t ? (t.k === 'v' ? T('mp_video', 'Video') : T('mp_audio', 'Audio')) : '') + '</div></div>' +
+        '<div class="mp-right2"><div class="mp-hd"><h2>' + esc(T('mp_up_next', 'Up next')) + '</h2><span class="grow"></span>' + add + (st.queue.length ? '<button class="mp-b" data-a="savepl">' + esc(T('mp_save_pl', 'Save as playlist')) + '</button><button class="mp-b" data-a="clear">' + esc(T('mp_clear', 'Clear')) + '</button>' : '') + '</div>' +
+        (st.err ? '<div class="mp-err">' + esc(st.err) + '</div>' : '') + trackRows(st.queue, true) + '</div></div>';
     }
     var pl = lists().filter(function (p) { return p.id === st.view; })[0];
     if (!pl) { st.view = 'now'; return main(); }
-    return '<div class="mp-hd"><h2>' + esc(pl.n) + '</h2><span class="grow"></span><button class="mp-b pri" data-a="playpl">' + ic('play') + esc(T('mp_play_all', 'Play all')) + '</button>' + add + '<button class="mp-b" data-a="renpl">' + esc(T('mp_rename', 'Rename')) + '</button><button class="mp-b" data-a="delpl">' + esc(T('mp_delete', 'Delete')) + '</button></div>' +
-      (st.err ? '<div class="mp-err">' + esc(st.err) + '</div>' : '') + trackRows(pl.t, false, pl.id);
+    return '<div class="mp-hero"><div class="mp-art sm">' + ic('list') + '</div><div><div class="mp-sub">' + esc(T('mp_playlist', 'Playlist')) + '</div><h2>' + esc(pl.n) + '</h2><div class="mp-sub">' + pl.t.length + ' ' + esc(T('mp_tracks', 'tracks')) + '</div></div></div>' +
+      '<div class="mp-hd"><button class="mp-b pri" data-a="playpl">' + ic('play') + esc(T('mp_play_all', 'Play all')) + '</button>' + add + '<span class="grow"></span><button class="mp-b" data-a="renpl">' + esc(T('mp_rename', 'Rename')) + '</button><button class="mp-b" data-a="delpl">' + esc(T('mp_delete', 'Delete')) + '</button></div>' +
+      (st.err ? '<div class="mp-err">' + esc(st.err) + '</div>' : '') + trackRows(pl.t, false);
   }
   function drawBar() {
     var b = $('mp-bar'); if (!b) return;
-    var t = cur();
-    b.innerHTML = '<div class="mp-seek"><span id="mp-cur">0:00</span><input type="range" id="mp-seekr" min="0" max="1000" value="0"><span id="mp-dur">0:00</span></div>' +
-      '<div class="mp-ctl"><div class="mp-now">' + esc(t ? (t.t || titleOf(t.u)) : '') + '</div><div class="mp-mid">' +
-      '<button class="mp-c' + (st.shuffle ? ' on' : '') + '" data-a="shuf" title="' + esc(T('mp_shuffle', 'Shuffle')) + '">' + ic('shuf') + '</button><button class="mp-c" data-a="prev">' + ic('prev') + '</button>' +
-      '<button class="mp-c play" data-a="toggle">' + ic(st.playing ? 'pause' : 'play') + '</button><button class="mp-c" data-a="next">' + ic('next') + '</button>' +
+    var t = cur(), nm = t ? (t.t || titleOf(t.u)) : '';
+    b.innerHTML = '<div class="mp-bl"><div class="mp-th2">' + ic('note') + '</div><div class="mp-bt"><div class="a">' + esc(nm) + '</div><div class="b">' + esc(t ? (t.k === 'v' ? T('mp_video', 'Video') : T('mp_audio', 'Audio')) : '') + '</div></div></div>' +
+      '<div class="mp-bc"><div class="mp-mid">' +
+      '<button class="mp-c' + (st.shuffle ? ' on' : '') + '" data-a="shuf" title="' + esc(T('mp_shuffle', 'Shuffle')) + '">' + ic('shuf') + '</button><button class="mp-c" data-a="prev" title="' + esc(T('mp_prev', 'Previous')) + '">' + ic('prev') + '</button>' +
+      '<button class="mp-c play" data-a="toggle" title="' + esc(st.playing ? T('mp_pause', 'Pause') : T('mp_play', 'Play')) + '">' + ic(st.playing ? 'pause' : 'play') + '</button><button class="mp-c" data-a="next" title="' + esc(T('mp_next', 'Next')) + '">' + ic('next') + '</button>' +
       '<button class="mp-c' + (st.rep ? ' on' : '') + '" data-a="rep" title="' + esc(T('mp_repeat', 'Repeat')) + '">' + ic('rep') + (st.rep === 2 ? '<b>1</b>' : '') + '</button></div>' +
-      '<div class="mp-right"><button class="mp-c' + (st.eqOpen ? ' on' : '') + '" data-a="eq" title="' + esc(T('mp_eq', 'Equaliser')) + '">' + ic('eq') + '</button><button class="mp-c" data-a="mute">' + ic(st.mute || !st.vol ? 'mute' : 'vol') + '</button><input type="range" id="mp-vol" min="0" max="100" value="' + st.vol + '"></div></div>';
+      '<div class="mp-seek"><span id="mp-cur">0:00</span><input type="range" id="mp-seekr" min="0" max="1000" value="0"><span id="mp-dur">0:00</span></div></div>' +
+      '<div class="mp-br"><button class="mp-c' + (st.eqOpen ? ' on' : '') + '" data-a="eq" title="' + esc(T('mp_eq', 'Equaliser')) + '">' + ic('eq') + '</button><button class="mp-c" data-a="mute" title="' + esc(T('mp_mute', 'Mute')) + '">' + ic(st.mute || !st.vol ? 'mute' : 'vol') + '</button><input type="range" id="mp-vol" min="0" max="100" value="' + st.vol + '"></div>';
     b.querySelectorAll('input[type=range]').forEach(paintRange);
     tick();
   }
@@ -227,6 +234,7 @@
   });
   document.addEventListener('input', function (e) {
     var t = e.target; if (!t || !$('win-media') || !$('win-media').contains(t)) return;
+    if (t.id === 'mp-q') { st.q = t.value; var m = document.querySelector('.mp-main'); if (m) { m.innerHTML = main(); var cv = cur(); var sg = $('mp-stage'); if (sg && cv && cv.k === 'v' && media) { sg.appendChild(media); media.className = 'mp-video'; } } return; }
     if (t.id === 'mp-vol') { st.vol = +t.value; st.mute = false; applyVol(); paintRange(t); }
     else if (t.id === 'mp-seekr') { t.dataset.drag = '1'; paintRange(t); if (media && media.duration) $('mp-cur').textContent = fmt(t.value / 1000 * media.duration); }
     else if (t.dataset && t.dataset.band !== undefined) { st.eq[+t.dataset.band] = +t.value; paintRange(t); applyEq(); }
