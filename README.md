@@ -549,7 +549,7 @@ A win reported faster than `Config.Hack.minSeconds` counts as failed. Not tested
 
 Every computer is a monitor plus a tower. A computer only starts when its tower holds a CPU, RAM, a PSU and a drive; otherwise it shows a "No bootable device" screen listing what is missing. Optional parts: a second RAM stick, a second drive, a GPU and a network card (Wi-Fi or Ethernet). Settings are in `config/hardware.lua`.
 
-- **Items.** The parts reuse the mining part items (`mining_cpu_std`, `mining_ram_adv` and so on, three tiers each). Network cards are new: add `mining_wifi_std/adv/elite` and `mining_eth_std/adv/elite` to ox_inventory `data/items.lua`. The Mining parts shop sells them.
+- **Items.** The parts reuse the mining part items (`mining_cpu_std`, `mining_ram_adv` and so on, three tiers each). Network cards are new: use the item files in `install/`. The Mining parts shop sells them.
 - **Fitting parts.** Use the tower prop (the same menu as before, now with the extra slots). Anyone nearby can fit or remove parts. The tower must be placed next to a monitor.
 - **Computers without a tower** (everything in `Config.Locations` and anything placed with `/placeprops`) need a build too. Staff fit one without items: `/pcbuild <key> [std|adv|elite] [all]` (for example `/pcbuild c1 std`). `all` also fits a GPU and a network card.
 - **Wear.** While a computer is on, each fitted part loses condition (`WearHours`, default 100 hours of use). A worn part keeps working but runs slower.
@@ -587,4 +587,4 @@ Every computer has its own accounts. The first person to start a computer sets i
 - Computers report their load every 30 seconds. Temperature comes from load, wear and cooling (`Config.Hardware.Temp`; fan and liquid cooling are tower parts in the `cool` slot).
 - **Blue screens**: worn or missing parts, overheating and a small random chance (`Config.Hardware.Crash`). The session ends, the failing part takes extra wear, the Event Viewer logs the stop code, and the player sees a blue screen, then the boot screen and sign-in. `/pccrash <key> [part]` (admin) tests it.
 - **IT job** (`Config.Hardware.ITJob`, default `it`): at a tower, "IT service" reads fault codes and repairs a part using `thermal_paste`.
-- Add these ox_inventory items: `mining_wifi_*`, `mining_eth_*`, `mining_fan_*`, `mining_liquid_*`, `thermal_paste`.
+- All items are listed in `install/` (ox_inventory and qb-core formats).
