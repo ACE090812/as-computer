@@ -87,6 +87,28 @@ local SPEC = {
   -- text size, set from the browser's own Settings menu (the 3-dot menu > Settings), not the Settings app.
   scoutTheme    = function(v) if v == '' then return '' end return enum('light', 'dark')(v) end,
   scoutTextSize = enum('small', 'normal', 'large'),
+  -- notification centre: Do not disturb, sounds, and the apps whose toasts are muted (ui/notify.js)
+  dnd           = bool,
+  notifSound    = bool,
+  notifMute     = function(v)
+    if type(v) ~= 'table' then return nil end
+    local out, n = {}, 0
+    for _, id in ipairs(v) do
+      if type(id) == 'string' and id:match('^[%w_%-]+$') and #id <= 32 then n = n + 1; out[n] = id end
+      if n >= 24 then break end
+    end
+    return out
+  end,
+  -- apps that open by themselves when the computer starts (Task Manager > Startup)
+  startupApps   = function(v)
+    if type(v) ~= 'table' then return nil end
+    local out, seen, n = {}, {}, 0
+    for _, id in ipairs(v) do
+      if type(id) == 'string' and id:match('^[%w_%-]+$') and #id <= 32 and not seen[id] then seen[id] = true; n = n + 1; out[n] = id end
+      if n >= 12 then break end
+    end
+    return out
+  end,
   iconPos       = function(v)
     if type(v) ~= 'table' then return nil end
     local out, n = {}, 0

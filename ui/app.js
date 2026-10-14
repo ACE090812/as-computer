@@ -552,6 +552,7 @@
       html += '<button class="' + cls + '" data-tb="' + esc(k) + '" title="' + esc(w.title || '') + '">' + icSpan(w.icon) + '</button>';
     });
     $('tb-apps').innerHTML = html;
+    if (window.LSOS && LSOS._onWins) { try { LSOS._onWins(); } catch (e) { /* ignore */ } }
   }
 
   function taskbarClick(id) {
@@ -618,8 +619,15 @@
     tick();
     if (state.lockPassword && pw) setTimeout(function () { pw.focus(); }, 30);
   }
+  // Task Manager > Startup: the apps the player chose open by themselves once per start (not when unlocking or resuming).
+  function runStartupApps() {
+    var list = P().startupApps;
+    if (!Array.isArray(list)) return;
+    list.forEach(function (id) { if (wins[id] && appVisible(id) && !wins[id].open) openWin(id); });
+  }
   function signIn() {
     $('lock').classList.add('hidden');
+    if (!state.startupDone) { state.startupDone = true; setTimeout(runStartupApps, 400); }
     if (!isDui) postToClient('sessionState', { state: 'active' });
     if (state.certsState === 'idle') refreshCerts();
     if (FS.bin.state === 'idle') fsBinLoad(true);
@@ -2411,6 +2419,11 @@
         { sep: true },
         { label: t('ui_br_remove', 'Remove'), run: function () { brRemoveBm(cu); } }
       ];
+    }
+    else if (e.target.closest('#taskbar') && !e.target.closest('[data-tb]') && !isDui) {
+      items = [];
+      if (appVisible('taskmgr') && wins.taskmgr) items.push({ label: t('app_taskmgr', 'Task Manager'), bold: true, run: function () { LSOS.openApp('taskmgr'); } });
+      items.push({ label: t('ui_app_settings', 'Settings'), run: function () { openSettings(); } });
     }
     if (items) showCtx(e, items); else hideCtx();
   });
@@ -4755,6 +4768,7 @@
 
   // ================================================================ session control
   function resetSession() {
+    state.startupDone = false;
     closeAllWindows();
     Object.keys(EXT).forEach(function (k) { if (EXT[k].onReset) EXT[k].onReset(); });
     brReset();
@@ -4945,6 +4959,29 @@
     t: t, fmt: fmt, esc: esc, fmtPlate: fmtPlate, ic: ic, icSpan: icSpan, fillIcons: fillIcons, confirmDlg: confirmDlg,
     showDlg: showDlg, closeDlg: closeDlg, print: openPrintDialog, isDui: isDui, state: state,
     winOpen: function (id) { return !!(wins[id] && wins[id].open); },
+    // window manager access for the Task Manager and the notification centre
+    winList: function () {
+      var out = [];
+      Object.keys(wins).forEach(function (k) {
+        var w = wins[k];
+        if (w.open) out.push({ id: k, title: w.title || t(w.titleKey, w.titleDef), icon: w.icon, min: !!w.min, active: activeId === k, z: +w.el.style.zIndex || 0 });
+      });
+      return out;
+    },
+    endTask: function (id) { if (wins[id] && wins[id].open) closeWin(id); },
+    bringTo: function (id) { if (wins[id]) { if (!wins[id].open || wins[id].min) openWin(id); else focusWin(id); } },
+    openApp: function (id) { if (wins[id] && appVisible(id)) { if (!wins[id].open || wins[id].min) openWin(id); else focusWin(id); } },
+    apps: function () {
+      var out = [];
+      document.querySelectorAll('.dicon[data-app]').forEach(function (el) {
+        var id = el.dataset.app; if (!wins[id] || !appVisible(id)) return;
+        out.push({ id: id, title: wins[id].title || t(wins[id].titleKey, wins[id].titleDef) });
+      });
+      return out;
+    },
+    prefs: function () { return P(); },
+    setPrefs: function (o) { seSet(o); },
+    api: seApi,
     registerApp: function (o) {
       if (EXT[o.id] || isDui) return null;
       ICONS[o.id] = o.icon;

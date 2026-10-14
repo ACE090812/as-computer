@@ -460,6 +460,7 @@ local function tickTower(row)
     if ownerSrc then
       TriggerClientEvent('as-computer:client:notify', ownerSrc,
         L('mining_notify_failure', table.concat(failedSlots, ', '):upper()), 'error')
+      if Notify then Notify.Send(key, { app = 'mining', title = 'Mining', text = L('mining_notify_failure', table.concat(failedSlots, ', '):upper()), priority = 'high', action = { app = 'mining' } }) end
     end
   end
 end

@@ -116,6 +116,27 @@ RegisterCommand('pcbuild', function(src, args)
   if ok and AdminLog then AdminLog(src, 'pcbuild', key .. ' ' .. tier) end
 end, false)
 
+--- Rough size of what is stored on a computer, in MB, from its files: a text file is tiny, pictures, sound and video are not.
+local KIND_MB = { text = 0.02, folder = 0, image = 3, audio = 5, video = 40, file = 1 }
+function Hardware.DiskUsedMB(key)
+  local rows = MySQL.query.await(
+    "SELECT kind, COUNT(*) AS n FROM computer_files WHERE deleted_at = 0 AND ((scope = 'personal' AND owner LIKE ?) OR (scope = 'pcshared' AND owner = ?)) GROUP BY kind",
+    { 'pc:' .. key .. ':%', key }) or {}
+  local mb = 0
+  for _, r in ipairs(rows) do mb = mb + (KIND_MB[r.kind] or 1) * (tonumber(r.n) or 0) end
+  return mb
+end
+
+--- What the Task Manager and the Hardware settings page read. Only the computer being used, never an arbitrary key.
+MotCallback.Register('hardware:info', function(src, respond, key)
+  if type(key) ~= 'string' or not key:match('^[cpm]%d+$') then return respond({ success = false }) end
+  local st = Hardware.Status(key)
+  local slots = {}
+  for slot, p in pairs(st.slots) do slots[slot] = { tier = p.tier, wear = p.wear, part = p.part } end
+  respond({ success = true, bootable = st.bootable, perf = st.perf, ramMB = st.ramMB, storageMB = st.storageMB, diskUsedMB = Hardware.DiskUsedMB(key),
+    hasGpu = st.hasGpu, gpuPerf = st.gpuPerf, network = st.network, networkSpeed = st.networkSpeed, slots = slots })
+end)
+
 --- For other scripts and the UI: hardware of a computer.
 exports('computerHardware', function(key) return Hardware.Status(tostring(key or '')) end)
 

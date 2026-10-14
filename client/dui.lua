@@ -777,3 +777,17 @@ AddEventHandler('onResourceStop', function(resource)
     if loc.spawnedObject then DeleteEntity(loc.spawnedObject) end
   end
 end)
+
+
+-- Notifications for the computer the player is using (server/notify.lua). `key` is set when it was meant for one computer.
+RegisterNetEvent('as-computer:client:pcNotify', function(key, n)
+  if not currentTerminal or not currentTerminal.key then return end
+  if key and key ~= currentTerminal.key then return end
+  SendNuiMessage(json.encode({ action = 'pcNotify', n = n }))
+end)
+
+-- Task Manager / Settings > Hardware: what is fitted in the computer being used and how it is doing.
+RegisterNUICallback('hardwareApi', function(data, cb)
+  if not currentTerminal or not currentTerminal.key then return cb({ success = false }) end
+  MotCallback.Trigger('hardware:info', function(r) cb(r or { success = false }) end, currentTerminal.key)
+end)

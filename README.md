@@ -567,3 +567,8 @@ Every computer has its own accounts. The first person to start a computer sets i
 - **Files stay with the computer.** Documents and Downloads are kept per account on that computer. A new **Public** folder in File Explorer is shared by everyone who uses the computer. Files sent to a character while no computer is involved (certificates, letters) arrive in the Downloads of the next computer that character opens.
 - **Shared by the character on every computer:** Mail (the phone's inbox), Notepad notes, the calendar and phone photos. Settings follow the character too.
 - Removing a placed computer wipes its accounts. Wipes, as before, also happen once on the first start of this version.
+
+## Task Manager and notifications
+
+- **Task Manager** (desktop icon, taskbar right-click menu, or Ctrl+Shift+Esc): Processes (open apps, End task, apps that do not fit in memory show Not responding), Performance (CPU, memory, disk, GPU and network graphs worked out from the parts in the tower and what is open), Startup apps (apps that open by themselves, saved per character) and Details and services. Other files add background rows with `LSOS.registerProcess(fn)`.
+- **Notification centre**: a bell in the taskbar opens the panel. Toasts appear bottom right for 5 seconds with a chime. Do not disturb silences everything, and each app can be muted. Other scripts send notifications with `exports['as-computer']:notifyComputer(target, { title, text, app, icon, priority, action = { app = 'mail' } })`, where `target` is a computer key (`'c1'`, `'p3'`, `'m7'`) or a character id.

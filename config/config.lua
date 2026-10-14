@@ -109,6 +109,7 @@ Config.PublicApps = {
   notepad    = true,
   calculator = true,
   settings   = true,
+  taskmgr    = true,   -- Task Manager
   mining     = true,   -- Crypto Mining Rig, Phase 3: open to all players, no licence/job gate
 }
 

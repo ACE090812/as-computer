@@ -65,6 +65,7 @@ server_scripts {
   'server/session.lua',
   'server/mirror.lua',
   'server/mining.lua',    -- Crypto Mining Rig, Phase 1: part purchase (needs Bridge + ox_inventory, both above)
+  'server/notify.lua',     -- computer notifications (exports.notifyComputer)
   'server/hardware.lua',   -- computer hardware: boot rule, wear, /pcbuild, first-start wipe (needs Mining from above)
   'server/mining_place.lua',   -- Crypto Mining Rig, Phase 4: player placement (needs Mining.EnsureRig from server/mining.lua, and Bridge.GetIdentifier, both above)
   'server/main.lua',
@@ -87,6 +88,10 @@ files {
   'ui/mail.css',
   'ui/calculator.js',
   'ui/calculator.css',
+  'ui/notify.js',
+  'ui/notify.css',
+  'ui/taskmgr.js',
+  'ui/taskmgr.css',
   'ui/notepad.js',
   'ui/notepad.css',
   'ui/files.css',

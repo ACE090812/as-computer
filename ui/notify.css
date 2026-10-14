@@ -1,0 +1,28 @@
+#tb-bell{position:relative}
+#tb-bell .nt-bell{display:inline-flex;width:18px;height:18px}
+#tb-bell .nt-bell svg{width:100%;height:100%}
+#tb-bell.dnd .nt-bell{opacity:.45}
+.nt-dot{position:absolute;right:4px;top:3px;width:8px;height:8px;border-radius:50%;background:#e5484d}
+#nt-toasts{position:absolute;right:12px;bottom:56px;width:320px;display:flex;flex-direction:column;gap:8px;z-index:140;pointer-events:none}
+.nt-toast{pointer-events:auto;cursor:pointer;background:rgba(32,32,36,.96);color:#fff;border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.4);animation:ntin .25s ease-out;transition:opacity .3s,transform .3s}
+.nt-toast.out{opacity:0;transform:translateX(30px)}
+.nt-toast.hi{border-left:4px solid #f59e0b}
+@keyframes ntin{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+#nt-panel{position:absolute;right:8px;bottom:52px;width:360px;max-height:70%;display:flex;flex-direction:column;background:rgba(36,36,42,.97);color:#fff;border:1px solid rgba(255,255,255,.14);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.5);z-index:141;overflow:hidden}
+#nt-panel.hidden{display:none}
+.nt-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.1)}
+.nt-head .grow{flex:1}
+.nt-list{overflow:auto;padding:8px;display:flex;flex-direction:column;gap:8px}
+.nt-empty{padding:26px;text-align:center;opacity:.6;font-size:13px}
+.nt-item{background:rgba(255,255,255,.07);border-radius:8px;padding:9px 11px}
+.nt-item.hi{border-left:4px solid #f59e0b}
+.nt-app{display:flex;align-items:center;gap:8px;font-size:11.5px;opacity:.7;text-transform:uppercase;letter-spacing:.03em}
+.nt-time{margin-left:auto;opacity:.8}
+.nt-x{background:none;border:0;color:inherit;cursor:pointer;font-size:16px;line-height:1;opacity:.7}
+.nt-t{font-weight:600;font-size:14px;margin-top:3px}
+.nt-s{font-size:13px;opacity:.85;margin-top:2px;line-height:1.35}
+.nt-acts{display:flex;gap:6px;margin-top:7px}
+.nt-btn{background:rgba(255,255,255,.12);border:0;color:inherit;border-radius:5px;padding:4px 9px;font-size:12px;cursor:pointer}
+.nt-btn:hover{background:rgba(255,255,255,.22)}
+.nt-btn.on{background:#0f6cbd}
+html.dui #nt-panel,html.dui #nt-toasts,html.dui #tb-bell{display:none!important}
