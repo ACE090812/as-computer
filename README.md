@@ -554,5 +554,16 @@ Every computer is a monitor plus a tower. A computer only starts when its tower 
 - **Computers without a tower** (everything in `Config.Locations` and anything placed with `/placeprops`) need a build too. Staff fit one without items: `/pcbuild <key> [std|adv|elite] [all]` (for example `/pcbuild c1 std`). `all` also fits a GPU and a network card.
 - **Wear.** While a computer is on, each fitted part loses condition (`WearHours`, default 100 hours of use). A worn part keeps working but runs slower.
 - **Mining** no longer uses the tower. It runs only on mining rigs (GPUs) linked to the computer and does not slow the desktop.
-- **First start wipe.** The first time this version starts, every computer's accounts, grants, owners and files are wiped once (`computer_hardware_meta` records it, so it never repeats). Set `Config.Hardware.WipeOnFirstStart = false` before the first start to keep existing data.
+- **First start wipe.** The first time this version starts, every computer's accounts, owners and files are wiped once (`computer_hardware_meta` records it, so it never repeats). Set `Config.Hardware.WipeOnFirstStart = false` before the first start to keep existing data.
 - **For other scripts:** `exports['as-computer']:computerHardware(key)` returns the fitted parts, memory, storage, performance and network of a computer.
+
+## Accounts on each computer
+
+Every computer has its own accounts. The first person to start a computer sets it up and becomes its **owner**. The lock screen lists the accounts of that computer; pick one and enter its password or PIN.
+
+- An account belongs to one computer and one character. The owner can make accounts for other people in **Settings > Accounts > Users on this computer**; the first character to sign in with such an account keeps it. A character can only have one account per computer.
+- Each account can set a PIN (4 to 6 digits) and change its password. Only the owner adds or removes accounts.
+- **Guest** account: no password, can be switched off by the owner. Guests cannot install apps or change Settings, and everything a guest saved is deleted when the guest signs out.
+- **Files stay with the computer.** Documents and Downloads are kept per account on that computer. A new **Public** folder in File Explorer is shared by everyone who uses the computer. Files sent to a character while no computer is involved (certificates, letters) arrive in the Downloads of the next computer that character opens.
+- **Shared by the character on every computer:** Mail (the phone's inbox), Notepad notes, the calendar and phone photos. Settings follow the character too.
+- Removing a placed computer wipes its accounts. Wipes, as before, also happen once on the first start of this version.

@@ -255,9 +255,29 @@ local function courtCanRead(jobName)
   return c ~= nil and (inList(c.writeJobs, jobName) or inList(c.readJobs, jobName))
 end
 
+--- Files belong to the computer, not the character: Documents and Downloads are kept per account on the computer being used
+--- ('pc:<computer key>:<account id>'), so they stay with that computer and its drive. Out of a computer session (nothing to go by)
+--- they fall back to the character.
+local function pcKey(src)
+  local key = Apps and Apps.computerOf and Apps.computerOf(src)
+  if key and ComputerSessionIs and ComputerSessionIs(key, src) then return key end
+  return nil
+end
+local function pcOwner(src, cid)
+  local key = pcKey(src)
+  local acct = key and ComputerSessionAccount and ComputerSessionAccount(key)
+  if key and acct then return 'pc:' .. key .. ':' .. acct end
+  return cid
+end
+
 --- Where a place id points for this player, or nil.
 local function place(src, cid, folder)
-  if folder == 'docs' or folder == 'dl' then return { scope = 'personal', owner = cid, folder = folder, key = folder } end
+  if folder == 'docs' or folder == 'dl' then return { scope = 'personal', owner = pcOwner(src, cid), folder = folder, key = folder } end
+  if folder == 'shared' then
+    -- the computer's own shared folder: every account on this computer can use it
+    local key = pcKey(src)
+    if key then return { scope = 'pcshared', owner = key, folder = 'shared', key = 'shared' } end
+  end
   if folder == 'job' then
     local j = Bridge.GetJob(src)
     if jobFolder(j) then return { scope = 'job', owner = j.name, folder = '', isBoss = j.isBoss == true, key = 'job' } end
@@ -285,8 +305,12 @@ local function samePlace(a, b) return a.scope == b.scope and a.owner == b.owner 
 --- The place a row lives in, but only if this player may see it.
 local function placeOfRow(src, cid, row)
   if row.scope == 'personal' then
-    if row.owner ~= cid then return nil end
+    if row.owner ~= pcOwner(src, cid) then return nil end
     return place(src, cid, row.folder)
+  end
+  if row.scope == 'pcshared' then
+    if row.owner ~= pcKey(src) then return nil end
+    return place(src, cid, 'shared')
   end
   if row.scope == 'group' and row.owner == GROUP_OWNER_LEGAL then
     return place(src, cid, 'legal')
@@ -300,7 +324,7 @@ local function placeOfRow(src, cid, row)
 end
 
 local function canManage(p, row, cid)
-  if p.scope == 'personal' then return true end
+  if p.scope == 'personal' or p.scope == 'pcshared' then return true end
   if p.scope == 'group' then return p.canWrite == true end   -- any writeJobs member may manage any file here (police already trust each other's reports)
   if row.created_by == cid then return true end
   return cfg().bossManagesAll ~= false and p.isBoss == true
@@ -978,7 +1002,13 @@ local function binRoots(src, cid, limit)
   local function add(rows) for _, r in ipairs(rows or {}) do out[#out + 1] = r end end
   add(MySQL.query.await(
     "SELECT id, name, kind, scope, owner, folder, parent_id, created_by, created_by_name, deleted_at, deleted_by FROM computer_files " ..
-    "WHERE deleted_at > 0 AND del_root = 1 AND scope = 'personal' AND owner = ? ORDER BY deleted_at DESC LIMIT ?", { cid, limit }))
+    "WHERE deleted_at > 0 AND del_root = 1 AND scope = 'personal' AND owner = ? ORDER BY deleted_at DESC LIMIT ?", { pcOwner(src, cid), limit }))
+  local psh = place(src, cid, 'shared')
+  if psh then
+    add(MySQL.query.await(
+      "SELECT id, name, kind, scope, owner, folder, parent_id, created_by, created_by_name, deleted_at, deleted_by FROM computer_files " ..
+      "WHERE deleted_at > 0 AND del_root = 1 AND scope = 'pcshared' AND owner = ? ORDER BY deleted_at DESC LIMIT ?", { psh.owner, limit }))
+  end
   local p = place(src, cid, 'job')
   if p then
     add(MySQL.query.await(
@@ -1047,7 +1077,7 @@ MotCallback.Register('filesApi', function(src, respond, name, data)
 
   if name == 'tree' then
     local out = {}
-    for _, key in ipairs({ 'docs', 'dl', 'job', 'legal', 'court' }) do
+    for _, key in ipairs({ 'docs', 'dl', 'shared', 'job', 'legal', 'court' }) do
       local p = place(src, cid, key)
       if p then
         local rows = MySQL.query.await(
@@ -1062,6 +1092,11 @@ MotCallback.Register('filesApi', function(src, respond, name, data)
   if name == 'list' then
     local p = place(src, cid, data.folder)
     if not p then return bad() end
+    if data.folder == 'dl' and p.owner ~= cid then
+      -- files delivered to the character while no computer was involved (certificates, letters) land in the Downloads of the
+      -- computer they open next
+      MySQL.update.await("UPDATE computer_files SET owner = ? WHERE scope = 'personal' AND owner = ? AND folder = 'dl'", { p.owner, cid })
+    end
     if not getParent(p, pid) then return bad() end
     local rows = MySQL.query.await(
       'SELECT id, name, kind, url, parent_id, CHAR_LENGTH(body) AS size, LEFT(body, 200) AS snip, created_by, created_by_name, updated_at, ' ..
@@ -1395,3 +1430,10 @@ exports('saveToDownloads', function(cid, name, body, fromName)
   local id = insertRow(p, 0, 'text', unique, text, '', cid, tostring(fromName or ''):sub(1, 100))
   return id, id and nil or 'error'
 end)
+
+
+--- Deletes everything one owner key holds (the guest account's files when a guest signs out). Used by server/session.lua.
+function FilesWipeOwner(owner)
+  if type(owner) ~= 'string' or not owner:match('^pc:[cpm]%d+:%d+$') then return end
+  MySQL.update('DELETE FROM computer_files WHERE scope = ? AND owner = ?', { 'personal', owner })
+end

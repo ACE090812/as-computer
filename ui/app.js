@@ -673,10 +673,24 @@
   // sense in that case. On an ORDINARY login (machine already claimed, this player just isn't signed
   // in on it right now) that link would be actively wrong - Setup always fails once a machine has an
   // owner, so it's kept hidden for the normal `needsLogin` flow.
-  function showGateLogin(fromFreshMachine) {
+  function showGateLogin(fromFreshMachine, accountList, mine) {
     $('gate-noboot').classList.add('hidden');
     $('gate-setup').classList.add('hidden');
-    $('gl-user').value = '';
+    var tiles = $('gl-accts');
+    if (tiles) {
+      tiles.innerHTML = (accountList || []).map(function (a) {
+        return '<div class="gl-acct" data-u="' + esc(a.username) + '" data-guest="' + (a.isGuest ? 1 : 0) + '"><span class="av">' + esc(a.username.charAt(0).toUpperCase()) + '</span>' +
+          '<span>' + esc(a.isGuest ? t('ui_guest', 'Guest') : a.username) + '</span></div>';
+      }).join('');
+      tiles.onclick = function (e) {
+        var el = e.target.closest('.gl-acct'); if (!el) return;
+        DOMq(tiles, '.gl-acct').forEach(function (x) { x.classList.toggle('on', x === el); });
+        $('gl-user').value = el.dataset.u;
+        if (el.dataset.guest === '1') { $('gl-pass').value = ''; GATE.guest = true; submitGateLogin(); return; }
+        GATE.guest = false; $('gl-pass').focus();
+      };
+    }
+    $('gl-user').value = mine || '';
     $('gl-pass').value = '';
     gateErr('gl-err', '');
     var sub = $('gl-sub'), link = $('gl-link');
@@ -688,6 +702,7 @@
     setTimeout(function () { $('gl-user').focus(); }, 30);
   }
 
+  function DOMq(root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); }
   function gateErr(id, msg) { var e = $(id); if (e) e.textContent = msg || ''; }
 
   function submitGateSetup() {
@@ -714,12 +729,16 @@
     if (GATE.busy) return;
     var u = ($('gl-user').value || '').trim();
     var p = $('gl-pass').value || '';
-    if (!u || !p) { gateErr('gl-err', t('ui_login_err_req', 'Enter a username and password.')); return; }
+    if (!u || (!p && !GATE.guest)) { gateErr('gl-err', t('ui_login_err_req', 'Enter a username and password.')); return; }
+    GATE.guest = false;
     GATE.busy = true; gateErr('gl-err', '');
     gateApi('login', { username: u, password: p }).then(function (r) {
       GATE.busy = false;
       if (r && r.success) { afterSignedIn(); return; }
       var msg = (r && r.error === 'not_granted') ? t('ui_login_err_notgranted', "That account doesn't have access to this computer.")
+        : (r && r.error === 'not_yours') ? t('ui_login_err_notyours', 'That account belongs to someone else.')
+        : (r && r.error === 'has_account') ? t('ui_login_err_hasacct', 'You already have an account on this computer.')
+        : (r && r.error === 'no_boot') ? t('ui_noboot_title', 'No bootable device')
         : t('ui_login_err_bad', 'Incorrect username or password.');
       gateErr('gl-err', msg);
       $('gl-pass').value = '';
@@ -1077,6 +1096,7 @@
     add('root', null, 'pc', 'ui_fx_pc', 'This PC');
     add('docs', 'root', 'folder', 'ui_fx_docs', 'Documents');
     add('dl', 'root', 'folder', 'ui_fx_dl', 'Downloads');
+    add('pcf', 'root', 'folder', 'ui_fx_pcshared', 'Public');
     add('jobf', 'root', 'folder', 'fl_jobf', 'Shared');
     add('legalf', 'root', 'folder', 'fl_legalf', 'Case Files');
     add('courtf', 'root', 'folder', 'fl_courtf', 'Court Files');
@@ -1094,7 +1114,7 @@
       if (c === 'jobf') return !!FS.job;
       if (c === 'legalf') return !!FS.legal;
       if (c === 'courtf') return !!FS.court;
-      if (c === 'docs' || c === 'dl') return FS.enabled !== false;
+      if (c === 'docs' || c === 'dl' || c === 'pcf') return FS.enabled !== false;
       return true;
     });
   }
@@ -1113,7 +1133,7 @@
   // (server/files.lua). Every call goes through the 'filesApi' NUI callback (client/files.lua); the server decides who may see
   // or change what, this page only shows it. An Explorer location is 'docs' | 'dl' | 'jobf', or 'docs:12' for the folder with
   // id 12 inside it.
-  var FILE_KEY = { docs: 'docs', dl: 'dl', jobf: 'job', legalf: 'legal', courtf: 'court' };
+  var FILE_KEY = { docs: 'docs', dl: 'dl', pcf: 'shared', jobf: 'job', legalf: 'legal', courtf: 'court' };
   var FS = { tried: false, enabled: true, job: null, isBoss: false, legal: null, legalWrite: false, court: null, courtWrite: false, phone: false, recycle: true, limits: {}, state: {}, data: {}, seq: {}, edit: {}, bin: { state: 'idle', data: [], days: 0, seq: 0 } };
   var KIND_ICON = { folder: 'folder', text: 'filetxt', image: 'fileimg', video: 'filevid', audio: 'fileaud', file: 'filegen' };
 
@@ -1271,7 +1291,7 @@
     if (certs.length) restoreCerts(certs);
     if (files.length) fsRestoreFiles(files);
   }
-  function binPlaceName(pl) { return nodeName(pl === 'job' ? 'jobf' : pl === 'legal' ? 'legalf' : pl === 'court' ? 'courtf' : pl); }
+  function binPlaceName(pl) { return nodeName(pl === 'shared' ? 'pcf' : pl === 'job' ? 'jobf' : pl === 'legal' ? 'legalf' : pl === 'court' ? 'courtf' : pl); }
   function binFileRow(f, key, selCls) {
     return '<div class="ex-row' + selCls + '" data-key="' + esc(key) + '"><div class="nm">' + icSpan(KIND_ICON[f.kind] || 'filetxt') + '<span>' + esc(f.name) + '</span></div>' +
       '<div class="dim">' + esc(fmtDate(f.deletedAt)) + '</div><div class="dim">' + esc(kindLabel(f.kind)) + '</div><div class="dim">' + esc(f.deletedBy || '—') + '</div></div>';
@@ -1459,7 +1479,7 @@
     if (!files.length) return;
     fsApi('tree').then(function (res) {
       if (!res.ok) { fsErrDlg(res); return; }
-      var folders = res.data.folders || [], byPlace = { docs: [], dl: [], job: [] }, kids = {}, block = {};
+      var folders = res.data.folders || [], byPlace = { docs: [], dl: [], shared: [], job: [] }, kids = {}, block = {};
       folders.forEach(function (f) { (byPlace[f.place] = byPlace[f.place] || []).push(f); (kids[f.parent] = kids[f.parent] || []).push(f.id); });
       files.forEach(function (f) { if (f.kind === 'folder') (function m(id) { block[id] = true; (kids[id] || []).forEach(m); })(f.id); });
       var cur = curFolder(), html = '<div class="fl-pick">';
@@ -1467,7 +1487,7 @@
         html += '<label class="fl-pk' + (off ? ' off' : '') + '" style="padding-left:' + (8 + depth * 18) + 'px"><input type="radio" name="fspick" value="' + esc(key) + '"' + (off ? ' disabled' : '') + '>' +
           icSpan('folder') + '<span>' + esc(label) + '</span></label>';
       }
-      ['docs', 'dl', 'jobf'].forEach(function (base) {
+      ['docs', 'dl', 'pcf', 'jobf'].forEach(function (base) {
         if (base === 'jobf' && !FS.job) return;
         line(base, nodeName(base), 0, mode === 'move' && cur === base);
         (function walk(parent, depth) {
@@ -3789,6 +3809,7 @@
     'personal/themes': ['personal', 'se_themes', 'Themes'], 'personal/lock': ['personal', 'se_lockscreen', 'Lock screen'],
     'personal/taskbar': ['personal', 'se_taskbar', 'Taskbar'],
     'accounts/info': ['accounts', 'se_yourinfo', 'Your info'], 'accounts/signin': ['accounts', 'se_signin', 'Sign-in options'],
+    'accounts/users': ['accounts', 'se_users', 'Users on this computer'],
     'time/datetime': ['time', 'se_datetime', 'Date & time'], 'time/language': ['time', 'se_language', 'Language & region']
   };
   // settings you can search for: [page, locale key, default text, extra words]
@@ -4043,7 +4064,8 @@
     return '<div class="se-hero">' + avaSpan() + '<div><div class="hn">' + esc(a.name || '—') + '</div><div class="hs">' + esc([a.job, a.grade].filter(Boolean).join(' · ')) + '</div></div></div>' +
       card([
         row({ ic: 'se_person', title: t('se_yourinfo', 'Your info'), desc: t('se_yourinfo_d', 'Your name, job and profile picture'), go: 'accounts/info' }),
-        row({ ic: 'se_key', title: t('se_signin', 'Sign-in options'), desc: t('se_signin_d', 'The lock screen, sign-in password'), go: 'accounts/signin' })
+        row({ ic: 'se_key', title: t('se_signin', 'Sign-in options'), desc: t('se_signin_d', 'The lock screen, sign-in password'), go: 'accounts/signin' }),
+        row({ ic: 'se_person', title: t('se_users', 'Users on this computer'), desc: t('se_users_d', 'Accounts, your PIN and password, guests'), go: 'accounts/users' })
       ]);
   };
   PAGE['accounts/info'] = function () {
@@ -4057,6 +4079,68 @@
       kv(t('se_acc_type', 'Account type'), a.isBoss ? t('se_acc_boss', 'Administrator (boss)') : t('se_acc_std', 'Standard user'))]);
     return out;
   };
+  // Users on this computer: the computer's own accounts (server/accounts.lua). Loaded when the page opens.
+  var UA = { data: null, err: '' };
+  PAGE['accounts/users'] = function () { return '<div id="se-users"><div class="se-empty">' + esc(t('ui_fx_loading', 'Loading…')) + '</div></div>'; };
+  function seUsersLoad() {
+    gateApi('accounts').then(function (r) {
+      UA.data = (r && r.success) ? r : null;
+      seUsersDraw();
+    });
+  }
+  function seUsersDraw() {
+    var host = $('se-users'); if (!host) return;
+    var d = UA.data;
+    if (!d) { host.innerHTML = '<div class="se-empty">' + esc(t('se_users_err', "Couldn't load accounts.")) + '</div>'; return; }
+    var out = '';
+    if (UA.err) out += '<div class="se-note err">' + esc(UA.err) + '</div>';
+    out += card([
+      row({ ic: 'se_person', title: d.me.username, desc: d.me.isGuest ? t('se_users_guestme', 'You are signed in as a guest') : (d.me.isOwner ? t('se_users_owner', 'Owner of this computer') : t('se_users_you', 'Your account')) }),
+    ]);
+    if (!d.me.isGuest) {
+      out += '<div class="se-gap"></div><div class="se-sec">' + esc(t('se_users_signin', 'YOUR SIGN-IN')) + '</div>' + card([
+        '<div class="se-pwform-fields" style="padding:12px 14px"><div class="field"><label>' + esc(t('se_users_pin', 'PIN (4 to 6 digits, leave empty to remove)')) + '</label><input type="password" inputmode="numeric" maxlength="6" class="se-inp" id="ua-pin" autocomplete="off"></div>' +
+        '<button class="se-btn primary" data-uact="pin">' + esc(t('ui_save', 'Save')) + '</button></div>',
+        '<div class="se-pwform-fields" style="padding:12px 14px"><div class="field"><label>' + esc(t('se_pw_current', 'Current password')) + '</label><input type="password" class="se-inp" id="ua-old" autocomplete="off"></div>' +
+        '<div class="field"><label>' + esc(t('se_pw_new', 'New password')) + '</label><input type="password" class="se-inp" id="ua-new" autocomplete="off"></div>' +
+        '<button class="se-btn primary" data-uact="pw">' + esc(t('se_pw_change', 'Change')) + '</button></div>'
+      ]);
+    }
+    if (d.me.isOwner && d.accounts) {
+      out += '<div class="se-gap"></div><div class="se-sec">' + esc(t('se_users_all', 'ACCOUNTS ON THIS COMPUTER')) + '</div><div class="se-card">' +
+        d.accounts.map(function (a) {
+          return '<div class="se-urow"><div class="un">' + esc(a.isGuest ? t('ui_guest', 'Guest') : a.username) + '<small>' +
+            esc(a.isOwner ? t('se_users_owner', 'Owner of this computer') : a.isGuest ? t('se_users_guest', 'No password, limited') : (a.claimed ? t('se_users_claimed', 'In use') : t('se_users_unclaimed', 'Waiting for its person to sign in'))) + '</small></div>' +
+            ((a.isOwner || a.isGuest) ? '' : '<button class="se-btn danger" data-uact="del" data-id="' + a.accountId + '">' + esc(t('se_ava_remove', 'Remove')) + '</button>') + '</div>';
+        }).join('') + '</div>';
+      out += '<div class="se-gap"></div>' + card([
+        row({ ic: 'se_person', title: t('se_users_guests', 'Allow a guest account'), desc: t('se_users_guests_d', 'No password. Cannot install apps or change settings, and its files are wiped when it signs out.'), right: tg('uaGuests', !!d.guests) })
+      ]);
+      out += '<div class="se-gap"></div><div class="se-sec">' + esc(t('se_users_new', 'ADD AN ACCOUNT')) + '</div>' + card([
+        '<div class="se-pwform-fields" style="padding:12px 14px"><div class="field"><label>' + esc(t('ui_setup_user', 'Username')) + '</label><input type="text" maxlength="20" class="se-inp" id="ua-user" autocomplete="off"></div>' +
+        '<div class="field"><label>' + esc(t('ui_setup_pass', 'Password')) + '</label><input type="password" maxlength="64" class="se-inp" id="ua-pass" autocomplete="off"></div>' +
+        '<div class="se-rd">' + esc(t('se_users_new_d', 'Give the person the password. The first character to sign in with it keeps the account.')) + '</div>' +
+        '<button class="se-btn primary" data-uact="add">' + esc(t('se_users_add', 'Add account')) + '</button></div>'
+      ]);
+    }
+    host.innerHTML = out;
+    fillIcons(host);
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-uact]'); if (!b || !$('se-users')) return;
+    var act = b.dataset.uact;
+    function done(r, okMsg) { UA.err = (r && r.success) ? '' : t('se_users_fail', 'That did not work.') + (r && r.error ? ' (' + r.error + ')' : ''); seUsersLoad(); }
+    if (act === 'pin') { gateApi('setPin', { pin: $('ua-pin').value }).then(done); }
+    else if (act === 'pw') { gateApi('setPassword', { old: $('ua-old').value, new: $('ua-new').value }).then(done); }
+    else if (act === 'add') { gateApi('createAccount', { username: $('ua-user').value, password: $('ua-pass').value }).then(done); }
+    else if (act === 'del') { gateApi('removeAccount', { accountId: Number(b.dataset.id) }).then(done); }
+  });
+  document.addEventListener('click', function (e) {
+    var g = e.target.closest && e.target.closest('[data-tg="uaGuests"]'); if (!g || !$('se-users')) return;
+    e.stopPropagation();
+    gateApi('setGuests', { on: !g.classList.contains('on') }).then(function () { seUsersLoad(); });
+  }, true);
+
   PAGE['accounts/signin'] = function () {
     var p = P(), a = (SE.info || {}).account || {}, hasPw = !!a.hasPassword;
     var out = card([row({ ic: 'se_lock', title: t('se_lock_show', 'Show the lock screen'), desc: t('se_lock_show_d', 'Show the lock screen when the computer opens, before the desktop'), right: tg('lockShow', p.lockShow !== false) })]);
@@ -4125,6 +4209,7 @@
     $('se-page').innerHTML = head + notice + page;
     fillIcons($('se-root'));
     seTickClock();
+    if (SE.page === 'accounts/users') seUsersLoad();
   }
 
   function seTickClock() {
@@ -4801,7 +4886,7 @@
         showGateSetup();
       } else if (d.needsLogin) {
         resetSession();
-        showGateLogin();
+        showGateLogin(false, d.accounts, d.myAccount);
       } else if (d.resume) {
         applyPrefs();
         applyApps();

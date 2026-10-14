@@ -390,6 +390,7 @@ end
 
 MotCallback.Register('settingsApi', function(src, respond, name, data)
   if not Bridge.HasComputerJob(src) then return respond({ ok = false, reason = 'not_authorised' }) end
+  if PlayerIsGuest and PlayerIsGuest(src) and name ~= 'passwordCheck' then return respond({ ok = false, reason = 'guest' }) end   -- guests cannot change Settings
   if name == 'wifiConnect' then return wifiConnect(src, respond, data) end
   if name == 'set' then return wifiSet(src, respond, data) end
   if name == 'passwordSet' then return passwordSet(src, respond, data) end

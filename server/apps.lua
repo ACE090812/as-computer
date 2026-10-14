@@ -387,6 +387,7 @@ MotCallback.Register('storeApi', function(src, respond, name, data)
   if not Apps.canManage(job, id) then return respond({ ok = false, reason = 'not_boss' }) end
 
   if name ~= 'install' and name ~= 'uninstall' then return respond({ ok = false, reason = 'invalid' }) end
+  if PlayerIsGuest and PlayerIsGuest(src) then return respond({ ok = false, reason = 'guest' }) end   -- guests cannot install or remove apps
 
   if d.personal == true then
     local cid = Bridge.GetIdentifier(src)

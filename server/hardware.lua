@@ -133,7 +133,7 @@ MySQL.ready(function()
     Wait(8000)
     if MySQL.scalar.await("SELECT 1 FROM computer_hardware_meta WHERE k = 'wiped_v1'") then return end
     local wiped = {}
-    for _, t in ipairs({ 'computer_accounts', 'computer_grants', 'computer_owners', 'computer_files' }) do
+    for _, t in ipairs({ 'computer_pc_accounts', 'computer_pc_flags', 'computer_owners', 'computer_files' }) do
       local ok, n = pcall(function() return MySQL.update.await(('DELETE FROM `%s`'):format(t)) end)
       if ok then wiped[#wiped + 1] = ('%s:%s'):format(t, tostring(n)) end
     end

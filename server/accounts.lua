@@ -1,16 +1,16 @@
--- Phase 0.5: per-machine accounts. A shared, server-side identity system independent of the
--- character (citizenid) using the computer: a username/password an admin creates, that then
--- works on every machine it has been explicitly granted onto (or, later, on a `public`-typed
--- machine, on any machine at all - not handled here yet).
+-- Per-computer accounts. Every account belongs to ONE computer (a username only has to be unique on that
+-- computer) and is linked to one character: the character who made it, or, for an account the owner made for
+-- someone else, the first character who signs in with it. A character has at most one account per computer.
+-- Only the computer's owner (whoever finished its first-boot setup) creates and removes accounts. Each account has a
+-- password and an optional PIN. A guest account (no password) can be switched on or off by the owner.
 --
--- Three tables:
---   computer_accounts  - one row per account (global, not per-machine): id, username, password
---                         hash+salt.
---   computer_grants    - join table: which accounts may log into which machine key, and whether
---                         they're an admin on that machine (can add/remove other accounts there).
---   computer_owners    - one row per machine key: the account that "owns" it (the admin who
---                         completed that machine's first-boot setup). Used later for e.g. mining
---                         payouts - always credit the owner, never whoever's logged in.
+-- Tables:
+--   computer_pc_accounts - one row per account: computer_key, username, citizenid (the linked character), password and
+--                          PIN hashes, is_owner, is_guest.
+--   computer_owners      - one row per computer: the owner's account id and character (mining payouts and the Event
+--                          Viewer use it). Kept from the earlier version.
+--   computer_pc_flags    - per computer switches (guests allowed).
+-- The old global tables (computer_accounts, computer_grants) are no longer used.
 --
 -- Machine key format matches server/session.lua: 'c<index>' (built-in Config.Locations computers)
 -- or 'p<placed id>' (placed via /placeprops).
@@ -130,25 +130,21 @@ end
 
 function accounts.ensureSchema()
   MySQL.query.await([[
-    CREATE TABLE IF NOT EXISTS `computer_accounts` (
+    CREATE TABLE IF NOT EXISTS `computer_pc_accounts` (
       `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      `computer_key`  VARCHAR(24)  NOT NULL,
       `username`      VARCHAR(20)  NOT NULL,
-      `password_hash` CHAR(64)     NOT NULL,
-      `password_salt` CHAR(32)     NOT NULL,
+      `citizenid`     VARCHAR(64)  NULL,
+      `password_hash` CHAR(64)     NULL,
+      `password_salt` CHAR(32)     NULL,
+      `pin_hash`      CHAR(64)     NULL,
+      `pin_salt`      CHAR(32)     NULL,
+      `is_owner`      TINYINT(1)   NOT NULL DEFAULT 0,
+      `is_guest`      TINYINT(1)   NOT NULL DEFAULT 0,
       `created_at`    BIGINT       NOT NULL,
       PRIMARY KEY (`id`),
-      UNIQUE KEY `uniq_username` (`username`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-  ]])
-  MySQL.query.await([[
-    CREATE TABLE IF NOT EXISTS `computer_grants` (
-      `computer_key` VARCHAR(24)  NOT NULL,
-      `account_id`   INT UNSIGNED NOT NULL,
-      `is_admin`     TINYINT(1)   NOT NULL DEFAULT 0,
-      `granted_by`   INT UNSIGNED NULL,
-      `granted_at`   BIGINT       NOT NULL,
-      PRIMARY KEY (`computer_key`, `account_id`),
-      KEY `idx_grants_account` (`account_id`)
+      UNIQUE KEY `uniq_pc_user` (`computer_key`, `username`),
+      KEY `idx_pc_cid` (`computer_key`, `citizenid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   ]])
   MySQL.query.await([[
@@ -160,156 +156,189 @@ function accounts.ensureSchema()
       PRIMARY KEY (`computer_key`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   ]])
-  -- Migration for a computer_owners table created before the citizenid column existed (idempotent -
-  -- MySQL has no portable "ADD COLUMN IF NOT EXISTS" here, so a repeat error on an already-migrated
-  -- table is expected and silently swallowed, same pattern as server/mdt.lua's own migrations).
   pcall(function() MySQL.query.await('ALTER TABLE `computer_owners` ADD COLUMN `citizenid` VARCHAR(64) NULL') end)
+  MySQL.query.await([[
+    CREATE TABLE IF NOT EXISTS `computer_pc_flags` (
+      `computer_key` VARCHAR(24) NOT NULL PRIMARY KEY,
+      `guests`       TINYINT(1)  NOT NULL DEFAULT 1
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  ]])
 end
 
 MySQL.ready(function()
   accounts.ensureSchema()
 end)
 
----One account row by (lowercased) username, or nil. Includes the password hash/salt - callers
----outside this file should use accounts.verifyLogin instead of comparing these themselves.
----@param username string
----@return table|nil row { id, username, password_hash, password_salt, created_at }
-local function byUsername(username)
+local function validPin(p) return type(p) == 'string' and p:match('^%d%d%d%d%d?%d?$') ~= nil end
+local function validPassword(p) return type(p) == 'string' and #p >= 4 and #p <= 64 end
+
+---One account row by computer key + (lowercased) username, or nil. Includes hashes: outside this file use verifyLogin.
+local function byUsername(computerKey, username)
   local u = normalizeUsername(username)
-  if not u then return nil end
-  return MySQL.single.await('SELECT * FROM `computer_accounts` WHERE username = ?', { u })
+  if not u or not validKey(computerKey) then return nil end
+  return MySQL.single.await('SELECT * FROM `computer_pc_accounts` WHERE computer_key = ? AND username = ?', { computerKey, u })
 end
 
----One account row by id, or nil.
----@param id integer
----@return table|nil row
+---One account by id (no hashes), or nil.
 function accounts.byId(id)
   if not id then return nil end
-  return MySQL.single.await('SELECT id, username, created_at FROM `computer_accounts` WHERE id = ?', { id })
+  return MySQL.single.await('SELECT id, computer_key, username, citizenid, is_owner, is_guest, created_at FROM `computer_pc_accounts` WHERE id = ?', { id })
 end
 
----True if a machine key has at least one grant - i.e. it has already been through first-boot
----setup. A key with zero grants is what triggers the setup wizard instead of a login screen.
----@param computerKey string
----@return boolean
+---True if a computer already has a real (non-guest) account, i.e. it has been through first-boot setup.
 function accounts.hasAnyGrants(computerKey)
   if not validKey(computerKey) then return false end
-  local row = MySQL.single.await('SELECT 1 AS x FROM `computer_grants` WHERE computer_key = ? LIMIT 1', { computerKey })
-  return row ~= nil
+  return MySQL.single.await('SELECT 1 AS x FROM `computer_pc_accounts` WHERE computer_key = ? AND is_guest = 0 LIMIT 1', { computerKey }) ~= nil
 end
 
----Creates a brand-new account (fails if the username is taken or invalid).
----@param username string 3-20 chars, [a-z0-9_], case-insensitive
----@param password string plaintext; hashed+salted before storage, never stored/logged raw
----@return integer|nil id, string|nil err one of 'invalid_username' | 'invalid_password' | 'taken'
-function accounts.create(username, password)
-  local u = normalizeUsername(username)
-  if not u then return nil, 'invalid_username' end
-  if type(password) ~= 'string' or #password < 4 or #password > 64 then return nil, 'invalid_password' end
-  if byUsername(u) then return nil, 'taken' end
+---The account a character already has on this computer, or nil.
+function accounts.ofCharacter(computerKey, citizenid)
+  if not validKey(computerKey) or not citizenid then return nil end
+  return MySQL.single.await('SELECT id, username, is_owner FROM `computer_pc_accounts` WHERE computer_key = ? AND citizenid = ? AND is_guest = 0', { computerKey, citizenid })
+end
 
+---Creates an account on one computer. `citizenid` links it to a character (nil = the first character to sign in claims it).
+---@return integer|nil id, string|nil err 'invalid_username' | 'invalid_password' | 'taken' | 'has_account'
+function accounts.create(computerKey, username, password, citizenid, isOwner)
+  if not validKey(computerKey) then return nil, 'invalid_username' end
+  local u = normalizeUsername(username)
+  if not u or u == 'guest' then return nil, 'invalid_username' end
+  if not validPassword(password) then return nil, 'invalid_password' end
+  if byUsername(computerKey, u) then return nil, 'taken' end
+  if citizenid and accounts.ofCharacter(computerKey, citizenid) then return nil, 'has_account' end
   local salt = genSalt()
-  local hash = accounts.hash(password, salt)
-  local id = MySQL.insert.await(
-    'INSERT INTO `computer_accounts` (username, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?)',
-    { u, hash, salt, os.time() })
+  -- (no nil inside a parameter list: an unclaimed account is written with a literal NULL instead)
+  local id
+  if citizenid then
+    id = MySQL.insert.await(
+      'INSERT INTO `computer_pc_accounts` (computer_key, username, citizenid, password_hash, password_salt, is_owner, is_guest, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?)',
+      { computerKey, u, citizenid, accounts.hash(password, salt), salt, isOwner and 1 or 0, os.time() })
+  else
+    id = MySQL.insert.await(
+      'INSERT INTO `computer_pc_accounts` (computer_key, username, citizenid, password_hash, password_salt, is_owner, is_guest, created_at) VALUES (?, ?, NULL, ?, ?, ?, 0, ?)',
+      { computerKey, u, accounts.hash(password, salt), salt, isOwner and 1 or 0, os.time() })
+  end
   return id
 end
 
----Verifies a username+password. Constant-effort-ish (always hashes) but not constant-time; good
----enough for this game context, not a general-purpose auth library.
----@param username string
----@param password string plaintext
----@return table|nil account { id, username } on success, nil on any failure
-function accounts.verifyLogin(username, password)
-  local row = byUsername(username)
-  if not row then return nil end
-  if type(password) ~= 'string' then return nil end
-  if accounts.hash(password, row.password_salt) ~= row.password_hash then return nil end
-  return { id = row.id, username = row.username }
+---Verifies a sign-in on one computer: the password, or the PIN when one is set. The guest account needs neither.
+---@return table|nil account { id, username, isGuest, isOwner, citizenid }, string|nil err 'bad_credentials' | 'not_yours'
+function accounts.verifyLogin(computerKey, username, password, citizenid)
+  local row = byUsername(computerKey, username)
+  if not row then return nil, 'bad_credentials' end
+  if row.is_guest == 1 then
+    if not accounts.guestsAllowed(computerKey) then return nil, 'bad_credentials' end
+    return { id = row.id, username = row.username, isGuest = true, isOwner = false, citizenid = nil }
+  end
+  if type(password) ~= 'string' or password == '' then return nil, 'bad_credentials' end
+  local ok = row.password_hash and accounts.hash(password, row.password_salt) == row.password_hash
+  if not ok and row.pin_hash and validPin(password) then ok = accounts.hash(password, row.pin_salt) == row.pin_hash end
+  if not ok then return nil, 'bad_credentials' end
+  if row.citizenid and citizenid and row.citizenid ~= citizenid then return nil, 'not_yours' end
+  if not row.citizenid and citizenid then
+    -- the first character to sign in claims an account the owner made for someone else, unless they already have one here
+    if accounts.ofCharacter(computerKey, citizenid) then return nil, 'has_account' end
+    MySQL.update.await('UPDATE `computer_pc_accounts` SET citizenid = ? WHERE id = ?', { citizenid, row.id })
+    row.citizenid = citizenid
+  end
+  return { id = row.id, username = row.username, isGuest = false, isOwner = row.is_owner == 1, citizenid = row.citizenid }
 end
 
----Grants an account access to a machine (upsert - re-granting just updates is_admin).
----@param computerKey string
----@param accountId integer
----@param isAdmin boolean can this account itself grant/revoke others on this machine
----@param grantedBy integer|nil account id of whoever granted it (nil for the setup wizard's own admin grant)
-function accounts.grant(computerKey, accountId, isAdmin, grantedBy)
-  if not validKey(computerKey) or not accountId then return false end
-  MySQL.prepare.await(
-    'INSERT INTO `computer_grants` (computer_key, account_id, is_admin, granted_by, granted_at) VALUES (?, ?, ?, ?, ?) ' ..
-    'ON DUPLICATE KEY UPDATE is_admin = VALUES(is_admin)',
-    { computerKey, accountId, isAdmin and 1 or 0, grantedBy, os.time() })
+---Are guests allowed on this computer? On by default.
+function accounts.guestsAllowed(computerKey)
+  local row = MySQL.single.await('SELECT guests FROM `computer_pc_flags` WHERE computer_key = ?', { computerKey })
+  return row == nil or row.guests == 1 or row.guests == true
+end
+
+---Switch guests on or off (and make sure the guest account exists). Owner only: the caller checks.
+function accounts.setGuests(computerKey, on)
+  if not validKey(computerKey) then return end
+  MySQL.prepare.await('INSERT INTO `computer_pc_flags` (computer_key, guests) VALUES (?, ?) ON DUPLICATE KEY UPDATE guests = VALUES(guests)', { computerKey, on and 1 or 0 })
+  if on then accounts.ensureGuest(computerKey) end
+end
+
+---The guest account of a computer, created on first use.
+function accounts.ensureGuest(computerKey)
+  local row = byUsername(computerKey, 'guest')
+  if row then return row.id end
+  return MySQL.insert.await(
+    "INSERT INTO `computer_pc_accounts` (computer_key, username, citizenid, is_owner, is_guest, created_at) VALUES (?, 'guest', NULL, 0, 1, ?)", { computerKey, os.time() })
+end
+
+---Is this account a guest?
+function accounts.isGuestId(accountId)
+  local a = accounts.byId(accountId)
+  return a ~= nil and a.is_guest == 1
+end
+
+---Sets or clears an account's PIN (4 to 6 digits). Pass nil to remove it.
+function accounts.setPin(accountId, pin)
+  if pin == nil then
+    MySQL.update.await('UPDATE `computer_pc_accounts` SET pin_hash = NULL, pin_salt = NULL WHERE id = ?', { accountId })
+    return true
+  end
+  if not validPin(pin) then return false, 'invalid_pin' end
+  local salt = genSalt()
+  MySQL.update.await('UPDATE `computer_pc_accounts` SET pin_hash = ?, pin_salt = ? WHERE id = ?', { accounts.hash(pin, salt), salt, accountId })
   return true
 end
 
----Revokes an account's access to one machine. Does not touch other machines it's granted on, and
----does not delete the account itself.
----@param computerKey string
----@param accountId integer
-function accounts.revoke(computerKey, accountId)
-  if not validKey(computerKey) or not accountId then return end
-  MySQL.prepare.await('DELETE FROM `computer_grants` WHERE computer_key = ? AND account_id = ?', { computerKey, accountId })
+---Changes an account's password after checking the old one.
+function accounts.setPassword(accountId, oldPassword, newPassword)
+  if not validPassword(newPassword) then return false, 'invalid_password' end
+  local row = MySQL.single.await('SELECT * FROM `computer_pc_accounts` WHERE id = ?', { accountId })
+  if not row or row.is_guest == 1 then return false, 'bad_credentials' end
+  if not row.password_hash or accounts.hash(tostring(oldPassword or ''), row.password_salt) ~= row.password_hash then return false, 'bad_credentials' end
+  local salt = genSalt()
+  MySQL.update.await('UPDATE `computer_pc_accounts` SET password_hash = ?, password_salt = ? WHERE id = ?', { accounts.hash(newPassword, salt), salt, accountId })
+  return true
 end
 
----Is this account allowed to log into this machine, and are they an admin there.
----@param computerKey string
----@param accountId integer
----@return boolean granted, boolean isAdmin
+---Removes one account (never the owner's or the guest's). Owner only: the caller checks.
+function accounts.remove(computerKey, accountId)
+  local a = accounts.byId(accountId)
+  if not a or a.computer_key ~= computerKey or a.is_owner == 1 or a.is_guest == 1 then return false end
+  MySQL.update.await('DELETE FROM `computer_pc_accounts` WHERE id = ?', { accountId })
+  return true
+end
+
+---Is this account part of that computer? (Kept under its old name.) Returns granted, isOwner.
 function accounts.isGranted(computerKey, accountId)
   if not validKey(computerKey) or not accountId then return false, false end
-  local row = MySQL.single.await(
-    'SELECT is_admin FROM `computer_grants` WHERE computer_key = ? AND account_id = ?', { computerKey, accountId })
-  if not row then return false, false end
-  return true, row.is_admin == 1
+  local a = accounts.byId(accountId)
+  if not a or a.computer_key ~= computerKey then return false, false end
+  return true, a.is_owner == 1
 end
 
----Every account granted onto a machine (for an admin's "manage users" screen).
----@param computerKey string
----@return { accountId: integer, username: string, isAdmin: boolean, grantedAt: integer }[]
+---Every account on a computer, for the lock screen and the owner's Accounts page. Guest only when allowed.
+---@return { accountId: integer, username: string, isOwner: boolean, isGuest: boolean, claimed: boolean }[]
 function accounts.listGrants(computerKey)
   if not validKey(computerKey) then return {} end
-  local rows = MySQL.query.await([[
-    SELECT g.account_id, a.username, g.is_admin, g.granted_at
-    FROM `computer_grants` g JOIN `computer_accounts` a ON a.id = g.account_id
-    WHERE g.computer_key = ? ORDER BY g.granted_at ASC
-  ]], { computerKey }) or {}
+  local rows = MySQL.query.await('SELECT id, username, citizenid, is_owner, is_guest, created_at FROM `computer_pc_accounts` WHERE computer_key = ? ORDER BY is_guest ASC, id ASC', { computerKey }) or {}
+  local guests = accounts.guestsAllowed(computerKey)
   local out = {}
   for _, r in ipairs(rows) do
-    out[#out + 1] = { accountId = r.account_id, username = r.username, isAdmin = r.is_admin == 1, grantedAt = r.granted_at }
+    if r.is_guest ~= 1 or guests then
+      out[#out + 1] = { accountId = r.id, username = r.username, isOwner = r.is_owner == 1, isGuest = r.is_guest == 1, claimed = r.citizenid ~= nil, grantedAt = r.created_at }
+    end
   end
   return out
 end
 
----The account id that owns a machine (nil if it hasn't been set up yet).
----@param computerKey string
----@return integer|nil accountId
+---The owner's account id for a computer (nil if it has not been set up).
 function accounts.getOwner(computerKey)
   if not validKey(computerKey) then return nil end
   local row = MySQL.single.await('SELECT account_id FROM `computer_owners` WHERE computer_key = ?', { computerKey })
   return row and row.account_id or nil
 end
 
----The CHARACTER (citizenid) that owns a machine - what mining payouts actually credit, since a
----sd-phone wallet is per-citizenid, not per login-account (an account can be a shared login used by
----several characters - see the plan doc's "Mining payout ownership" decision). nil if the machine
----hasn't been set up yet, or (only possible on data from before this column existed) if the owning
----citizenid was never recorded.
----@param computerKey string
----@return string|nil citizenid
+---The CHARACTER that owns a computer: what mining payouts credit. nil if it has not been set up.
 function accounts.getOwnerCitizenId(computerKey)
   if not validKey(computerKey) then return nil end
   local row = MySQL.single.await('SELECT citizenid FROM `computer_owners` WHERE computer_key = ?', { computerKey })
   return row and row.citizenid or nil
 end
 
----Sets (or transfers) a machine's owner: both the login-account (who can manage it) and the
----citizenid (who mining payouts actually credit - see accounts.getOwnerCitizenId). Setup calls this
----once for the admin who completed it; a future sale/trade flow calls it again to transfer both.
----@param computerKey string
----@param accountId integer
----@param citizenid string|nil the character completing setup/the transfer; nil only for old call
----  sites that haven't been updated yet - never pass nil for a NEW owner on purpose
 function accounts.setOwner(computerKey, accountId, citizenid)
   if not validKey(computerKey) or not accountId then return end
   MySQL.prepare.await(
@@ -318,38 +347,23 @@ function accounts.setOwner(computerKey, accountId, citizenid)
     { computerKey, accountId, citizenid, os.time() })
 end
 
----Deletes every grant and the owner record for a machine key - used when the physical machine is
----removed entirely (a placed mining monitor being picked up, server/mining_place.lua Phase 5.5) so a
----stale key can't quietly keep working, and accounts.hasAnyGrants correctly reports "never set up"
----if this exact key string is ever reused (it won't be - ids aren't recycled - but this keeps the
----table honest either way). Does not touch the accounts themselves, only this machine's link to them.
----@param computerKey string
+---Deletes every account, the guest switch and the owner record of a computer that stops existing (a placed monitor picked up,
+---an admin reset). Per the rules, accounts and files stay with the machine, so this is only for those two cases.
 function accounts.wipeMachine(computerKey)
   if not validKey(computerKey) then return end
-  MySQL.query.await('DELETE FROM `computer_grants` WHERE computer_key = ?', { computerKey })
+  MySQL.query.await('DELETE FROM `computer_pc_accounts` WHERE computer_key = ?', { computerKey })
+  MySQL.query.await('DELETE FROM `computer_pc_flags` WHERE computer_key = ?', { computerKey })
   MySQL.query.await('DELETE FROM `computer_owners` WHERE computer_key = ?', { computerKey })
 end
 
----First-boot setup: creates the admin account, grants it admin on this machine, and sets it as
----owner - all three or none (best-effort rollback if the grant/owner steps somehow fail after
----the account is created, since MySQL.prepare.await calls aren't wrapped in one transaction here).
----Fails outright (no account created) if this machine already has any grants - call
----accounts.hasAnyGrants first and route to a login screen instead.
----@param computerKey string
----@param username string
----@param password string plaintext
----@param citizenid string|nil the character running the wizard - recorded as the machine's owner
----  for mining payouts (accounts.getOwnerCitizenId). Always pass this from server/session.lua.
----@return table|nil account { id, username }, string|nil err 'already_setup' | 'invalid_username' | 'invalid_password' | 'taken'
+---First-boot setup: creates the owner's account and records the owner. Fails if the computer already has accounts.
+---@return table|nil account { id, username }, string|nil err
 function accounts.setup(computerKey, username, password, citizenid)
   if not validKey(computerKey) then return nil, 'invalid_username' end
   if accounts.hasAnyGrants(computerKey) then return nil, 'already_setup' end
-
-  local id, err = accounts.create(username, password)
+  local id, err = accounts.create(computerKey, username, password, citizenid, true)
   if not id then return nil, err end
-
-  accounts.grant(computerKey, id, true, nil)
   accounts.setOwner(computerKey, id, citizenid)
-
+  accounts.ensureGuest(computerKey)
   return { id = id, username = normalizeUsername(username) }
 end

@@ -319,6 +319,8 @@ local function OpenMessage(loc, rect, user, info, session)
     resume = session and session.resume or false,  -- same player, same computer, nobody else since: keep the open apps
     needsSetup = session and session.needsSetup or false, -- first boot: nobody's ever set this machine up (client/dui.lua's boot flow)
     noBoot = session and session.noBoot or false,         -- the tower is missing required parts: show the 'cannot start' screen
+    accounts = session and session.accounts or nil,        -- the lock screen's account list on this computer
+    myAccount = session and session.myAccount or nil,      -- this character's own account here, to preselect
     missing = session and session.missing or nil,          -- which required slots are empty
     needsLogin = session and session.needsLogin or false, -- past setup, but no resumable session: show the login screen
     accountName = session and session.accountName or nil, -- who resumed / just signed in (Phase 0.5 machine account, not the character)
@@ -388,7 +390,7 @@ function OpenTerminal(loc)
     -- Resume only if the apps still in this client's page are from this very computer. Losing resume this
     -- way must NOT lose a needsSetup/needsLogin flag - the login/setup screen still has to show.
     if session and not (session.resume and nuiSessionKey == loc.key) then
-      session = { resume = false, needsSetup = session.needsSetup, needsLogin = session.needsLogin, noBoot = session.noBoot, missing = session.missing }
+      session = { resume = false, needsSetup = session.needsSetup, needsLogin = session.needsLogin, noBoot = session.noBoot, missing = session.missing, accounts = session.accounts, myAccount = session.myAccount }
     end
     nuiSessionKey = loc.key
 
@@ -505,6 +507,18 @@ RegisterNUICallback('accountApi', function(data, cb)
   elseif data.name == 'login' then
     MotCallback.Trigger('session:login', function(r) cb(r or { success = false }) end,
       currentTerminal.key, body.username, body.password)
+  elseif data.name == 'accounts' then
+    MotCallback.Trigger('session:accounts', function(r) cb(r or { success = false }) end, currentTerminal.key)
+  elseif data.name == 'createAccount' then
+    MotCallback.Trigger('session:createAccount', function(r) cb(r or { success = false }) end, currentTerminal.key, body.username, body.password)
+  elseif data.name == 'removeAccount' then
+    MotCallback.Trigger('session:removeAccount', function(r) cb(r or { success = false }) end, currentTerminal.key, body.accountId)
+  elseif data.name == 'setGuests' then
+    MotCallback.Trigger('session:setGuests', function(r) cb(r or { success = false }) end, currentTerminal.key, body.on == true)
+  elseif data.name == 'setPin' then
+    MotCallback.Trigger('session:setPin', function(r) cb(r or { success = false }) end, currentTerminal.key, body.pin)
+  elseif data.name == 'setPassword' then
+    MotCallback.Trigger('session:setPassword', function(r) cb(r or { success = false }) end, currentTerminal.key, body.old, body.new)
   else
     cb({ success = false })
   end

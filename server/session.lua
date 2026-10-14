@@ -18,9 +18,18 @@ local RESUME = (Config.Session and Config.Session.resumeMinutes) or 60
 -- from 'p' (admin /placeprops) so the two never collide.
 local function validKey(k) return type(k) == 'string' and #k <= 24 and k:match('^[cpm]%d+$') ~= nil end
 
---- key -> { needsSetup } | { needsLogin } | { resume, locked, accountName }. Opening a computer also makes
+--- key -> { needsSetup } | { needsLogin, accounts } | { resume, locked, accountName }. Opening a computer also makes
 --- you its current user, so whoever used it before you can no longer resume there. Does NOT sign anyone in -
---- that only happens via session:setup or session:login below.
+--- that only happens via session:setup or session:login below. `accounts` is what the lock screen lists.
+local function loginList(key, cid)
+  local out = {}
+  for _, a in ipairs(Accounts.listGrants(key)) do
+    out[#out + 1] = { username = a.username, isGuest = a.isGuest, isOwner = a.isOwner }
+  end
+  local mine = cid and Accounts.ofCharacter(key, cid)
+  return out, mine and mine.username or nil
+end
+
 MotCallback.Register('session:open', function(src, respond, key)
   if not validKey(key) then return respond({ needsLogin = true }) end
 
@@ -49,14 +58,26 @@ MotCallback.Register('session:open', function(src, respond, key)
   end
 
   -- No resumable session (or the account that had one lost access since): show the login screen.
-  return respond({ needsLogin = true })
+  local list, mine = loginList(key, cid)
+  return respond({ needsLogin = true, accounts = list, myAccount = mine })
 end)
 
---- First-boot setup wizard: only succeeds while the machine has never been granted to anyone.
---- Creates the admin account, grants it, sets it as owner, and signs it in.
----@param key string machine key
----@param username string
----@param password string plaintext, hashed server-side before storage
+--- A guest's files do not outlast the guest session.
+local function wipeGuest(key)
+  local rec = sessions[key]
+  if rec and rec.guest and rec.accountId and FilesWipeOwner then FilesWipeOwner('pc:' .. key .. ':' .. rec.accountId) end
+end
+
+local function signedIn(key, src, account)
+  wipeGuest(key)
+  sessions[key] = { cid = Bridge.GetIdentifier(src), accountId = account.id, guest = account.isGuest == true, state = 'active', at = os.time() }
+  if ComputerLog then
+    ComputerLog(key, 'security', account.isGuest and 'guest_login' or 'login', ('Signed in as "%s"'):format(account.username), src, 'success')
+  end
+end
+
+--- First-boot setup wizard: only succeeds while the computer has no accounts. Creates the owner's account (linked to this
+--- character), makes them the owner, and signs them in.
 MotCallback.Register('session:setup', function(src, respond, key, username, password)
   if not validKey(key) then return respond({ success = false }) end
   if Hardware and not Hardware.Bootable(key) then return respond({ success = false, error = 'no_boot' }) end
@@ -76,46 +97,85 @@ MotCallback.Register('session:setup', function(src, respond, key, username, pass
   respond({ success = true, accountName = account.username })
 end)
 
---- Ordinary login on a machine that's already past setup. Requires the account to be granted onto
---- THIS machine (shared login: the same account can be granted on several machines, but not every
---- machine automatically accepts every account - see the plan doc's public-computer exception,
---- not yet wired in here).
----
---- The one exception, added to close the plan's "Still open: exactly how a machine grants access to
---- a shared account" gap: a machine that has NEVER been set up (zero grants at all) accepts a valid
---- login from any EXISTING account and claims it as that machine's first admin/owner, exactly like
---- session:setup does for a brand-new account. This is what makes logins actually feel shared - a
---- player who already made an account on one computer can walk up to any other never-configured
---- computer and sign straight in with the same credentials, instead of being forced through "Create
---- account" again (which would just fail with 'taken' since usernames are unique server-wide). A
---- machine some other account already claimed still requires an explicit grant - this only fires on
---- the very first login a fresh machine ever sees.
+--- Sign in to one account on this computer with its password or PIN (the guest account needs neither).
+--- An account the owner made for someone else is claimed by the first character who signs in; after that only that
+--- character can use it. A character has one account per computer.
 MotCallback.Register('session:login', function(src, respond, key, username, password)
   if not validKey(key) then return respond({ success = false }) end
   if Hardware and not Hardware.Bootable(key) then return respond({ success = false, error = 'no_boot' }) end
   local cid = Bridge.GetIdentifier(src)
   if not cid then return respond({ success = false, message = 'Not loaded' }) end
 
-  local account = Accounts.verifyLogin(username, password)
+  local account, err = Accounts.verifyLogin(key, username, password, cid)
   if not account then
     if ComputerLog then ComputerLog(key, 'security', 'login_failed', ('Failed sign-in as "%s"'):format(tostring(username):sub(1, 20)), src, 'failure') end
-    return respond({ success = false, error = 'bad_credentials' })
+    return respond({ success = false, error = err or 'bad_credentials' })
   end
 
-  local granted = Accounts.isGranted(key, account.id)
-  if not granted then
-    if Accounts.hasAnyGrants(key) then
-      if ComputerLog then ComputerLog(key, 'security', 'login_denied', ('"%s" has no access to this computer'):format(account.username), src, 'failure') end
-      return respond({ success = false, error = 'not_granted' })
-    end
-    -- Fresh machine, nobody's claimed it yet - this login claims it instead of failing.
-    Accounts.grant(key, account.id, true, nil)
-    Accounts.setOwner(key, account.id, cid)
-  end
+  signedIn(key, src, account)
+  respond({ success = true, accountName = account.username, guest = account.isGuest == true })
+end)
 
-  sessions[key] = { cid = cid, accountId = account.id, state = 'active', at = os.time() }
-  if ComputerLog then ComputerLog(key, 'security', 'login', ('Signed in as "%s"'):format(account.username), src, 'success') end
-  respond({ success = true, accountName = account.username })
+-- ---- Account management. Only the computer's owner may create or remove accounts or switch guests; everyone manages
+-- ---- their own PIN and password. All of it needs an active session on that computer.
+local function activeAccount(src, key)
+  local rec = sessions[key]
+  if not rec or rec.state == 'off' or rec.cid ~= Bridge.GetIdentifier(src) then return nil end
+  return Accounts.byId(rec.accountId)
+end
+
+--- The Accounts page: everyone sees their own, the owner also gets the full list and the guest switch.
+MotCallback.Register('session:accounts', function(src, respond, key)
+  if not validKey(key) then return respond({ success = false }) end
+  local me = activeAccount(src, key)
+  if not me then return respond({ success = false }) end
+  local isOwner = me.is_owner == 1
+  respond({
+    success = true, me = { username = me.username, isOwner = isOwner, isGuest = me.is_guest == 1 },
+    accounts = isOwner and Accounts.listGrants(key) or nil, guests = isOwner and Accounts.guestsAllowed(key) or nil,
+  })
+end)
+
+MotCallback.Register('session:createAccount', function(src, respond, key, username, password)
+  if not validKey(key) then return respond({ success = false }) end
+  local me = activeAccount(src, key)
+  if not me or me.is_owner ~= 1 then return respond({ success = false, error = 'not_owner' }) end
+  local id, err = Accounts.create(key, username, password, nil, false)
+  if ComputerLog and id then ComputerLog(key, 'security', 'account_created', ('Account "%s" created'):format(tostring(username):lower():sub(1, 20)), src, 'success') end
+  respond({ success = id ~= nil, error = err })
+end)
+
+MotCallback.Register('session:removeAccount', function(src, respond, key, accountId)
+  if not validKey(key) then return respond({ success = false }) end
+  local me = activeAccount(src, key)
+  if not me or me.is_owner ~= 1 then return respond({ success = false, error = 'not_owner' }) end
+  local ok = Accounts.remove(key, tonumber(accountId))
+  if ComputerLog and ok then ComputerLog(key, 'security', 'account_removed', 'An account was removed', src, 'warning') end
+  respond({ success = ok })
+end)
+
+MotCallback.Register('session:setGuests', function(src, respond, key, on)
+  if not validKey(key) then return respond({ success = false }) end
+  local me = activeAccount(src, key)
+  if not me or me.is_owner ~= 1 then return respond({ success = false, error = 'not_owner' }) end
+  Accounts.setGuests(key, on == true)
+  respond({ success = true })
+end)
+
+MotCallback.Register('session:setPin', function(src, respond, key, pin)
+  if not validKey(key) then return respond({ success = false }) end
+  local me = activeAccount(src, key)
+  if not me or me.is_guest == 1 then return respond({ success = false }) end
+  local ok, err = Accounts.setPin(me.id, (pin ~= nil and pin ~= '') and tostring(pin) or nil)
+  respond({ success = ok, error = err })
+end)
+
+MotCallback.Register('session:setPassword', function(src, respond, key, oldPassword, newPassword)
+  if not validKey(key) then return respond({ success = false }) end
+  local me = activeAccount(src, key)
+  if not me or me.is_guest == 1 then return respond({ success = false }) end
+  local ok, err = Accounts.setPassword(me.id, oldPassword, newPassword)
+  respond({ success = ok, error = err })
 end)
 
 RegisterNetEvent('as-computer:server:session', function(key, st)
@@ -128,9 +188,22 @@ RegisterNetEvent('as-computer:server:session', function(key, st)
       ComputerLog(key, 'system', st == 'off' and 'shutdown' or st == 'locked' and 'lock' or 'unlock', what[st], src)
     end
     rec.state, rec.at = st, os.time()
+    if st == 'off' then wipeGuest(key) end
     if st == 'off' and MirrorClear then MirrorClear(key) end
   end
 end)
+
+--- Is the account signed in on that computer the guest account? (guests cannot install apps or change Settings)
+function ComputerSessionIsGuest(key)
+  local rec = sessions[key]
+  return rec ~= nil and rec.state ~= 'off' and rec.guest == true
+end
+
+--- Is this player's current session a guest session?
+function PlayerIsGuest(src)
+  local key = Apps and Apps.computerOf and Apps.computerOf(src)
+  return key ~= nil and ComputerSessionIsGuest(key)
+end
 
 --- Is this player the one signed in on that computer right now? (server/mirror.lua)
 function ComputerSessionIs(key, src)
