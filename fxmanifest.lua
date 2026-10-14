@@ -96,6 +96,8 @@ files {
   'ui/diag.css',
   'ui/clock.js',
   'ui/clock.css',
+  'ui/photos.js',
+  'ui/photos.css',
   'ui/hwmon.js',
   'ui/notepad.js',
   'ui/notepad.css',
