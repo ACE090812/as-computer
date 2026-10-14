@@ -55,6 +55,7 @@
     strip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="9" rx="1.5"/><path d="M4 18h3M10.5 18h3M17 18h3"/></svg>'
   };
   function ib(a, icon, tip, on) { return '<button class="ph-ib' + (on ? ' on' : '') + '" data-a="' + a + '" title="' + esc(tip) + '">' + icon + '</button>'; }
+  function paintRange(r) { r.style.setProperty('--p', ((r.value - r.min) / (r.max - r.min) * 100) + '%'); }
   var idleT = null;
   function wake() {
     var m = $('ph-root'); if (!m) return;
@@ -82,6 +83,7 @@
     var strip = st.strip !== false && l.length ? '<div class="ph-strip">' + l.map(function (p, i) { return '<img data-i="' + i + '" class="' + (i === st.idx ? 'on' : '') + '" loading="lazy" referrerpolicy="no-referrer" alt="" src="' + esc(safe(p.url)) + '">'; }).join('') + '</div>' : '';
     var zoom = f ? '<div class="ph-zoom"><button data-a="zo">&minus;</button><span id="ph-zp">' + Math.round(st.zoom * 100) + '%</span><button data-a="zi">+</button><button data-a="fit">' + esc(T('ph_fit', 'Fit')) + '</button></div>' : '';
     root.innerHTML = '<div class="ph-stage" id="ph-stage">' + stage + '</div>' + top + edit + zoom + strip;
+    root.querySelectorAll('[data-fx]').forEach(paintRange);
     applyView(); wake();
   }
 
@@ -131,7 +133,7 @@
   document.addEventListener('dblclick', function (e) { if (e.target.closest && e.target.closest('#ph-stage') && !e.target.closest('.ph-nav')) { st.zoom = st.zoom > 1.05 ? 1 : 2; st.x = 0; st.y = 0; applyView(); } });
   document.addEventListener('input', function (e) {
     var r = e.target.closest && e.target.closest('[data-fx]'); if (!r || !$('win-photos').contains(r)) return;
-    st.fx[r.dataset.fx] = +r.value; var sp = r.previousElementSibling && r.previousElementSibling.querySelector('span'); if (sp) sp.textContent = r.value; applyView();
+    st.fx[r.dataset.fx] = +r.value; paintRange(r); var sp = r.previousElementSibling && r.previousElementSibling.querySelector('span'); if (sp) sp.textContent = r.value; applyView();
   });
   document.addEventListener('change', function (e) { var r = e.target.closest && e.target.closest('[data-fx]'); if (r) snap(); });
   document.addEventListener('wheel', function (e) {

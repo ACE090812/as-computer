@@ -31,3 +31,18 @@
 .ph-strip img{height:56px;width:78px;object-fit:cover;border-radius:4px;cursor:pointer;border:2px solid transparent;flex:none;opacity:.75}
 .ph-strip img.on{border-color:#fff;opacity:1}
 .ph.idle .ph-top,.ph.idle .ph-nav,.ph.idle .ph-zoom,.ph.idle .ph-strip{opacity:0;pointer-events:none}
+/* Windows 11 style sliders: thin track, accent fill, round thumb with a blue dot that grows on hover */
+.ph-edit input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:none;margin:2px 0 6px;cursor:pointer;
+  --p:50%;--ac:#4cc2ff}
+.ph-edit input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;
+  background:linear-gradient(to right,var(--ac) 0,var(--ac) var(--p),#ffffff40 var(--p),#ffffff40 100%)}
+.ph-edit input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;margin-top:-8px;border-radius:50%;
+  background:radial-gradient(circle,var(--ac) 0,var(--ac) 4px,#2b2b30 4.5px,#2b2b30 100%);border:1px solid #ffffff55;box-shadow:0 1px 3px #0008;transition:background .12s}
+.ph-edit input[type=range]:hover::-webkit-slider-thumb{background:radial-gradient(circle,var(--ac) 0,var(--ac) 6px,#2b2b30 6.5px,#2b2b30 100%)}
+.ph-edit input[type=range]:active::-webkit-slider-thumb{background:radial-gradient(circle,var(--ac) 0,var(--ac) 3px,#2b2b30 3.5px,#2b2b30 100%)}
+.ph-edit input[type=range]:focus-visible{outline:2px solid #ffffffaa;outline-offset:2px;border-radius:4px}
+.ph-edit input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:#ffffff40}
+.ph-edit input[type=range]::-moz-range-progress{height:4px;border-radius:2px;background:var(--ac)}
+.ph-edit input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#2b2b30;border:5px solid var(--ac);box-sizing:border-box}
+.ph-edit label{font-size:12px}.ph-edit label span{opacity:.7;font-variant-numeric:tabular-nums}
+.ph-fx button{transition:background .12s}.ph-fx button:hover{background:#ffffff33}.ph-fx button.on{background:#4cc2ff;color:#000}
