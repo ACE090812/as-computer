@@ -94,6 +94,8 @@ files {
   'ui/taskmgr.css',
   'ui/diag.js',
   'ui/diag.css',
+  'ui/clock.js',
+  'ui/clock.css',
   'ui/hwmon.js',
   'ui/notepad.js',
   'ui/notepad.css',

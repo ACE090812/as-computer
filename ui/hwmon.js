@@ -14,7 +14,7 @@
     return { cpu: Math.round(Math.min(100, (3 + 6 * wins.length) / perf)), gpu: Math.round(Math.min(100, g * 25 / gpuPerf)) };
   }
   function tick() {
-    if (!document.getElementById('root') || !document.getElementById('root').classList.contains('open')) return;
+    if (!document.documentElement.classList.contains('open')) return;
     S.api('hardwareApi', {}).then(function (r) {
       if (r && r.success) S.hw = r;
       S.api('hardwareApi', { name: 'telemetry', data: load() });

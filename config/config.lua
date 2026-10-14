@@ -111,6 +111,7 @@ Config.PublicApps = {
   settings   = true,
   taskmgr    = true,   -- Task Manager
   diag       = true,   -- Diagnostics
+  clock      = true,   -- Clock (alarms, timer, stopwatch, world clocks)
   mining     = true,   -- Crypto Mining Rig, Phase 3: open to all players, no licence/job gate
 }
 

@@ -111,6 +111,33 @@ local SPEC = {
     end
     return out
   end,
+  -- Clock app: alarms (time "HH:MM", days = bit mask Mon=1 .. Sun=64, 0 = once) and the world clocks shown
+  alarms        = function(v)
+    if type(v) ~= 'table' then return nil end
+    local out, n = {}, 0
+    for _, a in ipairs(v) do
+      if type(a) == 'table' and type(a.t) == 'string' and a.t:match('^[0-2]%d:[0-5]%d$') and tonumber(a.t:sub(1, 2)) < 24 then
+        n = n + 1
+        out[n] = {
+          id = tostring(a.id or n):gsub('[^%w_%-]', ''):sub(1, 12),
+          label = tostring(a.label or ''):sub(1, 40),
+          t = a.t, days = math.max(0, math.min(127, math.floor(tonumber(a.days) or 0))),
+          on = a.on ~= false, snd = math.max(1, math.min(3, math.floor(tonumber(a.snd) or 1))),
+        }
+      end
+      if n >= 20 then break end
+    end
+    return out
+  end,
+  worldClocks   = function(v)
+    if type(v) ~= 'table' then return nil end
+    local out, seen, n = {}, {}, 0
+    for _, z in ipairs(v) do
+      if type(z) == 'string' and z:match('^[%a_]+/?[%a_/%-%+%d]*$') and #z <= 40 and not seen[z] then seen[z] = true; n = n + 1; out[n] = z end
+      if n >= 8 then break end
+    end
+    return out
+  end,
   iconPos       = function(v)
     if type(v) ~= 'table' then return nil end
     local out, n = {}, 0

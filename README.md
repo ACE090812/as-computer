@@ -588,3 +588,6 @@ Every computer has its own accounts. The first person to start a computer sets i
 - **Blue screens**: worn or missing parts, overheating and a small random chance (`Config.Hardware.Crash`). The session ends, the failing part takes extra wear, the Event Viewer logs the stop code, and the player sees a blue screen, then the boot screen and sign-in. `/pccrash <key> [part]` (admin) tests it.
 - **IT job** (`Config.Hardware.ITJob`, default `it`): at a tower, "IT service" reads fault codes and repairs a part using `thermal_paste`.
 - All items are listed in `install/` (ox_inventory and qb-core formats).
+
+## Clock
+Built-in app (`config/apps/clock.lua`). Alarms (label, days, three sounds, snooze 5 minutes) are saved per character in Settings (`alarms`, up to 20) and ring while the computer is on, with a notification and sound. Also a timer, a stopwatch with laps, and world clocks (real time zones, `worldClocks`, up to 8).

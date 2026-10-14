@@ -1,0 +1,25 @@
+#win-clock .win-body{padding:0}
+.ck{display:flex;flex-direction:column;height:100%;font-size:13px}
+.ck-tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid rgba(128,128,128,.25)}
+.ck-tabs button{background:none;border:0;padding:7px 14px;cursor:pointer;border-radius:6px 6px 0 0;color:inherit;opacity:.75}
+.ck-tabs button.on{background:rgba(128,128,128,.16);opacity:1;font-weight:600}
+.ck-body{flex:1;overflow:auto;padding:16px}
+.ck-big{font-size:54px;font-weight:300;text-align:center;font-variant-numeric:tabular-nums;margin:18px 0}
+.ck-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.ck-b{border:0;border-radius:8px;padding:8px 18px;background:rgba(128,128,128,.22);color:inherit;cursor:pointer;font-size:13px}
+.ck-b.pri{background:var(--accent,#2563eb);color:#fff}.ck-b.red{background:#dc2626;color:#fff}
+.ck-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;background:rgba(128,128,128,.12);margin-bottom:8px}
+.ck-row .tm{font-size:26px;font-variant-numeric:tabular-nums;width:90px}
+.ck-row .gr{flex:1;min-width:0}.ck-row .gr small{display:block;opacity:.65}
+.ck-row.off .tm,.ck-row.off .gr{opacity:.45}
+.ck-x{background:none;border:0;color:inherit;opacity:.6;cursor:pointer;font-size:18px}
+.ck-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.ck-form input,.ck-form select{background:rgba(128,128,128,.15);border:1px solid rgba(128,128,128,.3);border-radius:6px;padding:6px 8px;color:inherit}
+.ck-days{display:flex;gap:4px}
+.ck-days button{width:28px;height:28px;border-radius:50%;border:0;background:rgba(128,128,128,.2);color:inherit;cursor:pointer;font-size:11px}
+.ck-days button.on{background:var(--accent,#2563eb);color:#fff}
+.ck-laps{max-height:150px;overflow:auto;margin-top:12px}
+.ck-laps div{display:flex;justify-content:space-between;padding:4px 20px;font-variant-numeric:tabular-nums;border-bottom:1px solid rgba(128,128,128,.15)}
+.ck-empty{opacity:.6;text-align:center;padding:24px}
+#ck-ring{position:fixed;left:50%;top:30%;transform:translateX(-50%);z-index:9999;background:#1f2937;color:#fff;border-radius:14px;padding:22px 28px;box-shadow:0 12px 40px rgba(0,0,0,.5);text-align:center;min-width:260px}
+#ck-ring .t{font-size:34px}#ck-ring .l{opacity:.8;margin:6px 0 16px}
